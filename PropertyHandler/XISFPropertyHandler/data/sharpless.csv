@@ -1,0 +1,49 @@
+Name;Type;RA;Dec;Const;MajAx;MinAx;PosAng;B-Mag;V-Mag;J-Mag;H-Mag;K-Mag;SurfBr;Hubble;Pax;Pm-RA;Pm-Dec;RadVel;Redshift;Cstar U-Mag;Cstar B-Mag;Cstar V-Mag;M;NGC;IC;Cstar Names;Identifiers;Common names;NED notes;OpenNGC notes;Sources
+Sh2-001;HII;17:46:10.0;-28:52:18;Sgr;45.00;45.00;;;;;;;;;;;;;;;;;;;;;Sgr A;Sagittarius A;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-006;HII;17:53:43.0;-23:58:00;Sgr;5.00;5.00;;;;;;;;;;;;;;;;;;;;;LBN 10,W 28;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-025;HII;18:03:37.0;-24:23:12;Sgr;90.00;40.00;;;;;;;;;;;;;;;;;;008;;;;LBN 25;Lagoon Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-027;HII;18:06:50.0;-24:21:00;Sgr;10.00;10.00;;;;;;;;;;;;;;;;;;;;;LBN 28;Omega Nebula area;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-029;HII;18:09:15.0;-20:47:30;Sgr;42.00;28.00;;;;;;;;;;;;;;;;;;020;;;;LBN 30;Trifid Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-045;HII;18:33:25.0;-08:19:00;Sct;2.00;2.00;;;;;;;;;;;;;;;;;;;;;LBN 72;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-049;HII;19:11:06.0;+14:06:00;Aql;180.00;180.00;;;;;;;;;;;;;;;;;;;;;W 51;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-054;HII;18:17:00.0;-11:45:00;Ser;60.00;30.00;;;;;;;;;;;;;;;;;;016;IC4703;;;;Eagle Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-057;HII;18:39:36.0;-06:24:00;Sct;8.00;8.00;;;;;;;;;;;;;;;;;;;;;LBN 82;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-071;HII;19:58:30.0;+30:04:00;Cyg;4.00;4.00;;;;;;;;;;;;;;;;;;;;;LBN 147;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-086;HII;19:46:00.0;+23:24:00;Vul;10.00;10.00;;;;;;;;;;;;;;;;;;;;;;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-101;HII;20:00:30.0;+35:20:30;Cyg;16.00;9.00;;;;;;;;;;;;;;;;;;;;;LBN 168;Tulip Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-106;HII;20:27:27.0;+37:22:48;Cyg;3.00;2.00;;;;;;;;;;;;;;;;;;;;;LBN 195;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-112;HII;20:33:48.0;+45:38:00;Cyg;10.00;10.00;;;;;;;;;;;;;;;;;;;;;LBN 211;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-115;HII;20:17:42.0;+47:43:00;Cyg;20.00;20.00;;;;;;;;;;;;;;;;;;;;;LBN 175;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-119;HII;21:20:30.0;+43:48:00;Cyg;60.00;60.00;;;;;;;;;;;;;;;;;;;;;LBN 358;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-124;HII;21:30:00.0;+48:32:00;Cyg;8.00;8.00;;;;;;;;;;;;;;;;;;;;;LBN 391;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-126;HII;21:42:00.0;+57:28:00;Cep;30.00;30.00;;;;;;;;;;;;;;;;;;;;;LBN 420;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-129;HII;21:11:48.0;+59:58:00;Cep;180.00;150.00;;;;;;;;;;;;;;;;;;;;;LBN 362;Flying Bat Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-132;HII;22:19:06.0;+56:06:00;Cep;40.00;30.00;;;;;;;;;;;;;;;;;;;;;LBN 473;Lion Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-142;HII;23:03:18.0;+60:23:00;Cas;50.00;40.00;;;;;;;;;;;;;;;;;;;;;LBN 517;Wizard Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-155;HII;22:57:54.0;+62:31:06;Cep;50.00;30.00;;;;;;;;;;;;;;;;;;;;;LBN 529;Cave Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-157;HII;23:16:04.0;+60:02:06;Cas;14.00;7.00;;;;;;;;;;;;;;;;;;;;;LBN 537;Lobster Claw Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-162;HII;23:20:48.0;+61:12:06;Cas;12.00;10.00;;;;;;;;;;;;;;;;;;;;;LBN 546;Bubble Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-170;HII;00:01:54.0;+64:10:42;Cas;10.00;10.00;;;;;;;;;;;;;;;;;;;;;LBN 589;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-171;HII;00:03:18.0;+67:08:00;Cas;30.00;30.00;;;;;;;;;;;;;;;;;;;;;LBN 594;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-173;HII;00:24:48.0;+61:53:00;Cas;40.00;40.00;;;;;;;;;;;;;;;;;;;;;LBN 599;Phantom of the Opera Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-188;HII;01:30:33.0;+58:24:50;Cas;9.00;4.00;;;;;;;;;;;;;;;;;;;;;LBN 619;Dolphin Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-199;HII;02:51:48.0;+60:24:36;Cas;150.00;75.00;;;;;;;;;;;;;;;;;;;;;LBN 667;Soul Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-190;HII;02:32:48.0;+61:27:00;Cas;60.00;30.00;;;;;;;;;;;;;;;;;;;;;IC1805;Heart Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-206;HII;04:03:48.0;+51:19:00;Cam;150.00;120.00;;;;;;;;;;;;;;;;;;;;;LBN 706;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-216;HII;04:44:48.0;+46:49:00;Per;100.00;100.00;;;;;;;;;;;;;;;;;;;;;LBN 741;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-224;HII;05:26:48.0;+42:54:00;Aur;150.00;120.00;;;;;;;;;;;;;;;;;;;;;LBN 787;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-235;HII;05:40:54.0;+35:51:18;Aur;14.00;14.00;;;;;;;;;;;;;;;;;;;;;LBN 821;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-236;HII;05:22:00.0;+33:24:00;Aur;200.00;160.00;;;;;;;;;;;;;;;;;;;;;LBN 798;Flaming Star region;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-240;HII;05:39:00.0;+28:00:00;Tau;180.00;180.00;;;;;;;;;;;;;;;;;;;;;Simeis 147;Spaghetti Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-245;HII;05:36:18.0;+09:56:00;Ori;30.00;30.00;;;;;;;;;;;;;;;;;;;;;LBN 860;Lambda Orionis Ring;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-252;HII;06:09:06.0;+20:29:12;Gem;30.00;30.00;;;;;;;;;;;;;;;;;;;;;LBN 892;Monkey Head Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-261;HII;06:18:42.0;+15:37:00;Ori;30.00;20.00;;;;;;;;;;;;;;;;;;;;;LBN 904;Lower's Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-264;HII;05:35:00.0;-01:00:00;Ori;300.00;300.00;;;;;;;;;;;;;;;;;;;;;LBN 911;Angelfish Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-274;HII;07:08:14.0;-10:38:48;Mon;13.00;13.00;;;;;;;;;;;;;;;;;;;;;PK 219+31.1;Medusa Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-276;HII;05:40:54.0;-01:54:36;Ori;60.00;60.00;;;;;;;;;;;;;;;;;;;;;LBN 942;Barnard's Loop;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-278;HII;05:33:54.0;-04:48:00;Ori;45.00;45.00;;;;;;;;;;;;;;;;;;;;;LBN 934;Flame + Horsehead region;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-281;HII;05:35:16.0;-05:23:24;Ori;66.00;60.00;;;;;;;;;;;;;;;;;;NGC1976;;;;;;Orion Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-282;HII;06:35:24.0;+00:56:00;Mon;8.00;8.00;;;;;;;;;;;;;;;;;;;;;LBN 948;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-296;HII;07:03:06.0;-11:33:00;CMa;120.00;120.00;;;;;;;;;;;;;;;;;;;;;LBN 1040;Seagull Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-302;HII;07:29:18.0;-16:54:24;CMa;10.00;10.00;;;;;;;;;;;;;;;;;;;;;LBN 1065;;;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99
+Sh2-308;HII;06:54:13.0;-23:55:42;CMa;40.00;32.00;;;;;;;;;;;;;;;;;;;;;LBN 1052;Dolphin Head Nebula;;;Type:99|RA:99|Dec:99|Const:99|MajAx:99

@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  CodeCoverage.runsettings — Win11-XISF-Shell-Extension
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  Production source is compiled directly into the test DLLs (no separate
+  production binaries are loaded at runtime), so we MUST
+  include the test assemblies in coverage.  To keep the report focused on
+  production code we use Source-level include/exclude filtering to strip
+  out test files, COM boilerplate, STL internals, and Windows SDK noise.
+
+  Activate:  Test > Configure Run Settings > Select Solution Wide runsettings File
+  Run:       Test > Analyze Code Coverage > All Tests
+-->
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="Code Coverage"
+                     uri="datacollector://Microsoft/CodeCoverage/2.0"
+                     assemblyQualifiedName="Microsoft.VisualStudio.Coverage.DynamicCoverageDataCollector, Microsoft.VisualStudio.TraceCollector, Version=11.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+        <Configuration>
+          <Format>coverage</Format>
+          <!-- Required: production source lives inside the test DLLs -->
+          <IncludeTestAssembly>True</IncludeTestAssembly>
+
+          <CodeCoverage>
+            <!-- =========================================================
+                 MODULE FILTERING
+                 Only instrument our own test DLLs (which contain the
+                 compiled production source) and the production DLLs
+                 for phases that build separate output.
+                 ========================================================= -->
+            <ModulePaths>
+              <Include>
+                <ModulePath>.*XISFPropertyHandlerTests\.dll$</ModulePath>
+                <ModulePath>.*XISFPreviewHandlerTests\.dll$</ModulePath>
+                <ModulePath>.*XISFPropertyHandler\.dll$</ModulePath>
+                <ModulePath>.*XISFPreviewHandler\.dll$</ModulePath>
+              </Include>
+              <Exclude>
+                <ModulePath>.*CPPUnitTestFramework.*</ModulePath>
+              </Exclude>
+            </ModulePaths>
+
+            <!-- =========================================================
+                 SOURCE FILTERING  (the key to a clean report)
+                 Include ONLY production source directories.  This strips
+                 test files, COM boilerplate stubs compiled from Windows
+                 headers, and anything outside our src/ trees.
+                 ========================================================= -->
+            <Sources>
+              <Include>
+                <Source>.*\\PropertyHandler\\XISFPropertyHandler\\src\\.*</Source>
+                <Source>.*\\PreviewHandler\\XISFPreviewHandler\\src\\.*</Source>
+              </Include>
+              <Exclude>
+                <!-- COM registration / factory boilerplate — not unit-testable -->
+                <Source>.*\\dllmain\.cpp$</Source>
+                <Source>.*\\ClassFactory\.cpp$</Source>
+                <Source>.*\\main\.cpp$</Source>
+                <!-- Windows / VC / ATL / CRT internals -->
+                <Source>.*\\atlmfc\\.*</Source>
+                <Source>.*\\vctools\\.*</Source>
+                <Source>.*\\public\\sdk\\.*</Source>
+                <Source>.*\\microsoft sdks\\.*</Source>
+                <Source>.*\\vc\\include\\.*</Source>
+                <Source>.*\\Windows Kits\\.*</Source>
+              </Exclude>
+            </Sources>
+
+            <!-- =========================================================
+                 FUNCTION FILTERING
+                 Strip STL template expansions, ATL internals, and VS
+                 test framework scaffolding that leak into the report.
+                 ========================================================= -->
+            <Functions>
+              <Exclude>
+                <!-- C++ Standard Library -->
+                <Function>^std::.*</Function>
+                <Function>^stdext::.*</Function>
+                <!-- ATL / COM helpers -->
+                <Function>^ATL::.*</Function>
+                <Function>^_com_.*</Function>
+                <!-- VS Native Test Framework internals -->
+                <Function>.*::__GetTestMethodInfo.*</Function>
+                <Function>^Microsoft::VisualStudio::CppCodeCoverageFramework::.*</Function>
+                <Function>^Microsoft::VisualStudio::CppUnitTestFramework::.*</Function>
+                <!-- CRT startup / atexit -->
+                <Function>^__security_.*</Function>
+                <Function>^__scrt_.*</Function>
+                <Function>^_CRT_.*</Function>
+                <Function>^_onexit.*</Function>
+                <Function>^_atexit.*</Function>
+              </Exclude>
+            </Functions>
+
+            <!-- =========================================================
+                 INSTRUMENTATION
+                 ========================================================= -->
+            <EnableStaticNativeInstrumentation>True</EnableStaticNativeInstrumentation>
+            <EnableDynamicNativeInstrumentation>True</EnableDynamicNativeInstrumentation>
+            <EnableStaticNativeInstrumentationRestore>True</EnableStaticNativeInstrumentationRestore>
+            <UseVerifiableInstrumentation>True</UseVerifiableInstrumentation>
+            <AllowLowIntegrityProcesses>True</AllowLowIntegrityProcesses>
+            <CollectFromChildProcesses>True</CollectFromChildProcesses>
+            <CollectAspDotNet>False</CollectAspDotNet>
+          </CodeCoverage>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

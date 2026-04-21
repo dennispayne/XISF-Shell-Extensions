@@ -1,0 +1,323 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.microsoft.com/windows/2006/propertydescription" schemaVersion="1.0">
+  <propertyDescriptionList publisher="XISF" product="XISFPropertyHandler">
+    <propertyDescription name="XISF.ExposureTime" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="2">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Exposure Time" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.CameraModel" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="3">
+      <searchInfo inInvertedIndex="true" isColumn="true" />
+      <labelInfo label="Astro Camera Model" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="100" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.FocalLength" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="4">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Focal Length" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.FNumber" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="5">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro F-Number" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="40" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.ObjectName" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="6">
+      <searchInfo inInvertedIndex="true" isColumn="true" />
+      <labelInfo label="Astro Object Name" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="80" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.FilterName" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="7">
+      <searchInfo inInvertedIndex="true" isColumn="true" />
+      <labelInfo label="Astro Filter" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="50" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.ImageType" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="8">
+      <searchInfo inInvertedIndex="true" isColumn="true" />
+      <labelInfo label="Astro Image Type" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.Gain" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="9">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Gain" />
+      <typeInfo type="UInt32" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="40" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.Offset" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="10">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Offset" />
+      <typeInfo type="UInt32" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="40" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.SensorTemperature" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="11">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Sensor Temp" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.Telescope" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="12">
+      <searchInfo inInvertedIndex="true" isColumn="true" />
+      <labelInfo label="Astro Telescope" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="80" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.Binning" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="13">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Binning" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="40" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.DateObserved" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="14">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Date Observed" />
+      <typeInfo type="DateTime" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="120" displayType="DateTime" />
+    </propertyDescription>
+    <propertyDescription name="XISF.Software" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="15">
+      <searchInfo inInvertedIndex="true" isColumn="true" />
+      <labelInfo label="Astro Software" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="80" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.RA" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="16">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro RA (degrees)" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.Dec" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="17">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Dec (degrees)" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.SetTemp" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="18">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Set Temp" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.PixelSize" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="19">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Pixel Size" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.ReadoutMode" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="20">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Readout Mode" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="70" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.BayerPattern" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="21">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Bayer Pattern" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.SiteLatitude" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="22">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Site Latitude" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="80" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.SiteLongitude" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="23">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Site Longitude" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="80" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.SiteElevation" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="24">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Site Elevation (m)" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="80" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.Altitude" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="25">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Altitude" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.Azimuth" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="26">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Azimuth" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.Airmass" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="27">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Airmass" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.PierSide" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="28">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Pier Side" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.ObjectRA" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="29">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro RA (HMS)" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="80" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.ObjectDec" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="30">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Dec (DMS)" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="80" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.Rotation" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="31">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Rotation" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.FocuserName" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="32">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Focuser Name" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="80" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.FocuserPosition" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="33">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Focuser Position" />
+      <typeInfo type="UInt32" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.FocuserTemp" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="34">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Focuser Temp" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.RotatorName" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="35">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Rotator Name" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="80" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.RotatorAngle" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="36">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Rotator Angle" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.FilterWheel" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="37">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Filter Wheel" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="70" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.DewPoint" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="38">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Dew Point" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.Humidity" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="39">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Humidity (%)" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.AmbientTemp" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="40">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Ambient Temp" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.DateLocal" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="41">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Date Local" />
+      <typeInfo type="DateTime" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="100" displayType="DateTime" />
+    </propertyDescription>
+    <propertyDescription name="XISF.RAHour" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="42">
+      <searchInfo inInvertedIndex="true" isColumn="true" />
+      <labelInfo label="Astro RA Region" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="40" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.DecBand" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="43">
+      <searchInfo inInvertedIndex="true" isColumn="true" />
+      <labelInfo label="Astro Dec Region" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="70" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.Constellation" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="44">
+      <searchInfo inInvertedIndex="true" isColumn="true" />
+      <labelInfo label="Astro Constellation" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="80" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.MatchedObjects" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="45">
+      <searchInfo inInvertedIndex="true" isColumn="true" />
+      <labelInfo label="Astro Matched Objects" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="120" displayType="String" />
+    </propertyDescription>
+    <propertyDescription name="XISF.StarFWHM" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="46">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Star FWHM" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.SkyQuality" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="47">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Sky Quality" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.SkyBrightness" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="48">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Sky Brightness" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.CloudCover" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="49">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Cloud Cover" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.Pressure" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="50">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Pressure (hPa)" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.SkyTemp" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="51">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Sky Temp" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.WindSpeed" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="52">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Wind Speed" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.GuideRA" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="53">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Guide RA Error" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.GuideDec" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="54">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Guide Dec Error" />
+      <typeInfo type="Double" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+  </propertyDescriptionList>
+</schema>

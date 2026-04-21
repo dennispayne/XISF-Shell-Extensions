@@ -1,0 +1,92 @@
+[
+  {
+    "canonicalName": "Orion Nebula",
+    "aliases": ["M42", "NGC 1976", "LBN 974", "Sh2-281"],
+    "type": "Emission Nebula",
+    "constellation": "Orion"
+  },
+  {
+    "canonicalName": "Andromeda Galaxy",
+    "aliases": ["M31", "NGC 224", "UGC 454"],
+    "type": "Spiral Galaxy",
+    "constellation": "Andromeda"
+  },
+  {
+    "canonicalName": "Whirlpool Galaxy",
+    "aliases": ["M51", "NGC 5194", "UGC 8493"],
+    "type": "Spiral Galaxy",
+    "constellation": "Canes Venatici"
+  },
+  {
+    "canonicalName": "Ring Nebula",
+    "aliases": ["M57", "NGC 6720"],
+    "type": "Planetary Nebula",
+    "constellation": "Lyra"
+  },
+  {
+    "canonicalName": "Crab Nebula",
+    "aliases": ["M1", "NGC 1952", "Taurus A"],
+    "type": "Supernova Remnant",
+    "constellation": "Taurus"
+  },
+  {
+    "canonicalName": "Pleiades",
+    "aliases": ["M45", "Melotte 22", "Seven Sisters"],
+    "type": "Open Cluster",
+    "constellation": "Taurus"
+  },
+  {
+    "canonicalName": "Horsehead Nebula",
+    "aliases": ["Barnard 33", "B33", "IC 434"],
+    "type": "Dark Nebula",
+    "constellation": "Orion"
+  },
+  {
+    "canonicalName": "Triangulum Galaxy",
+    "aliases": ["M33", "NGC 598", "UGC 1117"],
+    "type": "Spiral Galaxy",
+    "constellation": "Triangulum"
+  },
+  {
+    "canonicalName": "Sombrero Galaxy",
+    "aliases": ["M104", "NGC 4594", "UGC 7786"],
+    "type": "Spiral Galaxy",
+    "constellation": "Virgo"
+  },
+  {
+    "canonicalName": "Eagle Nebula",
+    "aliases": ["M16", "NGC 6611", "IC 4703"],
+    "type": "Emission Nebula",
+    "constellation": "Serpens"
+  },
+  {
+    "canonicalName": "Lagoon Nebula",
+    "aliases": ["M8", "NGC 6523", "Sharpless 25"],
+    "type": "Emission Nebula",
+    "constellation": "Sagittarius"
+  },
+  {
+    "canonicalName": "Trifid Nebula",
+    "aliases": ["M20", "NGC 6514"],
+    "type": "Emission Nebula",
+    "constellation": "Sagittarius"
+  },
+  {
+    "canonicalName": "Dumbbell Nebula",
+    "aliases": ["M27", "NGC 6853"],
+    "type": "Planetary Nebula",
+    "constellation": "Vulpecula"
+  },
+  {
+    "canonicalName": "Helix Nebula",
+    "aliases": ["NGC 7293", "Caldwell 63"],
+    "type": "Planetary Nebula",
+    "constellation": "Aquarius"
+  },
+  {
+    "canonicalName": "Pillars of Creation",
+    "aliases": ["M16 Pillars", "Eagle Nebula Pillars"],
+    "type": "Emission Nebula",
+    "constellation": "Serpens"
+  }
+]

@@ -1,0 +1,7 @@
+// XISFPropertyHandler.rc - Embed OpenNGC catalog data as Win32 resources
+#include "resource.h"
+#include <windows.h>
+
+IDR_DSO_NGC       RCDATA "..\\data\\NGC.csv"
+IDR_DSO_ADDENDUM  RCDATA "..\\data\\addendum.csv"
+IDR_DSO_SHARPLESS RCDATA "..\\data\\sharpless.csv"
