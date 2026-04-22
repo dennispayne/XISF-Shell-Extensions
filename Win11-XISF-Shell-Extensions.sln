@@ -34,7 +34,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Packaging", "Packaging", "{CAFE0001-0000-0000-0000-000000000001}"
 	ProjectSection(SolutionItems) = preProject
 		Packaging\build-msix.ps1 = Packaging\build-msix.ps1
-		Packaging\XISFShellExtension\Package.appxmanifest = Packaging\XISFShellExtension\Package.appxmanifest
+		Packaging\XISFShellExtensions\Package.appxmanifest = Packaging\XISFShellExtensions\Package.appxmanifest
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{CAFE0002-0000-0000-0000-000000000001}"

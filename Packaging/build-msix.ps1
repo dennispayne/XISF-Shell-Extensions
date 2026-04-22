@@ -57,7 +57,7 @@ Set-StrictMode -Version Latest
 $repoRoot     = Resolve-Path (Join-Path $PSScriptRoot '..')
 $releaseDir   = Join-Path $repoRoot "x64\$Configuration"
 $sharedAssets = Join-Path $PSScriptRoot 'Shared\Assets'
-$manifestSrc  = Join-Path $PSScriptRoot 'XISFShellExtension\Package.appxmanifest'
+$manifestSrc  = Join-Path $PSScriptRoot 'XISFShellExtensions\Package.appxmanifest'
 if (-not $OutputDir) { $OutputDir = Join-Path $repoRoot 'artifacts' }
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 
@@ -96,7 +96,7 @@ foreach ($f in $binaries) {
 $outName = 'XISF.ShellExtension'
 Write-Host "`n=== Building $outName`_${fullVersion}_x64.msix ===" -ForegroundColor Cyan
 
-$stage = Join-Path $repoRoot 'artifacts\stage\XISFShellExtension'
+$stage = Join-Path $repoRoot 'artifacts\stage\XISFShellExtensions'
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 

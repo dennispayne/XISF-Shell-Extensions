@@ -112,7 +112,7 @@ XISF-Shell-Extensions/
 ├── PerformanceTests/                # Microbenchmarks
 ├── ShellExtensionHost/              # Settings app + catalog installer
 ├── Packaging/
-│   ├── XISFShellExtension/          # MSIX manifest
+│   ├── XISFShellExtensions/          # MSIX manifest
 │   └── Shared/Assets/
 ├── HelperScripts/                   # Dev scripts (regsvr32, catalogs)
 ├── docs/                            # Design docs

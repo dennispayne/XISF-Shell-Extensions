@@ -165,7 +165,7 @@ install catalogs.
 Packaging/
 ├── Shared/
 │   └── Assets/                      # Square44/150, Wide310x150, StoreLogo PNGs
-├── XISFShellExtension/
+├── XISFShellExtensions/
 │   └── Package.appxmanifest
 └── build-msix.ps1                   # Staging + makeappx + signtool driver
 
