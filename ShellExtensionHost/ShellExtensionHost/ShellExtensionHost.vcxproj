@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -12,29 +12,28 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>
-    <ProjectGuid>{F6A7B8C9-D0E1-2345-F123-456789012345}</ProjectGuid>
-    <RootNamespace>XISFPropertyHandler</RootNamespace>
+    <ProjectGuid>{B1C2D3E4-F5A6-7890-1234-56789ABCDEF0}</ProjectGuid>
+    <RootNamespace>XISFShellExtensionHost</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
-  <ImportGroup Label="ExtensionSettings">
-  </ImportGroup>
-  <ImportGroup Label="Shared">
-  </ImportGroup>
+  <Import Project="$(MSBuildThisFileDirectory)..\..\build\version.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="Shared" />
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataProps" />
   </ImportGroup>
@@ -42,80 +41,67 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataProps" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <TargetName>XISFShellExtensionHost</TargetName>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;UNICODE;_UNICODE;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <Optimization>Disabled</Optimization>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <!-- Uncomment when nlohmann/json is available via vcpkg (vcpkg install nlohmann-json):
-      <AdditionalIncludeDirectories>$(VcpkgRoot)\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories> -->
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <ModuleDefinitionFile>src\XISFPropertyHandler.def</ModuleDefinitionFile>
-      <AdditionalDependencies>shlwapi.lib;propsys.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>user32.lib;shell32.lib;comctl32.lib;comdlg32.lib;shlwapi.lib;winhttp.lib;bcrypt.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;UNICODE;_UNICODE;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <!-- Uncomment when nlohmann/json is available via vcpkg (vcpkg install nlohmann-json):
-      <AdditionalIncludeDirectories>$(VcpkgRoot)\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories> -->
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <ModuleDefinitionFile>src\XISFPropertyHandler.def</ModuleDefinitionFile>
-      <AdditionalDependencies>shlwapi.lib;propsys.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>user32.lib;shell32.lib;comctl32.lib;comdlg32.lib;shlwapi.lib;winhttp.lib;bcrypt.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="src\ConstellationDB.cpp" />
-    <ClCompile Include="src\dllmain.cpp" />
-    <ClCompile Include="src\ClassFactory.cpp" />
-    <ClCompile Include="src\DSOCatalog.cpp" />
-    <ClCompile Include="src\HandlerSettings.cpp" />
-    <ClCompile Include="src\PropertyStore.cpp" />
-    <ClCompile Include="src\DSOAliasDB.cpp" />
-    <ClCompile Include="src\XISFParser.cpp" />
+    <ClCompile Include="src\ShellExtensionHost.cpp" />
+    <ClCompile Include="src\CatalogInstaller.cpp" />
+    <ClCompile Include="src\HostSettings.cpp" />
+    <ClCompile Include="src\Paths.cpp" />
+    <ClCompile Include="src\Sha256.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\ClassFactory.h" />
-    <ClInclude Include="src\ConstellationDB.h" />
-    <ClInclude Include="src\DSOCatalog.h" />
-    <ClInclude Include="src\HandlerSettings.h" />
-    <ClInclude Include="src\PropertyStore.h" />
-    <ClInclude Include="src\DSOAliasDB.h" />
-    <ClInclude Include="src\resource.h" />
-    <ClInclude Include="src\XISFParser.h" />
+    <ClInclude Include="src\CatalogInstaller.h" />
+    <ClInclude Include="src\CatalogSpec.h" />
+    <ClInclude Include="src\HostResources.h" />
+    <ClInclude Include="src\HostSettings.h" />
+    <ClInclude Include="src\Paths.h" />
+    <ClInclude Include="src\Sha256.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="data\sharpless.csv" />
-    <None Include="src\XISFPropertyHandler.def" />
+    <ResourceCompile Include="src\ShellExtensionHost.rc" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="src\XISFPropertyHandler.rc" />
+    <Manifest Include="src\ShellExtensionHost.exe.manifest" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <ImportGroup Label="ExtensionTargets">
-  </ImportGroup>
-  <Target Name="CopyPropdesc" AfterTargets="Build">
-    <Copy SourceFiles="propdesc\xisf.propdesc" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
-  </Target>
+  <ImportGroup Label="ExtensionTargets" />
 </Project>

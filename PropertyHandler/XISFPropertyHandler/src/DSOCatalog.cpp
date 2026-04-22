@@ -323,6 +323,14 @@ bool DSOCatalog::LoadFromCSVFile(const std::string& path) {
     return LoadFromCSVString(ss.str());
 }
 
+bool DSOCatalog::AppendFromCSVFile(const std::string& path) {
+    std::ifstream file(path);
+    if (!file.is_open()) return false;
+    std::ostringstream ss;
+    ss << file.rdbuf();
+    return AppendFromCSVString(ss.str());
+}
+
 bool DSOCatalog::LoadFromResource(HMODULE hModule, int resourceId) {
     HRSRC hRes = FindResourceW(hModule, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
     if (!hRes) return false;

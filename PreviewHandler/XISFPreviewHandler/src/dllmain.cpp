@@ -15,6 +15,7 @@
 #include "ThumbnailProvider.h"
 #include "PreviewHandler.h"
 #include "PreviewHandlerTelemetry.h"
+#include "HandlerSettings.h"
 
 #pragma comment(lib, "advapi32.lib")
 
@@ -74,6 +75,10 @@ public:
         if (!ppv) return E_POINTER;
         *ppv = nullptr;
         if (pUnkOuter) return CLASS_E_NOAGGREGATION;
+
+        // Runtime toggle: when disabled via HKCU, Explorer falls back to default behavior.
+        if (!xisf::IsPreviewHandlerEnabled())
+            return CLASS_E_CLASSNOTAVAILABLE;
 
         T* p = new (std::nothrow) T();
         if (!p) return E_OUTOFMEMORY;

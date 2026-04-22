@@ -1,0 +1,167 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version_override:
+        description: 'Override version (for manual runs). Leave blank to use version.json.'
+        required: false
+
+permissions:
+  contents: write  # needed to create a GitHub Release
+
+jobs:
+  release:
+    name: Build + Sign + Release
+    runs-on: windows-latest
+    env:
+      # Subject/CN used for both self-signed cert and MSIX Identity/Publisher.
+      # Must match exactly.
+      PUBLISHER_CN: 'CN=Dennis Payne'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          $override = '${{ github.event.inputs.version_override }}'
+          if ($override) {
+            $v = $override
+          } elseif ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $v = $env:GITHUB_REF -replace '^refs/tags/v', ''
+          } else {
+            $v = (Get-Content version.json | ConvertFrom-Json).version
+          }
+          if ($v -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z\.\-]+)?$') {
+            throw "Version '$v' is not a valid SemVer."
+          }
+          $core = ($v -split '-')[0]
+          "version=$core"       | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "full_version=$v"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "tag=v$v"             | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Build solution
+        shell: pwsh
+        run: |
+          msbuild Win11-XISF-Shell-Extensions.sln `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:XISFVersion=${{ steps.ver.outputs.version }} `
+            /p:XISFBuildNumber=${{ github.run_number }} `
+            /m /v:minimal /nologo
+
+      - name: Setup VSTest
+        uses: darenm/Setup-VSTest@v1.3
+
+      - name: Run unit tests
+        shell: pwsh
+        run: |
+          $tests = @(
+            'x64\Release\XISFPropertyHandlerTests.dll',
+            'x64\Release\XISFPreviewHandlerTests.dll'
+          ) | Where-Object { Test-Path $_ }
+          vstest.console.exe $tests --Platform:x64 --Logger:trx --ResultsDirectory:TestResults
+
+      - name: Resolve signing certificate
+        id: cert
+        shell: pwsh
+        run: |
+          $pfxB64 = '${{ secrets.SIGNING_PFX_BASE64 }}'
+          $pfxPwd = '${{ secrets.SIGNING_PFX_PASSWORD }}'
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'xisf-signing.pfx'
+          $cerPath = Join-Path $env:RUNNER_TEMP 'xisf-signing.cer'
+
+          if ($pfxB64) {
+            Write-Host "Using repository signing certificate from secrets."
+            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($pfxB64))
+            "self_signed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          } else {
+            Write-Warning "No SIGNING_PFX_BASE64 secret set. Generating an EPHEMERAL self-signed certificate."
+            $password = ConvertTo-SecureString -String 'xisf-dev' -AsPlainText -Force
+            $cert = New-SelfSignedCertificate `
+                -Type CodeSigningCert `
+                -Subject $env:PUBLISHER_CN `
+                -KeyUsage DigitalSignature `
+                -FriendlyName 'XISF Shell Extension (self-signed)' `
+                -CertStoreLocation Cert:\CurrentUser\My `
+                -KeyAlgorithm RSA `
+                -KeyLength 2048 `
+                -HashAlgorithm SHA256 `
+                -NotAfter (Get-Date).AddYears(3) `
+                -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3','2.5.29.19={text}')
+            Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $password | Out-Null
+            Export-Certificate    -Cert $cert -FilePath $cerPath -Type CERT | Out-Null
+            "self_signed=true"    | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            "pfx_password=xisf-dev" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          }
+
+          "pfx_path=$pfxPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "cer_path=$cerPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Build and sign MSIX packages
+        shell: pwsh
+        run: |
+          $pwd = if ('${{ steps.cert.outputs.self_signed }}' -eq 'true') {
+            ConvertTo-SecureString -String '${{ steps.cert.outputs.pfx_password }}' -AsPlainText -Force
+          } else {
+            ConvertTo-SecureString -String '${{ secrets.SIGNING_PFX_PASSWORD }}' -AsPlainText -Force
+          }
+          .\Packaging\build-msix.ps1 `
+            -Version ${{ steps.ver.outputs.version }} `
+            -BuildNumber ${{ github.run_number }} `
+            -Publisher '${{ env.PUBLISHER_CN }}' `
+            -CertificatePath '${{ steps.cert.outputs.pfx_path }}' `
+            -CertificatePassword $pwd
+
+      - name: Compute SHA256SUMS
+        shell: pwsh
+        run: |
+          $out = Join-Path 'artifacts' 'SHA256SUMS.txt'
+          Get-ChildItem artifacts\*.msix | ForEach-Object {
+            $h = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLower()
+            "$h  $($_.Name)"
+          } | Set-Content $out -Encoding ascii
+          Get-Content $out
+
+      - name: Stage release assets
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'release-assets'
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          Copy-Item artifacts\*.msix $stage
+          Copy-Item artifacts\SHA256SUMS.txt $stage
+          if ('${{ steps.cert.outputs.self_signed }}' -eq 'true') {
+            Copy-Item '${{ steps.cert.outputs.cer_path }}' (Join-Path $stage 'XISF-Shell-Extensions.cer')
+          }
+          "release_dir=$stage" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Get-ChildItem $stage
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: ${{ steps.ver.outputs.tag }}
+          generate_release_notes: true
+          prerelease: ${{ contains(steps.ver.outputs.full_version, '-') }}
+          files: |
+            artifacts/*.msix
+            artifacts/SHA256SUMS.txt
+            ${{ runner.temp }}/release-assets/XISF-Shell-Extensions.cer
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.ver.outputs.full_version }}
+          path: |
+            artifacts/*.msix
+            artifacts/SHA256SUMS.txt

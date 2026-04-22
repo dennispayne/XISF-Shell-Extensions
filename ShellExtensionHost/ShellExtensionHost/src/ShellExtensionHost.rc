@@ -1,0 +1,91 @@
+// ShellExtensionHost.rc - Version info + settings dialog
+#include <windows.h>
+#include <commctrl.h>
+#include "src/HostResources.h"
+
+#ifndef XISF_VERSION_COMMA
+#define XISF_VERSION_COMMA 0,1,0,0
+#endif
+#ifndef XISF_VERSION_TEXT
+#define XISF_VERSION_TEXT 0.1.0.0
+#endif
+#define XISF_STR_(x) #x
+#define XISF_STR(x) XISF_STR_(x)
+#define XISF_VERSION_STR XISF_STR(XISF_VERSION_TEXT)
+
+IDD_SETTINGS DIALOGEX 0, 0, 420, 320
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX
+CAPTION "XISF Shell Extension"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    LTEXT           "Enable or disable the Windows Shell handlers for .xisf files. Changes apply next time File Explorer loads the handler (Restart File Explorer from Task Manager to apply immediately).",
+                    IDC_STATIC_INTRO,   10,  8, 400, 24
+    GROUPBOX        "Handlers",                     -1,                 10, 36, 400, 58
+    AUTOCHECKBOX    "Property Handler  (Details pane, File Info)",
+                    IDC_CHK_PROPERTY,   20, 50, 380, 12
+    AUTOCHECKBOX    "Preview / Thumbnail Handler  (Preview pane, Explorer thumbnails)",
+                    IDC_CHK_PREVIEW,    20, 66, 380, 12
+    LTEXT           "Disabling a handler makes Explorer fall back to default behavior; the DLLs stay installed.",
+                    -1,                 20, 80, 380, 10
+
+    GROUPBOX        "DSO Catalogs (optional, enriches Property Handler output)", IDC_STATIC_CATALOGS, 10, 100, 400, 170
+    LTEXT           "",                 IDC_STATIC_PIN,      20, 112, 380, 18
+
+    LTEXT           "NGC.csv:",         IDC_STATIC_NGC_LABEL, 20, 134, 60, 10
+    LTEXT           "(checking…)",      IDC_STATIC_NGC_STATUS, 82, 134, 320, 18
+
+    LTEXT           "addendum.csv:",    IDC_STATIC_ADD_LABEL, 20, 156, 60, 10
+    LTEXT           "(checking…)",      IDC_STATIC_ADD_STATUS, 82, 156, 320, 18
+
+    PUSHBUTTON      "Install / Update from GitHub",
+                    IDC_BTN_FETCH_ONLINE,  20, 180, 130, 14
+    PUSHBUTTON      "Import from File…",
+                    IDC_BTN_IMPORT_FILE,  155, 180,  90, 14
+    PUSHBUTTON      "Open Catalog Folder",
+                    IDC_BTN_OPEN_CATALOG_DIR, 250, 180,  80, 14
+    PUSHBUTTON      "Copy Expected Hashes",
+                    IDC_BTN_COPY_EXPECTED_HASHES, 335, 180,  65, 14
+
+    CONTROL         "", IDC_PROGRESS, PROGRESS_CLASSA,
+                    WS_CHILD | WS_VISIBLE,   20, 202, 380, 10
+    LTEXT           "",                 IDC_STATIC_PROGRESS_TEXT, 20, 216, 380, 40
+
+    LTEXT           "All downloads are pinned to a specific OpenNGC commit and verified with SHA-256. Files with mismatching hashes are rejected. You can also verify local files offline.",
+                    -1,                 20, 240, 380, 28
+
+    DEFPUSHBUTTON   "Close",            IDOK,               360, 296,  50, 14
+    LTEXT           "",                 IDC_STATIC_VERSION,  10, 298, 340, 10
+END
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION    XISF_VERSION_COMMA
+ PRODUCTVERSION XISF_VERSION_COMMA
+ FILEFLAGSMASK  0x3fL
+#ifdef _DEBUG
+ FILEFLAGS      0x1L
+#else
+ FILEFLAGS      0x0L
+#endif
+ FILEOS         VOS_NT_WINDOWS32
+ FILETYPE       VFT_APP
+ FILESUBTYPE    VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName",      "Dennis Payne"
+            VALUE "FileDescription",  "XISF Shell Extension Host (about stub)"
+            VALUE "FileVersion",      XISF_VERSION_STR
+            VALUE "InternalName",     "XISFShellExtensionHost"
+            VALUE "LegalCopyright",   "Copyright (c) 2026 Dennis Payne. MIT License."
+            VALUE "OriginalFilename", "XISFShellExtensionHost.exe"
+            VALUE "ProductName",      "XISF Shell Extension"
+            VALUE "ProductVersion",   XISF_VERSION_STR
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

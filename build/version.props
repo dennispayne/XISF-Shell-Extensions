@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Shared version properties for XISF Shell Extension binaries.
+  Overridden by CI via /p:XISFVersion=X.Y.Z and /p:XISFBuildNumber=N.
+  Local builds produce X.Y.Z.0.
+-->
+<Project>
+  <PropertyGroup>
+    <XISFVersion Condition="'$(XISFVersion)' == ''">0.1.0</XISFVersion>
+    <XISFBuildNumber Condition="'$(XISFBuildNumber)' == ''">0</XISFBuildNumber>
+    <XISFFullVersion>$(XISFVersion).$(XISFBuildNumber)</XISFFullVersion>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PreprocessorDefinitions>XISF_VERSION_STR="$(XISFFullVersion)";XISF_VERSION_MAJOR_MINOR_PATCH="$(XISFVersion)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>XISF_VERSION_TEXT=$(XISFFullVersion);XISF_VERSION_COMMA=$([System.String]::Copy('$(XISFFullVersion)').Replace('.',','));%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+</Project>

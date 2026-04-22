@@ -44,6 +44,9 @@ public:
     /// Load catalog from a semicolon-delimited CSV file (OpenNGC format).
     bool LoadFromCSVFile(const std::string& path);
 
+    /// Append catalog entries from a semicolon-delimited CSV file.
+    bool AppendFromCSVFile(const std::string& path);
+
     /// Load catalog from an in-memory CSV string.
     bool LoadFromCSVString(const std::string& csvContent);
 

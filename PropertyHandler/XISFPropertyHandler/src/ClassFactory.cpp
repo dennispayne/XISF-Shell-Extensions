@@ -1,6 +1,7 @@
 // ClassFactory.cpp — IClassFactory implementation for CXISFPropertyHandler (Property Handler)
 #include "ClassFactory.h"
 #include "PropertyStore.h"
+#include "HandlerSettings.h"
 #include <new>
 
 extern long g_cDllRef;

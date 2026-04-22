@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  CodeCoverage.runsettings — Win11-XISF-Shell-Extension
+  CodeCoverage.runsettings — Win11-XISF-Shell-Extensions
   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   Production source is compiled directly into the test DLLs (no separate
   production binaries are loaded at runtime), so we MUST

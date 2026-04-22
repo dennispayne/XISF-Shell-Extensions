@@ -31,6 +31,7 @@
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="$(MSBuildThisFileDirectory)..\..\build\version.props" />
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
   <ImportGroup Label="Shared">
@@ -83,11 +84,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\dllmain.cpp" />
+    <ClCompile Include="src\HandlerSettings.cpp" />
     <ClCompile Include="src\ThumbnailProvider.cpp" />
     <ClCompile Include="src\PreviewHandler.cpp" />
     <ClCompile Include="src\XISFParser.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\HandlerSettings.h" />
     <ClInclude Include="src\PreviewHandlerTelemetry.h" />
     <ClInclude Include="src\ThumbnailProvider.h" />
     <ClInclude Include="src\PreviewHandler.h" />
@@ -95,6 +98,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="src\XISFPreviewHandler.def" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="src\XISFPreviewHandler.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

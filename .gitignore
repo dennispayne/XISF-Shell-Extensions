@@ -1,8 +1,10 @@
 # MCP config (contains auth tokens)
 .vscode/mcp.json
 
-# Local-only agent/instruction configuration
-.github/
+# Local-only agent/instruction configuration (keep workflows/templates trackable)
+.github/agents/
+.github/copilot-instructions.md
+.github/*.agent.md
 
 # Visual Studio
 .vs/

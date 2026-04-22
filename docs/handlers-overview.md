@@ -27,7 +27,7 @@ Windows Explorer
 
 Use the combined solution:
 
-`Win11-XISF-Shell-Extension.sln`
+`Win11-XISF-Shell-Extensions.sln`
 
 ## Supporting docs
 

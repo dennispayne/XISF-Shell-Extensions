@@ -4,6 +4,8 @@
 #include <evntprov.h>
 #include <strsafe.h>
 #include <shlwapi.h>
+#include <shlobj.h>
+#include <knownfolders.h>
 #include <new>
 #include <cstdlib>
 #include <cstring>
@@ -12,6 +14,9 @@
 #include <mutex>
 #include <cstdarg>
 #include "resource.h"
+
+#pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "advapi32.lib")
 
 extern long g_cDllRef;
@@ -297,7 +302,7 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
 
     std::call_once(*s_catalogOnceFlag, [this, &catalogConfiguredThisCall, &catalogSource, &overridePath, &catalogPriorityCount, &catalogEntryCount, &matchToleranceDeg]() {
         catalogConfiguredThisCall = true;
-        catalogSource = L"embedded-resource";
+        catalogSource = L"none";
         overridePath = s_dsoDbPath;
 
         {
@@ -324,13 +329,31 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
             }
         }
 
-        extern HINSTANCE g_hInst;
         auto cat = std::make_shared<xisf::DSOCatalog>();
-        if (g_hInst) {
-            cat->LoadFromResource(static_cast<HMODULE>(g_hInst), IDR_DSO_NGC);
-            cat->AppendFromResource(static_cast<HMODULE>(g_hInst), IDR_DSO_ADDENDUM);
-            cat->AppendFromResource(static_cast<HMODULE>(g_hInst), IDR_DSO_SHARPLESS);
-        }
+
+        // Catalog files live under %LOCALAPPDATA%\XISFShellExtension\catalogs\
+        // and are acquired at runtime by the settings EXE
+        // (XISFShellExtensionHost). They are not embedded in this DLL. If a
+        // file is missing or fails to parse we continue without that catalog
+        // — the handler degrades gracefully and simply omits DSO enrichment.
+        auto loadLocalAppDataCsv = [](xisf::DSOCatalog& c, const wchar_t* fileName, bool append) -> bool {
+            PWSTR pszBase = nullptr;
+            if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &pszBase)) || !pszBase)
+                return false;
+            std::wstring wpath = std::wstring(pszBase) + L"\\XISFShellExtension\\catalogs\\" + fileName;
+            CoTaskMemFree(pszBase);
+            int len = WideCharToMultiByte(CP_UTF8, 0, wpath.c_str(), -1, nullptr, 0, nullptr, nullptr);
+            if (len <= 0) return false;
+            std::string path(static_cast<size_t>(len - 1), '\0');
+            WideCharToMultiByte(CP_UTF8, 0, wpath.c_str(), -1, path.data(), len, nullptr, nullptr);
+            return append ? c.AppendFromCSVFile(path) : c.LoadFromCSVFile(path);
+        };
+
+        bool anyLoaded = loadLocalAppDataCsv(*cat, L"NGC.csv", /*append*/ false);
+        if (loadLocalAppDataCsv(*cat, L"addendum.csv", /*append*/ true)) anyLoaded = true;
+        if (loadLocalAppDataCsv(*cat, L"sharpless.csv", /*append*/ true)) anyLoaded = true;
+        catalogSource = anyLoaded ? L"localappdata-csv" : L"none";
+
         if (!s_dsoDbPath.empty()) {
             int len = WideCharToMultiByte(CP_UTF8, 0, s_dsoDbPath.c_str(), -1, nullptr, 0, nullptr, nullptr);
             if (len > 0) {
@@ -342,7 +365,7 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
                     catalogSource = L"file-override";
                 }
                 else {
-                    catalogSource = L"embedded-fallback";
+                    catalogSource = anyLoaded ? L"localappdata-fallback" : L"none";
                 }
             }
         }
