@@ -16,7 +16,7 @@ permissions:
 jobs:
   release:
     name: Build + Sign + Release
-    runs-on: windows-latest
+    runs-on: windows-2025-vs2026
     env:
       # Subject/CN used for both self-signed cert and MSIX Identity/Publisher.
       # Must match exactly.
