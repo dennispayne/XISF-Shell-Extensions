@@ -91,6 +91,7 @@
   <ItemGroup>
     <ClInclude Include="src\CatalogInstaller.h" />
     <ClInclude Include="src\CatalogSpec.h" />
+    <ClInclude Include="src\HandlerDllPath.h" />
     <ClInclude Include="src\HostResources.h" />
     <ClInclude Include="src\HostSettings.h" />
     <ClInclude Include="src\Paths.h" />

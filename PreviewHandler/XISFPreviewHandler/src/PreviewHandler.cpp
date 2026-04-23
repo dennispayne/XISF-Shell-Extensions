@@ -7,7 +7,6 @@
 #include "PreviewHandlerTelemetry.h"
 
 #include <shlwapi.h>
-#include <evntrace.h>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -98,14 +97,20 @@ IFACEMETHODIMP CPreviewHandler::Initialize(IStream* pStream, DWORD /*grfMode*/)
 {
     if (m_initialized)
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_LIFECYCLE,
-            L"PreviewInitializeFailed Stage=AlreadyInitialized");
+        TraceLoggingWrite(g_hPreviewProvider, "PreviewInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE),
+            TraceLoggingString("AlreadyInitialized", "Stage"));
+        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_LIFECYCLE, L"PreviewInitializeFailed Stage=AlreadyInitialized");
         return HRESULT_FROM_WIN32(ERROR_ALREADY_INITIALIZED);
     }
     if (!pStream)
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_LIFECYCLE,
-            L"PreviewInitializeFailed Stage=NullStream");
+        TraceLoggingWrite(g_hPreviewProvider, "PreviewInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE),
+            TraceLoggingString("NullStream", "Stage"));
+        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_LIFECYCLE, L"PreviewInitializeFailed Stage=NullStream");
         return E_INVALIDARG;
     }
 
@@ -114,15 +119,25 @@ IFACEMETHODIMP CPreviewHandler::Initialize(IStream* pStream, DWORD /*grfMode*/)
     HRESULT hr = pStream->Read(preamble, 16, &cbRead);
     if (FAILED(hr) || cbRead < 16)
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
-            L"PreviewInitializeFailed Stage=ReadPreamble HRESULT=0x%08X CbRead=%u",
-            static_cast<unsigned>(hr), cbRead);
+        TraceLoggingWrite(g_hPreviewProvider, "PreviewInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PARSE),
+            TraceLoggingString("ReadPreamble", "Stage"),
+            TraceLoggingHResult(hr, "Hr"),
+            TraceLoggingUInt32(cbRead, "CbRead"));
+        if (g_xisfPreviewHandlerTelemetryHook) {
+            wchar_t _buf[256]; swprintf_s(_buf, L"PreviewInitializeFailed Stage=ReadPreamble HRESULT=0x%08X CbRead=%u", static_cast<unsigned>(hr), cbRead);
+            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, _buf);
+        }
         return E_FAIL;
     }
     if (memcmp(preamble, "XISF0100", 8) != 0)
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
-            L"PreviewInitializeFailed Stage=InvalidSignature");
+        TraceLoggingWrite(g_hPreviewProvider, "PreviewInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PARSE),
+            TraceLoggingString("InvalidSignature", "Stage"));
+        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, L"PreviewInitializeFailed Stage=InvalidSignature");
         return E_FAIL;
     }
 
@@ -130,8 +145,15 @@ IFACEMETHODIMP CPreviewHandler::Initialize(IStream* pStream, DWORD /*grfMode*/)
     memcpy(&headerLength, preamble + 8, sizeof(UINT32));
     if (headerLength == 0 || headerLength > xisf::XISFParser::kMaxHeaderBytes)
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
-            L"PreviewInitializeFailed Stage=HeaderLength Length=%u", headerLength);
+        TraceLoggingWrite(g_hPreviewProvider, "PreviewInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PARSE),
+            TraceLoggingString("HeaderLength", "Stage"),
+            TraceLoggingUInt32(headerLength, "Length"));
+        if (g_xisfPreviewHandlerTelemetryHook) {
+            wchar_t _buf[128]; swprintf_s(_buf, L"PreviewInitializeFailed Stage=HeaderLength Length=%u", headerLength);
+            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, _buf);
+        }
         return E_FAIL;
     }
 
@@ -139,24 +161,41 @@ IFACEMETHODIMP CPreviewHandler::Initialize(IStream* pStream, DWORD /*grfMode*/)
     hr = pStream->Read(buffer.data(), headerLength, &cbRead);
     if (FAILED(hr) || cbRead < headerLength)
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
-            L"PreviewInitializeFailed Stage=ReadHeader HRESULT=0x%08X CbRead=%u Expected=%u",
-            static_cast<unsigned>(hr), cbRead, headerLength);
+        TraceLoggingWrite(g_hPreviewProvider, "PreviewInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PARSE),
+            TraceLoggingString("ReadHeader", "Stage"),
+            TraceLoggingHResult(hr, "Hr"),
+            TraceLoggingUInt32(cbRead, "CbRead"),
+            TraceLoggingUInt32(headerLength, "Expected"));
+        if (g_xisfPreviewHandlerTelemetryHook) {
+            wchar_t _buf[256]; swprintf_s(_buf, L"PreviewInitializeFailed Stage=ReadHeader HRESULT=0x%08X CbRead=%u Expected=%u", static_cast<unsigned>(hr), cbRead, headerLength);
+            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, _buf);
+        }
         return E_FAIL;
     }
 
     xisf::ParseResult result = xisf::XISFParser::ParseXMLString(buffer);
     if (!result.ok())
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
-            L"PreviewInitializeFailed Stage=ParseXml");
+        TraceLoggingWrite(g_hPreviewProvider, "PreviewInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PARSE),
+            TraceLoggingString("ParseXml", "Stage"));
+        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, L"PreviewInitializeFailed Stage=ParseXml");
         return E_FAIL;
     }
     m_metadata = std::move(result.metadata);
 
     m_initialized = true;
-    WritePreviewHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_LIFECYCLE,
-        L"PreviewInitialized HeaderBytes=%u", headerLength);
+    TraceLoggingWrite(g_hPreviewProvider, "PreviewInitialized",
+        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE),
+        TraceLoggingUInt32(headerLength, "HeaderBytes"));
+    if (g_xisfPreviewHandlerTelemetryHook) {
+        wchar_t _buf[128]; swprintf_s(_buf, L"PreviewInitialized HeaderBytes=%u", headerLength);
+        g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_LIFECYCLE, _buf);
+    }
     return S_OK;
 }
 
@@ -203,8 +242,11 @@ IFACEMETHODIMP CPreviewHandler::DoPreview()
 {
     if (!m_hwndParent)
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PREVIEW,
-            L"DoPreviewFailed Stage=MissingParentWindow");
+        TraceLoggingWrite(g_hPreviewProvider, "DoPreviewFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PREVIEW),
+            TraceLoggingString("MissingParentWindow", "Stage"));
+        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PREVIEW, L"DoPreviewFailed Stage=MissingParentWindow");
         return E_FAIL;
     }
 
@@ -212,15 +254,20 @@ IFACEMETHODIMP CPreviewHandler::DoPreview()
 
     if (!m_hwndPreview)
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PREVIEW,
-            L"DoPreviewFailed Stage=CreatePreviewWindow");
+        TraceLoggingWrite(g_hPreviewProvider, "DoPreviewFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PREVIEW),
+            TraceLoggingString("CreatePreviewWindow", "Stage"));
+        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PREVIEW, L"DoPreviewFailed Stage=CreatePreviewWindow");
         return E_FAIL;
     }
 
     ShowWindow(m_hwndPreview, SW_SHOW);
     UpdateWindow(m_hwndPreview);
-    WritePreviewHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_PREVIEW,
-        L"PreviewDisplayed");
+    TraceLoggingWrite(g_hPreviewProvider, "PreviewDisplayed",
+        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PREVIEW));
+    if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_PREVIEW, L"PreviewDisplayed");
     return S_OK;
 }
 
@@ -231,8 +278,10 @@ IFACEMETHODIMP CPreviewHandler::Unload()
         DestroyWindow(m_hwndPreview);
         m_hwndPreview = nullptr;
     }
-    WritePreviewHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_LIFECYCLE,
-        L"PreviewUnloaded");
+    TraceLoggingWrite(g_hPreviewProvider, "PreviewUnloaded",
+        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE));
+    if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_LIFECYCLE, L"PreviewUnloaded");
     return S_OK;
 }
 

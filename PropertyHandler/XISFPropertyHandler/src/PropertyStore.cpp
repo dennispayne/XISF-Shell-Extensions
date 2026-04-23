@@ -1,7 +1,6 @@
 #include <initguid.h>
 #include "PropertyStore.h"
-#include <evntrace.h>
-#include <evntprov.h>
+#include "PropertyHandlerTraceLogging.h"
 #include <strsafe.h>
 #include <shlwapi.h>
 #include <shlobj.h>
@@ -20,11 +19,6 @@
 #pragma comment(lib, "advapi32.lib")
 
 extern long g_cDllRef;
-#ifndef XISF_PROPERTY_DLL_BUILD
-REGHANDLE g_hPropertyHandlerTelemetryHandle = 0;
-#else
-extern REGHANDLE g_hPropertyHandlerTelemetryHandle;
-#endif
 
 std::wstring CXISFPropertyHandler::s_dsoDbPath;
 std::shared_ptr<xisf::DSOCatalog> CXISFPropertyHandler::s_dsoCatalog;
@@ -34,40 +28,22 @@ bool CXISFPropertyHandler::s_projectionEnabled = true;
 bool CXISFPropertyHandler::s_projectionChecked = false;
 static auto s_catalogOnceFlag = std::make_shared<std::once_flag>();
 
-static constexpr ULONGLONG XISF_ETW_KEYWORD_LIFECYCLE  = 0x0000000000000001ULL;
-static constexpr ULONGLONG XISF_ETW_KEYWORD_PARSE      = 0x0000000000000002ULL;
-static constexpr ULONGLONG XISF_ETW_KEYWORD_CATALOG    = 0x0000000000000004ULL;
-static constexpr ULONGLONG XISF_ETW_KEYWORD_PROJECTION = 0x0000000000000008ULL;
-static constexpr ULONGLONG XISF_ETW_KEYWORD_PERF       = 0x0000000000000010ULL;
+// Single definition for the test hook pointer.
+extern "C" XISFPropertyHandlerTelemetryHook g_xisfPropertyHandlerTelemetryHook = nullptr;
 
-// Test hook: when set, every formatted telemetry payload is also delivered
-// here (regardless of ETW provider enablement). Tests install a capturing
-// callback to assert on emitted events without needing a live ETW session.
-extern "C" {
-    using XISFPropertyHandlerTelemetryHook = void (*)(UCHAR level, ULONGLONG keyword, const wchar_t* message);
-    XISFPropertyHandlerTelemetryHook g_xisfPropertyHandlerTelemetryHook = nullptr;
-}
-
-static void WritePropertyHandlerTelemetry(UCHAR level, ULONGLONG keyword, PCWSTR format, ...) {
-    const bool etwEnabled = (g_hPropertyHandlerTelemetryHandle != 0 &&
-        EventProviderEnabled(g_hPropertyHandlerTelemetryHandle, level, keyword));
+void WritePropertyHandlerTelemetry(UCHAR level, ULONGLONG keyword, PCWSTR format, ...) {
     const bool hookEnabled = (g_xisfPropertyHandlerTelemetryHook != nullptr);
-    if (!etwEnabled && !hookEnabled) {
-        return;
-    }
-
     wchar_t buffer[768] = {};
     va_list args;
     va_start(args, format);
-    const HRESULT hr = StringCchVPrintfW(buffer, ARRAYSIZE(buffer), format, args);
+    StringCchVPrintfW(buffer, ARRAYSIZE(buffer), format, args);
     va_end(args);
-    if (FAILED(hr)) {
-        return;
-    }
 
-    if (etwEnabled) {
-        EventWriteString(g_hPropertyHandlerTelemetryHandle, level, keyword, buffer);
-    }
+    // EventWriteString accepts runtime level/keyword (TraceLoggingWrite requires
+    // compile-time constants).  Access the underlying REGHANDLE from the
+    // TraceLogging provider to emit a flat string event.
+    EventWriteString(g_hPropertyProvider->RegHandle, level, keyword, buffer);
+
     if (hookEnabled) {
         g_xisfPropertyHandlerTelemetryHook(level, keyword, buffer);
     }
@@ -237,18 +213,58 @@ std::string CXISFPropertyHandler::ComputeDecBand(double decDegrees) {
 
 IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode) {
     const ULONGLONG initStart = GetTickCount64();
-    WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_LIFECYCLE, L"PropertyStoreInitializeStart Mode=%u", grfMode);
+    TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeStart",
+        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE),
+        TraceLoggingUInt32(grfMode, "Mode"));
+    if (g_xisfPropertyHandlerTelemetryHook) {
+        wchar_t _buf[256]; swprintf_s(_buf, L"PropertyStoreInitializeStart Mode=%u", grfMode);
+        g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_LIFECYCLE, _buf);
+    }
 
     if (m_initialized) {
-        WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, L"PropertyStoreInitializeFailed Stage=AlreadyInitialized Hr=0x%08X Mode=%u DurationMs=%llu", HRESULT_FROM_WIN32(ERROR_ALREADY_INITIALIZED), grfMode, GetTickCount64() - initStart);
+        { HRESULT _hr = HRESULT_FROM_WIN32(ERROR_ALREADY_INITIALIZED); ULONGLONG _dur = GetTickCount64() - initStart;
+        TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE),
+            TraceLoggingString("AlreadyInitialized", "Stage"),
+            TraceLoggingHResult(_hr, "Hr"),
+            TraceLoggingUInt32(grfMode, "Mode"),
+            TraceLoggingUInt64(_dur, "DurationMs"));
+        if (g_xisfPropertyHandlerTelemetryHook) {
+            wchar_t _buf[256]; swprintf_s(_buf, L"PropertyStoreInitializeFailed Stage=AlreadyInitialized Hr=0x%08X Mode=%u DurationMs=%llu", _hr, grfMode, _dur);
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, _buf);
+        }}
         return HRESULT_FROM_WIN32(ERROR_ALREADY_INITIALIZED);
     }
     if (grfMode & (STGM_READWRITE | STGM_WRITE)) {
-        WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, L"PropertyStoreInitializeFailed Stage=WriteModeRejected Hr=0x%08X Mode=%u DurationMs=%llu", STG_E_ACCESSDENIED, grfMode, GetTickCount64() - initStart);
+        { ULONGLONG _dur = GetTickCount64() - initStart;
+        TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE),
+            TraceLoggingString("WriteModeRejected", "Stage"),
+            TraceLoggingHResult(STG_E_ACCESSDENIED, "Hr"),
+            TraceLoggingUInt32(grfMode, "Mode"),
+            TraceLoggingUInt64(_dur, "DurationMs"));
+        if (g_xisfPropertyHandlerTelemetryHook) {
+            wchar_t _buf[256]; swprintf_s(_buf, L"PropertyStoreInitializeFailed Stage=WriteModeRejected Hr=0x%08X Mode=%u DurationMs=%llu", STG_E_ACCESSDENIED, grfMode, _dur);
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, _buf);
+        }}
         return STG_E_ACCESSDENIED;
     }
     if (!pStream) {
-        WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, L"PropertyStoreInitializeFailed Stage=NullStream Hr=0x%08X Mode=%u DurationMs=%llu", E_POINTER, grfMode, GetTickCount64() - initStart);
+        { ULONGLONG _dur = GetTickCount64() - initStart;
+        TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE),
+            TraceLoggingString("NullStream", "Stage"),
+            TraceLoggingHResult(E_POINTER, "Hr"),
+            TraceLoggingUInt32(grfMode, "Mode"),
+            TraceLoggingUInt64(_dur, "DurationMs"));
+        if (g_xisfPropertyHandlerTelemetryHook) {
+            wchar_t _buf[256]; swprintf_s(_buf, L"PropertyStoreInitializeFailed Stage=NullStream Hr=0x%08X Mode=%u DurationMs=%llu", E_POINTER, grfMode, _dur);
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, _buf);
+        }}
         return E_POINTER;
     }
 
@@ -256,42 +272,111 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
     ULONG cbRead = 0;
     HRESULT hr = ReadAll(pStream, preamble, 16, &cbRead);
     if (FAILED(hr) || cbRead < 16) {
-        WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, L"PropertyStoreInitializeFailed Stage=ReadPreamble Hr=0x%08X Mode=%u BytesRead=%u DurationMs=%llu", FAILED(hr) ? hr : E_FAIL, grfMode, cbRead, GetTickCount64() - initStart);
+        { HRESULT _hr = FAILED(hr) ? hr : E_FAIL; ULONGLONG _dur = GetTickCount64() - initStart;
+        TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE),
+            TraceLoggingString("ReadPreamble", "Stage"),
+            TraceLoggingHResult(_hr, "Hr"),
+            TraceLoggingUInt32(grfMode, "Mode"),
+            TraceLoggingUInt32(cbRead, "BytesRead"),
+            TraceLoggingUInt64(_dur, "DurationMs"));
+        if (g_xisfPropertyHandlerTelemetryHook) {
+            wchar_t _buf[384]; swprintf_s(_buf, L"PropertyStoreInitializeFailed Stage=ReadPreamble Hr=0x%08X Mode=%u BytesRead=%u DurationMs=%llu", _hr, grfMode, cbRead, _dur);
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, _buf);
+        }}
         return E_FAIL;
     }
     if (memcmp(preamble, "XISF0100", 8) != 0) {
-        WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, L"PropertyStoreInitializeFailed Stage=InvalidSignature Hr=0x%08X Mode=%u BytesRead=%u DurationMs=%llu", HRESULT_FROM_WIN32(ERROR_INVALID_DATA), grfMode, cbRead, GetTickCount64() - initStart);
+        { HRESULT _hr = HRESULT_FROM_WIN32(ERROR_INVALID_DATA); ULONGLONG _dur = GetTickCount64() - initStart;
+        TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE),
+            TraceLoggingString("InvalidSignature", "Stage"),
+            TraceLoggingHResult(_hr, "Hr"),
+            TraceLoggingUInt32(grfMode, "Mode"),
+            TraceLoggingUInt32(cbRead, "BytesRead"),
+            TraceLoggingUInt64(_dur, "DurationMs"));
+        if (g_xisfPropertyHandlerTelemetryHook) {
+            wchar_t _buf[384]; swprintf_s(_buf, L"PropertyStoreInitializeFailed Stage=InvalidSignature Hr=0x%08X Mode=%u BytesRead=%u DurationMs=%llu", _hr, grfMode, cbRead, _dur);
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, _buf);
+        }}
         return E_FAIL;
     }
 
     UINT32 headerLength = 0;
     memcpy(&headerLength, preamble + 8, sizeof(UINT32));
     if (headerLength == 0 || headerLength > xisf::XISFParser::kMaxHeaderBytes) {
-        WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, L"PropertyStoreInitializeFailed Stage=HeaderLength Hr=0x%08X Mode=%u HeaderBytes=%u DurationMs=%llu", HRESULT_FROM_WIN32(ERROR_INVALID_DATA), grfMode, headerLength, GetTickCount64() - initStart);
+        { HRESULT _hr = HRESULT_FROM_WIN32(ERROR_INVALID_DATA); ULONGLONG _dur = GetTickCount64() - initStart;
+        TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE),
+            TraceLoggingString("HeaderLength", "Stage"),
+            TraceLoggingHResult(_hr, "Hr"),
+            TraceLoggingUInt32(grfMode, "Mode"),
+            TraceLoggingUInt32(headerLength, "HeaderBytes"),
+            TraceLoggingUInt64(_dur, "DurationMs"));
+        if (g_xisfPropertyHandlerTelemetryHook) {
+            wchar_t _buf[384]; swprintf_s(_buf, L"PropertyStoreInitializeFailed Stage=HeaderLength Hr=0x%08X Mode=%u HeaderBytes=%u DurationMs=%llu", _hr, grfMode, headerLength, _dur);
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, _buf);
+        }}
         return E_FAIL;
     }
 
     std::vector<char> xmlBuf(headerLength + 1, 0);
     hr = ReadAll(pStream, xmlBuf.data(), headerLength, &cbRead);
     if (FAILED(hr) || cbRead < headerLength) {
-        WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, L"PropertyStoreInitializeFailed Stage=ReadHeader Hr=0x%08X Mode=%u BytesRead=%u HeaderBytes=%u DurationMs=%llu", FAILED(hr) ? hr : E_FAIL, grfMode, cbRead, headerLength, GetTickCount64() - initStart);
+        { HRESULT _hr = FAILED(hr) ? hr : E_FAIL; ULONGLONG _dur = GetTickCount64() - initStart;
+        TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE),
+            TraceLoggingString("ReadHeader", "Stage"),
+            TraceLoggingHResult(_hr, "Hr"),
+            TraceLoggingUInt32(grfMode, "Mode"),
+            TraceLoggingUInt32(cbRead, "BytesRead"),
+            TraceLoggingUInt32(headerLength, "HeaderBytes"),
+            TraceLoggingUInt64(_dur, "DurationMs"));
+        if (g_xisfPropertyHandlerTelemetryHook) {
+            wchar_t _buf[384]; swprintf_s(_buf, L"PropertyStoreInitializeFailed Stage=ReadHeader Hr=0x%08X Mode=%u BytesRead=%u HeaderBytes=%u DurationMs=%llu", _hr, grfMode, cbRead, headerLength, _dur);
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, _buf);
+        }}
         return E_FAIL;
     }
 
     std::string xml(xmlBuf.data(), headerLength);
     auto result = xisf::XISFParser::ParseXMLString(xml);
     if (!result.ok()) {
-        WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, L"PropertyStoreInitializeFailed Stage=ParseXml Hr=0x%08X Mode=%u HeaderBytes=%u DurationMs=%llu", E_FAIL, grfMode, headerLength, GetTickCount64() - initStart);
+        { ULONGLONG _dur = GetTickCount64() - initStart;
+        TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE),
+            TraceLoggingString("ParseXml", "Stage"),
+            TraceLoggingHResult(E_FAIL, "Hr"),
+            TraceLoggingUInt32(grfMode, "Mode"),
+            TraceLoggingUInt32(headerLength, "HeaderBytes"),
+            TraceLoggingUInt64(_dur, "DurationMs"));
+        if (g_xisfPropertyHandlerTelemetryHook) {
+            wchar_t _buf[384]; swprintf_s(_buf, L"PropertyStoreInitializeFailed Stage=ParseXml Hr=0x%08X Mode=%u HeaderBytes=%u DurationMs=%llu", E_FAIL, grfMode, headerLength, _dur);
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, _buf);
+        }}
         return E_FAIL;
     }
     m_metadata = std::move(result.metadata);
 
-    WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PARSE | XISF_ETW_KEYWORD_PERF,
-        L"PropertyStoreMetadataParsed HeaderBytes=%u FitsKeywordCount=%u XisfPropertyCount=%u DurationMs=%llu",
-        headerLength,
-        static_cast<UINT32>(m_metadata.fitsKeywords.size()),
-        static_cast<UINT32>(m_metadata.properties.size()),
-        GetTickCount64() - initStart);
+    { UINT32 _fitsCount = static_cast<UINT32>(m_metadata.fitsKeywords.size());
+      UINT32 _propCount = static_cast<UINT32>(m_metadata.properties.size());
+      ULONGLONG _dur = GetTickCount64() - initStart;
+    TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreMetadataParsed",
+        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingKeyword(XISF_ETW_KEYWORD_PARSE | XISF_ETW_KEYWORD_PERF),
+        TraceLoggingUInt32(headerLength, "HeaderBytes"),
+        TraceLoggingUInt32(_fitsCount, "FitsKeywordCount"),
+        TraceLoggingUInt32(_propCount, "XisfPropertyCount"),
+        TraceLoggingUInt64(_dur, "DurationMs"));
+    if (g_xisfPropertyHandlerTelemetryHook) {
+        wchar_t _buf[384]; swprintf_s(_buf, L"PropertyStoreMetadataParsed HeaderBytes=%u FitsKeywordCount=%u XisfPropertyCount=%u DurationMs=%llu", headerLength, _fitsCount, _propCount, _dur);
+        g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PARSE | XISF_ETW_KEYWORD_PERF, _buf);
+    }}
 
     bool catalogConfiguredThisCall = false;
     std::wstring catalogSource;
@@ -376,30 +461,50 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
     });
 
     if (catalogConfiguredThisCall) {
-        WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_CATALOG | XISF_ETW_KEYWORD_PERF,
-            L"CatalogConfigured Source=%ls OverridePath=%ls PriorityCount=%u MatchToleranceDeg=%.3f EntryCount=%u DurationMs=%llu",
-            catalogSource.c_str(),
-            overridePath.empty() ? L"" : overridePath.c_str(),
-            catalogPriorityCount,
-            matchToleranceDeg,
-            catalogEntryCount,
-            GetTickCount64() - initStart);
+        { ULONGLONG _dur = GetTickCount64() - initStart;
+        TraceLoggingWrite(g_hPropertyProvider, "CatalogConfigured",
+            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingKeyword(XISF_ETW_KEYWORD_CATALOG | XISF_ETW_KEYWORD_PERF),
+            TraceLoggingWideString(catalogSource.c_str(), "Source"),
+            TraceLoggingWideString(overridePath.empty() ? L"" : overridePath.c_str(), "OverridePath"),
+            TraceLoggingUInt32(catalogPriorityCount, "PriorityCount"),
+            TraceLoggingFloat64(matchToleranceDeg, "MatchToleranceDeg"),
+            TraceLoggingUInt32(catalogEntryCount, "EntryCount"),
+            TraceLoggingUInt64(_dur, "DurationMs"));
+        if (g_xisfPropertyHandlerTelemetryHook) {
+            wchar_t _buf[768]; swprintf_s(_buf, L"CatalogConfigured Source=%ls OverridePath=%ls PriorityCount=%u MatchToleranceDeg=%.3f EntryCount=%u DurationMs=%llu",
+                catalogSource.c_str(), overridePath.empty() ? L"" : overridePath.c_str(), catalogPriorityCount, matchToleranceDeg, catalogEntryCount, _dur);
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_CATALOG | XISF_ETW_KEYWORD_PERF, _buf);
+        }}
     }
 
     if (!s_projectionChecked) {
         s_projectionEnabled = ReadProjectionEnabled();
         s_projectionChecked = true;
-        WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PROJECTION,
-            L"ProjectionSettingLoaded Enabled=%u", s_projectionEnabled ? 1u : 0u);
+        { UINT32 _enabled = s_projectionEnabled ? 1u : 0u;
+        TraceLoggingWrite(g_hPropertyProvider, "ProjectionSettingLoaded",
+            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingKeyword(XISF_ETW_KEYWORD_PROJECTION),
+            TraceLoggingBoolean(_enabled, "Enabled"));
+        if (g_xisfPropertyHandlerTelemetryHook) {
+            wchar_t _buf[128]; swprintf_s(_buf, L"ProjectionSettingLoaded Enabled=%u", _enabled);
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PROJECTION, _buf);
+        }}
     }
 
     PopulateProperties();
     m_initialized = true;
 
-    WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PERF,
-        L"PropertyStoreInitializeCompleted PropertyCount=%u DurationMs=%llu",
-        static_cast<UINT32>(m_properties.size()),
-        GetTickCount64() - initStart);
+    { UINT32 _propCount = static_cast<UINT32>(m_properties.size()); ULONGLONG _dur = GetTickCount64() - initStart;
+    TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeCompleted",
+        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PERF),
+        TraceLoggingUInt32(_propCount, "PropertyCount"),
+        TraceLoggingUInt64(_dur, "DurationMs"));
+    if (g_xisfPropertyHandlerTelemetryHook) {
+        wchar_t _buf[256]; swprintf_s(_buf, L"PropertyStoreInitializeCompleted PropertyCount=%u DurationMs=%llu", _propCount, _dur);
+        g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PERF, _buf);
+    }}
     return S_OK;
 }
 
@@ -596,17 +701,29 @@ void CXISFPropertyHandler::PopulateProperties() {
     bool usingObjectCoords = hasObjRA && hasObjDec;
 
     if (!hasComputedCoords) {
-        WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_PARSE,
-            L"PropertyCoordinatesUnavailable HasObjectCoords=%u HasCenterCoords=%u",
-            usingObjectCoords ? 1u : 0u,
-            (hasRA && hasDec) ? 1u : 0u);
+        { UINT32 _hasObj = usingObjectCoords ? 1u : 0u; UINT32 _hasCenter = (hasRA && hasDec) ? 1u : 0u;
+        TraceLoggingWrite(g_hPropertyProvider, "PropertyCoordinatesUnavailable",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_ETW_KEYWORD_PARSE),
+            TraceLoggingBoolean(_hasObj, "HasObjectCoords"),
+            TraceLoggingBoolean(_hasCenter, "HasCenterCoords"));
+        if (g_xisfPropertyHandlerTelemetryHook) {
+            wchar_t _buf[256]; swprintf_s(_buf, L"PropertyCoordinatesUnavailable HasObjectCoords=%u HasCenterCoords=%u", _hasObj, _hasCenter);
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_PARSE, _buf);
+        }}
     }
     else {
-        WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PARSE,
-            L"PropertyCoordinatesResolved UsingObjectCoords=%u ComputedRA=%.6f ComputedDec=%.6f",
-            usingObjectCoords ? 1u : 0u,
-            computedRA,
-            computedDec);
+        { UINT32 _usingObj = usingObjectCoords ? 1u : 0u;
+        TraceLoggingWrite(g_hPropertyProvider, "PropertyCoordinatesResolved",
+            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingKeyword(XISF_ETW_KEYWORD_PARSE),
+            TraceLoggingBoolean(_usingObj, "UsingObjectCoords"),
+            TraceLoggingFloat64(computedRA, "ComputedRA"),
+            TraceLoggingFloat64(computedDec, "ComputedDec"));
+        if (g_xisfPropertyHandlerTelemetryHook) {
+            wchar_t _buf[256]; swprintf_s(_buf, L"PropertyCoordinatesResolved UsingObjectCoords=%u ComputedRA=%.6f ComputedDec=%.6f", _usingObj, computedRA, computedDec);
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PARSE, _buf);
+        }}
     }
 
     // Computed: RA Hour band
@@ -665,9 +782,14 @@ void CXISFPropertyHandler::PopulateProperties() {
     }
 
     if (geometryFallbackUsed) {
-        WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PARSE | XISF_ETW_KEYWORD_PERF,
-            L"GeometryFallbackUsed ConeRadiusDeg=%.6f",
-            coneRadiusDeg);
+        TraceLoggingWrite(g_hPropertyProvider, "GeometryFallbackUsed",
+            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingKeyword(XISF_ETW_KEYWORD_PARSE | XISF_ETW_KEYWORD_PERF),
+            TraceLoggingFloat64(coneRadiusDeg, "ConeRadiusDeg"));
+        if (g_xisfPropertyHandlerTelemetryHook) {
+            wchar_t _buf[128]; swprintf_s(_buf, L"GeometryFallbackUsed ConeRadiusDeg=%.6f", coneRadiusDeg);
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PARSE | XISF_ETW_KEYWORD_PERF, _buf);
+        }
     }
 
     // Computed: Matched Objects via cone search (single search, reused for keywords below)
@@ -693,11 +815,17 @@ void CXISFPropertyHandler::PopulateProperties() {
             AddStringProp(PKEY_XISF_MatchedObjects, matchedObjectsStr);
         }
 
-        WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_CATALOG | XISF_ETW_KEYWORD_PERF,
-            L"ConeSearchCompleted UsingObjectCoords=%u MatchCount=%u ConeRadiusDeg=%.6f",
-            usingObjectCoords ? 1u : 0u,
-            static_cast<UINT32>(coneResults.size()),
-            coneRadiusDeg);
+        { UINT32 _usingObj = usingObjectCoords ? 1u : 0u; UINT32 _matchCount = static_cast<UINT32>(coneResults.size());
+        TraceLoggingWrite(g_hPropertyProvider, "ConeSearchCompleted",
+            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingKeyword(XISF_ETW_KEYWORD_CATALOG | XISF_ETW_KEYWORD_PERF),
+            TraceLoggingBoolean(_usingObj, "UsingObjectCoords"),
+            TraceLoggingUInt32(_matchCount, "MatchCount"),
+            TraceLoggingFloat64(coneRadiusDeg, "ConeRadiusDeg"));
+        if (g_xisfPropertyHandlerTelemetryHook) {
+            wchar_t _buf[256]; swprintf_s(_buf, L"ConeSearchCompleted UsingObjectCoords=%u MatchCount=%u ConeRadiusDeg=%.6f", _usingObj, _matchCount, coneRadiusDeg);
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_CATALOG | XISF_ETW_KEYWORD_PERF, _buf);
+        }}
     }
 
     // System.Photo projection (registry-controlled)
@@ -709,10 +837,16 @@ void CXISFPropertyHandler::PopulateProperties() {
         if (hasFN) { AddDoubleProp(PKEY_Photo_FNumber, fNumber); ++projectionPropCount; }
     }
 
-    WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PROJECTION,
-        L"ProjectionEvaluated Enabled=%u ProjectedPropertyCount=%u",
-        s_projectionEnabled ? 1u : 0u,
-        projectionPropCount);
+    { UINT32 _enabled = s_projectionEnabled ? 1u : 0u;
+    TraceLoggingWrite(g_hPropertyProvider, "ProjectionEvaluated",
+        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingKeyword(XISF_ETW_KEYWORD_PROJECTION),
+        TraceLoggingBoolean(_enabled, "Enabled"),
+        TraceLoggingUInt32(projectionPropCount, "ProjectedPropertyCount"));
+    if (g_xisfPropertyHandlerTelemetryHook) {
+        wchar_t _buf[128]; swprintf_s(_buf, L"ProjectionEvaluated Enabled=%u ProjectedPropertyCount=%u", _enabled, projectionPropCount);
+        g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PROJECTION, _buf);
+    }}
 
     // DSO aliases + System.Keywords
     std::vector<std::string> keywords;
@@ -737,25 +871,45 @@ void CXISFPropertyHandler::PopulateProperties() {
     }
 
     if (hasComputedCoords && !s_dsoCatalog) {
-        WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_CATALOG,
-            L"CatalogUnavailableForConeSearch ComputedRA=%.6f ComputedDec=%.6f",
-            computedRA,
-            computedDec);
+        TraceLoggingWrite(g_hPropertyProvider, "CatalogUnavailableForConeSearch",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_ETW_KEYWORD_CATALOG),
+            TraceLoggingFloat64(computedRA, "ComputedRA"),
+            TraceLoggingFloat64(computedDec, "ComputedDec"));
+        if (g_xisfPropertyHandlerTelemetryHook) {
+            wchar_t _buf[256]; swprintf_s(_buf, L"CatalogUnavailableForConeSearch ComputedRA=%.6f ComputedDec=%.6f", computedRA, computedDec);
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_CATALOG, _buf);
+        }
     }
 
-    WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PARSE | XISF_ETW_KEYWORD_CATALOG | XISF_ETW_KEYWORD_PROJECTION | XISF_ETW_KEYWORD_PERF,
-        L"PropertyPopulation FitsKeywordCount=%u XisfPropertyCount=%u PropertyCount=%u MatchedObjectCount=%u KeywordCount=%u ProjectedPhotoPropertyCount=%u HasComputedCoords=%u UsedObjectCoordinates=%u ProjectionEnabled=%u ConeRadiusDeg=%.6f DurationMs=%llu",
-        static_cast<UINT32>(m_metadata.fitsKeywords.size()),
-        static_cast<UINT32>(m_metadata.properties.size()),
-        static_cast<UINT32>(m_properties.size()),
-        static_cast<UINT32>(coneResults.size()),
-        static_cast<UINT32>(keywords.size()),
-        projectionPropCount,
-        hasComputedCoords ? 1u : 0u,
-        (hasObjRA && hasObjDec) ? 1u : 0u,
-        s_projectionEnabled ? 1u : 0u,
-        coneRadiusDeg,
-        GetTickCount64() - populateStart);
+    { UINT32 _fitsCount = static_cast<UINT32>(m_metadata.fitsKeywords.size());
+      UINT32 _xisfPropCount = static_cast<UINT32>(m_metadata.properties.size());
+      UINT32 _propCount = static_cast<UINT32>(m_properties.size());
+      UINT32 _matchCount = static_cast<UINT32>(coneResults.size());
+      UINT32 _kwCount = static_cast<UINT32>(keywords.size());
+      UINT32 _hasCoords = hasComputedCoords ? 1u : 0u;
+      UINT32 _usedObj = (hasObjRA && hasObjDec) ? 1u : 0u;
+      UINT32 _projEnabled = s_projectionEnabled ? 1u : 0u;
+      ULONGLONG _dur = GetTickCount64() - populateStart;
+    TraceLoggingWrite(g_hPropertyProvider, "PropertyPopulation",
+        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingKeyword(XISF_ETW_KEYWORD_PARSE | XISF_ETW_KEYWORD_CATALOG | XISF_ETW_KEYWORD_PROJECTION | XISF_ETW_KEYWORD_PERF),
+        TraceLoggingUInt32(_fitsCount, "FitsKeywordCount"),
+        TraceLoggingUInt32(_xisfPropCount, "XisfPropertyCount"),
+        TraceLoggingUInt32(_propCount, "PropertyCount"),
+        TraceLoggingUInt32(_matchCount, "MatchedObjectCount"),
+        TraceLoggingUInt32(_kwCount, "KeywordCount"),
+        TraceLoggingUInt32(projectionPropCount, "ProjectedPhotoPropertyCount"),
+        TraceLoggingBoolean(_hasCoords, "HasComputedCoords"),
+        TraceLoggingBoolean(_usedObj, "UsedObjectCoordinates"),
+        TraceLoggingBoolean(_projEnabled, "ProjectionEnabled"),
+        TraceLoggingFloat64(coneRadiusDeg, "ConeRadiusDeg"),
+        TraceLoggingUInt64(_dur, "DurationMs"));
+    if (g_xisfPropertyHandlerTelemetryHook) {
+        wchar_t _buf[768]; swprintf_s(_buf, L"PropertyPopulation FitsKeywordCount=%u XisfPropertyCount=%u PropertyCount=%u MatchedObjectCount=%u KeywordCount=%u ProjectedPhotoPropertyCount=%u HasComputedCoords=%u UsedObjectCoordinates=%u ProjectionEnabled=%u ConeRadiusDeg=%.6f DurationMs=%llu",
+            _fitsCount, _xisfPropCount, _propCount, _matchCount, _kwCount, projectionPropCount, _hasCoords, _usedObj, _projEnabled, coneRadiusDeg, _dur);
+        g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PARSE | XISF_ETW_KEYWORD_CATALOG | XISF_ETW_KEYWORD_PROJECTION | XISF_ETW_KEYWORD_PERF, _buf);
+    }}
 }
 
 IFACEMETHODIMP CXISFPropertyHandler::GetCount(DWORD* cProps) {

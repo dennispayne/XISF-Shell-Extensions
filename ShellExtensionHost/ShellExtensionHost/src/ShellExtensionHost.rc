@@ -26,12 +26,12 @@ BEGIN
     LTEXT           "Property Handler",              -1,                 20, 47, 78, 10
     PUSHBUTTON      "…",
                     IDC_BTN_TOGGLE_PROPERTY, 102, 44, 55, 14
-    LTEXT           "✓",                IDC_STATIC_PROPERTY_STATUS, 162, 47, 10, 10
+    LTEXT           "",                 IDC_STATIC_PROPERTY_STATUS, 162, 47, 10, 10
     LTEXT           "",                 IDC_STATIC_PROPERTY_VER,    175, 47, 305, 10
     LTEXT           "Preview / Thumbnail",           -1,                 20, 65, 78, 10
     PUSHBUTTON      "…",
                     IDC_BTN_TOGGLE_PREVIEW,  102, 62, 55, 14
-    LTEXT           "✓",                IDC_STATIC_PREVIEW_STATUS, 162, 65, 10, 10
+    LTEXT           "",                 IDC_STATIC_PREVIEW_STATUS, 162, 65, 10, 10
     LTEXT           "",                 IDC_STATIC_PREVIEW_VER,    175, 65, 305, 10
 
     GROUPBOX        "DSO Catalogs", IDC_STATIC_CATALOGS, 10, 108, 480, 170

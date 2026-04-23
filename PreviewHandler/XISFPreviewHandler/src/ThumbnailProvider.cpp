@@ -14,8 +14,6 @@
 #include "PreviewHandlerTelemetry.h"
 
 #include <shlwapi.h>
-#include <evntrace.h>
-#include <evntprov.h>
 #include <strsafe.h>
 #include <algorithm>
 #include <chrono>
@@ -28,40 +26,25 @@
 #include <vector>
 #include <numeric>
 
-#pragma comment(lib, "advapi32.lib")
-
 extern long g_cDllRef;
 
-// Single definition for the Preview Handler ETW provider handle — externed from dllmain.cpp.
-extern "C" REGHANDLE g_hPreviewHandlerTelemetryHandle = 0;
-
-// Single definition for the Preview Handler test hook (see PreviewHandlerTelemetry.h).
+// Single definition for the Preview Handler test hook.
 extern "C" XISFPreviewHandlerTelemetryHook g_xisfPreviewHandlerTelemetryHook = nullptr;
 
 void WritePreviewHandlerTelemetry(UCHAR level, ULONGLONG keyword, PCWSTR format, ...)
 {
-    const bool etwEnabled = (g_hPreviewHandlerTelemetryHandle != 0 &&
-        EventProviderEnabled(g_hPreviewHandlerTelemetryHandle, level, keyword));
     const bool hookEnabled = (g_xisfPreviewHandlerTelemetryHook != nullptr);
-    if (!etwEnabled && !hookEnabled)
-    {
-        return;
-    }
-
     wchar_t buffer[768] = {};
     va_list args;
     va_start(args, format);
-    const HRESULT hr = StringCchVPrintfW(buffer, ARRAYSIZE(buffer), format, args);
+    StringCchVPrintfW(buffer, ARRAYSIZE(buffer), format, args);
     va_end(args);
-    if (FAILED(hr))
-    {
-        return;
-    }
 
-    if (etwEnabled)
-    {
-        EventWriteString(g_hPreviewHandlerTelemetryHandle, level, keyword, buffer);
-    }
+    // EventWriteString accepts runtime level/keyword (TraceLoggingWrite requires
+    // compile-time constants).  Access the underlying REGHANDLE from the
+    // TraceLogging provider to emit a flat string event.
+    EventWriteString(g_hPreviewProvider->RegHandle, level, keyword, buffer);
+
     if (hookEnabled)
     {
         g_xisfPreviewHandlerTelemetryHook(level, keyword, buffer);
@@ -124,14 +107,20 @@ IFACEMETHODIMP CThumbnailProvider::Initialize(IStream* pStream, DWORD /*grfMode*
 {
     if (m_initialized)
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_LIFECYCLE,
-            L"ThumbnailInitializeFailed Stage=AlreadyInitialized");
+        TraceLoggingWrite(g_hPreviewProvider, "ThumbnailInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE),
+            TraceLoggingString("AlreadyInitialized", "Stage"));
+        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_LIFECYCLE, L"ThumbnailInitializeFailed Stage=AlreadyInitialized");
         return HRESULT_FROM_WIN32(ERROR_ALREADY_INITIALIZED);
     }
     if (!pStream)
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_LIFECYCLE,
-            L"ThumbnailInitializeFailed Stage=NullStream");
+        TraceLoggingWrite(g_hPreviewProvider, "ThumbnailInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE),
+            TraceLoggingString("NullStream", "Stage"));
+        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_LIFECYCLE, L"ThumbnailInitializeFailed Stage=NullStream");
         return E_INVALIDARG;
     }
 
@@ -145,15 +134,25 @@ IFACEMETHODIMP CThumbnailProvider::Initialize(IStream* pStream, DWORD /*grfMode*
     HRESULT hr = pStream->Read(preamble, 16, &cbRead);
     if (FAILED(hr) || cbRead < 16)
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
-            L"ThumbnailInitializeFailed Stage=ReadPreamble HRESULT=0x%08X CbRead=%u",
-            static_cast<unsigned>(hr), cbRead);
+        TraceLoggingWrite(g_hPreviewProvider, "ThumbnailInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PARSE),
+            TraceLoggingString("ReadPreamble", "Stage"),
+            TraceLoggingHResult(hr, "Hr"),
+            TraceLoggingUInt32(cbRead, "CbRead"));
+        if (g_xisfPreviewHandlerTelemetryHook) {
+            wchar_t _buf[256]; swprintf_s(_buf, L"ThumbnailInitializeFailed Stage=ReadPreamble HRESULT=0x%08X CbRead=%u", static_cast<unsigned>(hr), cbRead);
+            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, _buf);
+        }
         return E_FAIL;
     }
     if (memcmp(preamble, "XISF0100", 8) != 0)
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
-            L"ThumbnailInitializeFailed Stage=InvalidSignature");
+        TraceLoggingWrite(g_hPreviewProvider, "ThumbnailInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PARSE),
+            TraceLoggingString("InvalidSignature", "Stage"));
+        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, L"ThumbnailInitializeFailed Stage=InvalidSignature");
         return E_FAIL;
     }
 
@@ -161,9 +160,15 @@ IFACEMETHODIMP CThumbnailProvider::Initialize(IStream* pStream, DWORD /*grfMode*
     memcpy(&headerLength, preamble + 8, sizeof(UINT32));
     if (headerLength == 0 || headerLength > xisf::XISFParser::kMaxHeaderBytes)
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
-            L"ThumbnailInitializeFailed Stage=HeaderLength Length=%u",
-            headerLength);
+        TraceLoggingWrite(g_hPreviewProvider, "ThumbnailInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PARSE),
+            TraceLoggingString("HeaderLength", "Stage"),
+            TraceLoggingUInt32(headerLength, "Length"));
+        if (g_xisfPreviewHandlerTelemetryHook) {
+            wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailInitializeFailed Stage=HeaderLength Length=%u", headerLength);
+            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, _buf);
+        }
         return E_FAIL;
     }
 
@@ -171,23 +176,40 @@ IFACEMETHODIMP CThumbnailProvider::Initialize(IStream* pStream, DWORD /*grfMode*
     hr = pStream->Read(buffer.data(), headerLength, &cbRead);
     if (FAILED(hr) || cbRead < headerLength)
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
-            L"ThumbnailInitializeFailed Stage=ReadHeader HRESULT=0x%08X CbRead=%u Expected=%u",
-            static_cast<unsigned>(hr), cbRead, headerLength);
+        TraceLoggingWrite(g_hPreviewProvider, "ThumbnailInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PARSE),
+            TraceLoggingString("ReadHeader", "Stage"),
+            TraceLoggingHResult(hr, "Hr"),
+            TraceLoggingUInt32(cbRead, "CbRead"),
+            TraceLoggingUInt32(headerLength, "Expected"));
+        if (g_xisfPreviewHandlerTelemetryHook) {
+            wchar_t _buf[256]; swprintf_s(_buf, L"ThumbnailInitializeFailed Stage=ReadHeader HRESULT=0x%08X CbRead=%u Expected=%u", static_cast<unsigned>(hr), cbRead, headerLength);
+            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, _buf);
+        }
         return E_FAIL;
     }
 
     xisf::ParseResult result = xisf::XISFParser::ParseXMLString(buffer);
     if (!result.ok())
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
-            L"ThumbnailInitializeFailed Stage=ParseXml");
+        TraceLoggingWrite(g_hPreviewProvider, "ThumbnailInitializeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PARSE),
+            TraceLoggingString("ParseXml", "Stage"));
+        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, L"ThumbnailInitializeFailed Stage=ParseXml");
         return E_FAIL;
     }
     m_metadata = std::move(result.metadata);
     m_initialized = true;
-    WritePreviewHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_LIFECYCLE,
-        L"ThumbnailInitialized HeaderBytes=%u", headerLength);
+    TraceLoggingWrite(g_hPreviewProvider, "ThumbnailInitialized",
+        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE),
+        TraceLoggingUInt32(headerLength, "HeaderBytes"));
+    if (g_xisfPreviewHandlerTelemetryHook) {
+        wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailInitialized HeaderBytes=%u", headerLength);
+        g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_LIFECYCLE, _buf);
+    }
     return S_OK;
 }
 
@@ -215,15 +237,29 @@ IFACEMETHODIMP CThumbnailProvider::GetThumbnail(UINT cx, HBITMAP* phbmp,
 
     if (!hbmp)
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_ERROR, XISF_PREVIEW_KEYWORD_THUMBNAIL,
-            L"ThumbnailFailed RequestedSize=%u DurationMs=%lld",
-            cx, durationMs);
+        TraceLoggingWrite(g_hPreviewProvider, "ThumbnailFailed",
+            TraceLoggingLevel(TRACE_LEVEL_ERROR),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
+            TraceLoggingUInt32(cx, "RequestedSize"),
+            TraceLoggingInt64(durationMs, "DurationMs"));
+        if (g_xisfPreviewHandlerTelemetryHook) {
+            wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailFailed RequestedSize=%u DurationMs=%lld", cx, durationMs);
+            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_ERROR, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
+        }
         return E_FAIL;
     }
 
-    WritePreviewHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_THUMBNAIL,
-        L"ThumbnailCompleted RequestedSize=%u UsedPlaceholder=%u DurationMs=%lld",
-        cx, usedPlaceholder ? 1u : 0u, durationMs);
+    { UINT32 _placeholder = usedPlaceholder ? 1u : 0u;
+    TraceLoggingWrite(g_hPreviewProvider, "ThumbnailCompleted",
+        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
+        TraceLoggingUInt32(cx, "RequestedSize"),
+        TraceLoggingBoolean(_placeholder, "UsedPlaceholder"),
+        TraceLoggingInt64(durationMs, "DurationMs"));
+    if (g_xisfPreviewHandlerTelemetryHook) {
+        wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailCompleted RequestedSize=%u UsedPlaceholder=%u DurationMs=%lld", cx, _placeholder, durationMs);
+        g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
+    }}
 
     *phbmp    = hbmp;
     *pdwAlpha = WTSAT_UNKNOWN;
@@ -241,8 +277,11 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
 {
     if (!m_pStream || !m_initialized)
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
-            L"ThumbnailDecodeFailed Stage=NotInitialized");
+        TraceLoggingWrite(g_hPreviewProvider, "ThumbnailDecodeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
+            TraceLoggingString("NotInitialized", "Stage"));
+        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, L"ThumbnailDecodeFailed Stage=NotInitialized");
         return nullptr;
     }
 
@@ -319,8 +358,11 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
     }
 
     if (candidates.empty()) {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
-            L"ThumbnailDecodeFailed Stage=NoAttachmentImage");
+        TraceLoggingWrite(g_hPreviewProvider, "ThumbnailDecodeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
+            TraceLoggingString("NoAttachmentImage", "Stage"));
+        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, L"ThumbnailDecodeFailed Stage=NoAttachmentImage");
         return nullptr;
     }
 
@@ -339,8 +381,11 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
     std::string colorSpace = findAttr(imgElem, "colorSpace");
 
     if (geometry.empty() || location.empty()) {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
-            L"ThumbnailDecodeFailed Stage=MissingGeometryOrLocation");
+        TraceLoggingWrite(g_hPreviewProvider, "ThumbnailDecodeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
+            TraceLoggingString("MissingGeometryOrLocation", "Stage"));
+        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, L"ThumbnailDecodeFailed Stage=MissingGeometryOrLocation");
         return nullptr;
     }
 
@@ -357,9 +402,17 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
         }
     }
     if (imgW == 0 || imgH == 0) {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
-            L"ThumbnailDecodeFailed Stage=InvalidGeometry Width=%u Height=%u Channels=%u",
-            imgW, imgH, imgC);
+        TraceLoggingWrite(g_hPreviewProvider, "ThumbnailDecodeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
+            TraceLoggingString("InvalidGeometry", "Stage"),
+            TraceLoggingUInt32(imgW, "Width"),
+            TraceLoggingUInt32(imgH, "Height"),
+            TraceLoggingUInt32(imgC, "Channels"));
+        if (g_xisfPreviewHandlerTelemetryHook) {
+            wchar_t _buf[256]; swprintf_s(_buf, L"ThumbnailDecodeFailed Stage=InvalidGeometry Width=%u Height=%u Channels=%u", imgW, imgH, imgC);
+            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
+        }
         return nullptr;
     }
 
@@ -374,8 +427,11 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
             size = std::strtoull(end + 1, nullptr, 10);
     }
     if (size == 0) {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
-            L"ThumbnailDecodeFailed Stage=ZeroAttachmentSize");
+        TraceLoggingWrite(g_hPreviewProvider, "ThumbnailDecodeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
+            TraceLoggingString("ZeroAttachmentSize", "Stage"));
+        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, L"ThumbnailDecodeFailed Stage=ZeroAttachmentSize");
         return nullptr;
     }
 
@@ -389,9 +445,16 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
     ULONGLONG pixelCount = static_cast<ULONGLONG>(imgW) * imgH * imgC;
     ULONGLONG expected   = pixelCount * bps;
     if (size < expected) {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
-            L"ThumbnailDecodeFailed Stage=AttachmentTooSmall Expected=%llu Actual=%llu",
-            expected, size);
+        TraceLoggingWrite(g_hPreviewProvider, "ThumbnailDecodeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
+            TraceLoggingString("AttachmentTooSmall", "Stage"),
+            TraceLoggingUInt64(expected, "Expected"),
+            TraceLoggingUInt64(size, "Actual"));
+        if (g_xisfPreviewHandlerTelemetryHook) {
+            wchar_t _buf[256]; swprintf_s(_buf, L"ThumbnailDecodeFailed Stage=AttachmentTooSmall Expected=%llu Actual=%llu", expected, size);
+            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
+        }
         return nullptr;
     }
 
@@ -400,9 +463,15 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
     size_t readBytes = channelPixels * readChannels * bps;
     if (readBytes > 768ULL * 1024 * 1024)
     {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
-            L"ThumbnailDecodeFailed Stage=ExceedsMemoryGuard ReadBytes=%llu",
-            static_cast<unsigned long long>(readBytes));
+        TraceLoggingWrite(g_hPreviewProvider, "ThumbnailDecodeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
+            TraceLoggingString("ExceedsMemoryGuard", "Stage"),
+            TraceLoggingUInt64(static_cast<ULONGLONG>(readBytes), "ReadBytes"));
+        if (g_xisfPreviewHandlerTelemetryHook) {
+            wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailDecodeFailed Stage=ExceedsMemoryGuard ReadBytes=%llu", static_cast<unsigned long long>(readBytes));
+            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
+        }
         return nullptr;
     }
 
@@ -507,23 +576,45 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
             LARGE_INTEGER seekPos;
             seekPos.QuadPart = static_cast<LONGLONG>(chBase + static_cast<ULONGLONG>(run.startRow) * rowBytes);
             if (FAILED(m_pStream->Seek(seekPos, STREAM_SEEK_SET, nullptr))) {
-                WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
-                    L"ThumbnailDecodeFailed Stage=SeekFailed Channel=%u", ch);
+                TraceLoggingWrite(g_hPreviewProvider, "ThumbnailDecodeFailed",
+                    TraceLoggingLevel(TRACE_LEVEL_WARNING),
+                    TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
+                    TraceLoggingString("SeekFailed", "Stage"),
+                    TraceLoggingUInt32(ch, "Channel"));
+                if (g_xisfPreviewHandlerTelemetryHook) {
+                    wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailDecodeFailed Stage=SeekFailed Channel=%u", ch);
+                    g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
+                }
                 return nullptr;
             }
 
             ULONG runReadBytes = static_cast<ULONG>(run.rowCount * rowBytes);
             ULONG cbRead = 0;
             if (FAILED(m_pStream->Read(rowBuf.data(), runReadBytes, &cbRead))) {
-                WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
-                    L"ThumbnailDecodeFailed Stage=ReadFailed Channel=%u Bytes=%lu",
-                    ch, runReadBytes);
+                TraceLoggingWrite(g_hPreviewProvider, "ThumbnailDecodeFailed",
+                    TraceLoggingLevel(TRACE_LEVEL_WARNING),
+                    TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
+                    TraceLoggingString("ReadFailed", "Stage"),
+                    TraceLoggingUInt32(ch, "Channel"),
+                    TraceLoggingUInt32(runReadBytes, "Bytes"));
+                if (g_xisfPreviewHandlerTelemetryHook) {
+                    wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailDecodeFailed Stage=ReadFailed Channel=%u Bytes=%lu", ch, runReadBytes);
+                    g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
+                }
                 return nullptr;
             }
             if (cbRead < runReadBytes) {
-                WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
-                    L"ThumbnailDecodeFailed Stage=ShortRead Channel=%u Expected=%lu Actual=%lu",
-                    ch, runReadBytes, cbRead);
+                TraceLoggingWrite(g_hPreviewProvider, "ThumbnailDecodeFailed",
+                    TraceLoggingLevel(TRACE_LEVEL_WARNING),
+                    TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
+                    TraceLoggingString("ShortRead", "Stage"),
+                    TraceLoggingUInt32(ch, "Channel"),
+                    TraceLoggingUInt32(runReadBytes, "Expected"),
+                    TraceLoggingUInt32(cbRead, "Actual"));
+                if (g_xisfPreviewHandlerTelemetryHook) {
+                    wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailDecodeFailed Stage=ShortRead Channel=%u Expected=%lu Actual=%lu", ch, runReadBytes, cbRead);
+                    g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
+                }
                 return nullptr;
             }
 
@@ -660,9 +751,16 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
     HDC hdcMem = CreateCompatibleDC(hdcScreen);
     HBITMAP hbmp = CreateCompatibleBitmap(hdcScreen, thumbW, thumbH);
     if (!hbmp) {
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
-            L"ThumbnailDecodeFailed Stage=CreateCompatibleBitmap Width=%u Height=%u",
-            thumbW, thumbH);
+        TraceLoggingWrite(g_hPreviewProvider, "ThumbnailDecodeFailed",
+            TraceLoggingLevel(TRACE_LEVEL_WARNING),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
+            TraceLoggingString("CreateCompatibleBitmap", "Stage"),
+            TraceLoggingUInt32(thumbW, "Width"),
+            TraceLoggingUInt32(thumbH, "Height"));
+        if (g_xisfPreviewHandlerTelemetryHook) {
+            wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailDecodeFailed Stage=CreateCompatibleBitmap Width=%u Height=%u", thumbW, thumbH);
+            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
+        }
         DeleteDC(hdcMem);
         ReleaseDC(nullptr, hdcScreen);
         return nullptr;
@@ -680,10 +778,20 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
     DeleteDC(hdcMem);
     ReleaseDC(nullptr, hdcScreen);
 
-    WritePreviewHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_THUMBNAIL,
-        L"ThumbnailDecoded ThumbW=%u ThumbH=%u ImgW=%u ImgH=%u Channels=%u SampleFormat=%hs",
-        thumbW, thumbH, imgW, imgH, imgC,
-        sampleFmt.empty() ? "UInt16" : sampleFmt.c_str());
+    { const char* _fmt = sampleFmt.empty() ? "UInt16" : sampleFmt.c_str();
+    TraceLoggingWrite(g_hPreviewProvider, "ThumbnailDecoded",
+        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
+        TraceLoggingUInt32(thumbW, "ThumbW"),
+        TraceLoggingUInt32(thumbH, "ThumbH"),
+        TraceLoggingUInt32(imgW, "ImgW"),
+        TraceLoggingUInt32(imgH, "ImgH"),
+        TraceLoggingUInt32(imgC, "Channels"),
+        TraceLoggingString(_fmt, "SampleFormat"));
+    if (g_xisfPreviewHandlerTelemetryHook) {
+        wchar_t _buf[256]; swprintf_s(_buf, L"ThumbnailDecoded ThumbW=%u ThumbH=%u ImgW=%u ImgH=%u Channels=%u SampleFormat=%hs", thumbW, thumbH, imgW, imgH, imgC, _fmt);
+        g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
+    }}
 
     return hbmp;
 }
@@ -697,8 +805,14 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
 
 HBITMAP CThumbnailProvider::CreatePlaceholderBitmap(UINT cx)
 {
-    WritePreviewHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_FALLBACK,
-        L"ThumbnailPlaceholderUsed RequestedSize=%u", cx);
+    TraceLoggingWrite(g_hPreviewProvider, "ThumbnailPlaceholderUsed",
+        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_FALLBACK),
+        TraceLoggingUInt32(cx, "RequestedSize"));
+    if (g_xisfPreviewHandlerTelemetryHook) {
+        wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailPlaceholderUsed RequestedSize=%u", cx);
+        g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_FALLBACK, _buf);
+    }
     HDC hdcScreen = GetDC(nullptr);
     HDC hdcMem    = CreateCompatibleDC(hdcScreen);
     HBITMAP hbmp  = CreateCompatibleBitmap(hdcScreen, cx, cx);

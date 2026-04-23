@@ -1,9 +1,12 @@
 # XISF Handler Telemetry
 
 The Property and Preview shell handlers emit Event Tracing for Windows (ETW) events
-directly via `EventRegister` / `EventWriteString`. Traces are **local-only** —
-no data leaves the machine, and nothing is aggregated or uploaded. Full file
-paths may appear in trace strings; path privacy is not a concern for this repo.
+using the [TraceLogging](https://learn.microsoft.com/en-us/windows/win32/tracelogging/trace-logging-portal)
+API. Each event carries typed, structured fields (strings, integers, HRESULTs,
+durations) that trace viewers (WPA, PerfView) can filter, sort, and aggregate
+natively — no format-string parsing required. Traces are **local-only** — no data
+leaves the machine, and nothing is aggregated or uploaded. Full file paths may
+appear in trace strings; path privacy is not a concern for this repo.
 
 ## Providers
 
@@ -12,8 +15,9 @@ paths may appear in trace strings; path privacy is not a concern for this repo.
 | Property | XISF-PropertyHandler | `{6F6B0C9D-6B76-5A24-BC3D-708314E96F2B}`    | `XISFPropertyHandler.dll`    |
 | Preview  | XISF-PreviewHandler  | `{4FD34FD0-08B3-5D9A-8D77-B9D6705D6B75}`    | `XISFPreviewHandler.dll`     |
 
-Each provider is registered in `DllMain(DLL_PROCESS_ATTACH)` and unregistered
-in `DLL_PROCESS_DETACH`. No registration is required outside the DLL itself.
+Each provider is registered via `TraceLoggingRegister` in `DllMain(DLL_PROCESS_ATTACH)`
+and unregistered via `TraceLoggingUnregister` in `DLL_PROCESS_DETACH`. No external
+registration (e.g. `wevtutil`) is required.
 
 ## Levels and keywords
 
@@ -51,8 +55,11 @@ with `TRACE_LEVEL_VERBOSE`).
 
 ## Local collection
 
-Both providers emit `EventWriteString` payloads, so any ETW consumer that
-understands string-mode providers will work. The two options we use:
+Events are emitted as TraceLogging structured payloads. Any ETW consumer that
+understands TraceLogging providers will decode the typed fields automatically.
+Legacy string-mode consumers still work — a `LegacyTrace` event with a single
+`Message` string field is emitted alongside each structured event via the
+`WritePropertyHandlerTelemetry` / `WritePreviewHandlerTelemetry` wrappers.
 
 ### Option 1 – `logman` (no extra files)
 
@@ -134,16 +141,40 @@ wpr -stop C:\Temp\xisf.etl
 
 ## Event naming convention
 
-All events use a short tag prefix followed by space-separated `Key=Value`
-fields. Examples:
+Events use short descriptive names as the TraceLogging event name (e.g.
+`PropertyStoreInitializeFailed`, `ThumbnailCompleted`), with typed fields
+for each parameter:
 
 ```
-ThumbnailInitializeFailed Stage=InvalidSignature
-ThumbnailCompleted RequestedSize=256 UsedPlaceholder=0 DurationMs=47
-PreviewDisplayed
-PropertyPopulation Resolved=23 Empty=4 DurationMs=12
+Event: PropertyStoreInitializeFailed
+  Stage       = "InvalidSignature"  (string)
+  Hr          = 0x8007000D          (HRESULT)
+  Mode        = 0                   (uint32)
+  BytesRead   = 16                  (uint32)
+  DurationMs  = 3                   (uint64)
+
+Event: ThumbnailCompleted
+  RequestedSize   = 256   (uint32)
+  UsedPlaceholder = 0     (bool)
+  DurationMs      = 47    (int64)
+
+Event: PropertyPopulation
+  FitsKeywordCount = 23   (uint32)
+  PropertyCount    = 42   (uint32)
+  MatchedObjectCount = 3  (uint32)
+  DurationMs       = 12   (uint64)
 ```
 
-This format is stable enough to grep but avoids schema lock-in — keep the
-string short (<768 chars, the internal buffer limit) and prefer one
-aggregated event per operation over per-property spam.
+Prefer one aggregated event per operation over per-property granularity to
+avoid event storms in the Explorer host process.
+
+## Test hooks
+
+Both handlers expose a function-pointer hook for unit tests to capture telemetry
+without needing a live ETW session:
+
+- `g_xisfPropertyHandlerTelemetryHook` — set in PropertyHandler tests
+- `g_xisfPreviewHandlerTelemetryHook` — set in PreviewHandler tests
+
+When set, the hook receives `(level, keyword, formatted_message)` for every
+event, enabling assertions on emitted telemetry in CI.

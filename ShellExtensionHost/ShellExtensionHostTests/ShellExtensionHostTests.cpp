@@ -17,12 +17,14 @@
 #include <vector>
 #include <array>
 #include <cstdint>
+#include <filesystem>
 
 #include "Sha256.h"
 #include "Paths.h"
 #include "HostSettings.h"
 #include "CatalogSpec.h"
 #include "CatalogInstaller.h"
+#include "HandlerDllPath.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -641,6 +643,77 @@ namespace ShellExtensionHostTests_CatalogInstaller
             Assert::IsTrue(p.state == PresenceState::PresentMismatch);
 
             DeleteFileW(dest.c_str());
+        }
+    };
+}
+
+// ===========================================================================
+// HandlerDllPath - resolve handler binaries across output layouts
+// ===========================================================================
+namespace ShellExtensionHostTests_HandlerDllPath
+{
+    namespace fs = std::filesystem;
+
+    class TempRootGuard
+    {
+    public:
+        TempRootGuard()
+        {
+            wchar_t tmpDir[MAX_PATH] = {};
+            GetTempPathW(MAX_PATH, tmpDir);
+
+            wchar_t tmpName[MAX_PATH] = {};
+            GetTempFileNameW(tmpDir, L"xhp", 0, tmpName);
+            DeleteFileW(tmpName);
+
+            m_root = tmpName;
+            fs::create_directories(m_root);
+        }
+
+        ~TempRootGuard()
+        {
+            std::error_code ec;
+            fs::remove_all(m_root, ec);
+        }
+
+        std::wstring Root() const { return m_root.wstring(); }
+
+    private:
+        fs::path m_root;
+    };
+
+    static void WriteEmptyFile(const fs::path& p)
+    {
+        fs::create_directories(p.parent_path());
+        HANDLE h = CreateFileW(p.c_str(), GENERIC_WRITE, 0, nullptr,
+                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        Assert::IsTrue(h != INVALID_HANDLE_VALUE);
+        CloseHandle(h);
+    }
+
+    TEST_CLASS(HandlerDllPathTests)
+    {
+    public:
+        TEST_METHOD(ResolvePropertyPrefersSolutionLevelOutput)
+        {
+            TempRootGuard tmp;
+            fs::path root(tmp.Root());
+            auto expected = root / L"x64" / L"Debug" / L"XISFPropertyHandler.dll";
+            WriteEmptyFile(expected);
+
+            auto resolved = xisf::hostpaths::ResolveHandlerDllPath(root.wstring(), true, L"Debug");
+            Assert::AreEqual(expected.wstring(), resolved);
+        }
+
+        TEST_METHOD(ResolvePreviewFallsBackToProjectLevelOutput)
+        {
+            TempRootGuard tmp;
+            fs::path root(tmp.Root());
+            auto expected = root / L"PreviewHandler" / L"XISFPreviewHandler" / L"x64" / L"Release" / L"XISFPreviewHandler.dll";
+            WriteEmptyFile(expected);
+
+            auto resolved = xisf::hostpaths::ResolveHandlerDllPath(root.wstring(), false, L"Release");
+            Assert::AreEqual(expected.wstring(), resolved);
         }
     };
 }

@@ -29,6 +29,10 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 long      g_cDllRef = 0;
 HINSTANCE g_hInst   = nullptr;
 
+// The test EXE needs its own provider definition (normally in dllmain.cpp).
+TRACELOGGING_DEFINE_PROVIDER(g_hPreviewProvider, "XISF-PreviewHandler",
+    (0x4fd34fd0, 0x08b3, 0x5d9a, 0x8d, 0x77, 0xb9, 0xd6, 0x70, 0x5d, 0x6b, 0x75));
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

@@ -5,7 +5,7 @@
 #include <shlwapi.h>
 #include <propsys.h>
 #include <olectl.h>
-#include <evntprov.h>
+#include "PropertyHandlerTraceLogging.h"
 #include <new>
 #include <wchar.h>
 #include "ClassFactory.h"
@@ -14,13 +14,11 @@
 DEFINE_GUID(CLSID_XISFPropertyHandler,
     0x7C54FA8B, 0x9D63, 0x4C10, 0x8F, 0xBE, 0x1A, 0x5A, 0x0F, 0x9A, 0x3B, 0x2E);
 
-// {6F6B0C9D-6B76-5A24-BC3D-708314E96F2B}
-static const GUID kPropertyHandlerTelemetryProvider =
-    {0x6f6b0c9d, 0x6b76, 0x5a24, {0xbc, 0x3d, 0x70, 0x83, 0x14, 0xe9, 0x6f, 0x2b}};
+TRACELOGGING_DEFINE_PROVIDER(g_hPropertyProvider, "XISF-PropertyHandler",
+    (0x6f6b0c9d, 0x6b76, 0x5a24, 0xbc, 0x3d, 0x70, 0x83, 0x14, 0xe9, 0x6f, 0x2b));
 
 HINSTANCE g_hInst = nullptr;
 long g_cDllRef = 0;
-extern REGHANDLE g_hPropertyHandlerTelemetryHandle;
 
 static const wchar_t kClsidStr[] = L"{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}";
 static const wchar_t kPropertyHandlersKey[] =
@@ -34,13 +32,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID) {
     if (dwReason == DLL_PROCESS_ATTACH) {
         g_hInst = hModule;
         DisableThreadLibraryCalls(hModule);
-        EventRegister(&kPropertyHandlerTelemetryProvider, nullptr, nullptr, &g_hPropertyHandlerTelemetryHandle);
+        TraceLoggingRegister(g_hPropertyProvider);
     }
     else if (dwReason == DLL_PROCESS_DETACH) {
-        if (g_hPropertyHandlerTelemetryHandle != 0) {
-            EventUnregister(g_hPropertyHandlerTelemetryHandle);
-            g_hPropertyHandlerTelemetryHandle = 0;
-        }
+        TraceLoggingUnregister(g_hPropertyProvider);
     }
     return TRUE;
 }

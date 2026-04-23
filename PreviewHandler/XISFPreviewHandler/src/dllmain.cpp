@@ -8,16 +8,12 @@
 #include <shlwapi.h>
 #include <olectl.h>
 #include <initguid.h>
-#include <evntprov.h>
-#include <evntrace.h>
 #include <new>
 
 #include "ThumbnailProvider.h"
 #include "PreviewHandler.h"
 #include "PreviewHandlerTelemetry.h"
 #include "HandlerSettings.h"
-
-#pragma comment(lib, "advapi32.lib")
 
 // {9C76E8AD-4E85-5F30-B00D-3C7D1AB5F6E0}
 DEFINE_GUID(CLSID_XISFThumbnailProvider,
@@ -27,16 +23,14 @@ DEFINE_GUID(CLSID_XISFThumbnailProvider,
 DEFINE_GUID(CLSID_XISFPreviewHandler,
     0xAD87F6CE, 0x5B03, 0x6E41, 0xC1, 0x1E, 0x4D, 0xB2, 0xAC, 0x06, 0xF5, 0xF1);
 
-// {4fd34fd0-08b3-5d9a-8d77-b9d6705d6b75}  Provider: "XISF-PreviewHandler"
-extern "C" const GUID kPreviewHandlerTelemetryProvider =
-    {0x4fd34fd0, 0x08b3, 0x5d9a, {0x8d, 0x77, 0xb9, 0xd6, 0x70, 0x5d, 0x6b, 0x75}};
-
 HINSTANCE g_hInst   = nullptr;
 long      g_cDllRef = 0;
-extern "C" REGHANDLE g_hPreviewHandlerTelemetryHandle;
 
 static const wchar_t kThumbClsidStr[]   = L"{9C76E8AD-4E85-5F30-B00D-3C7D1AB5F6E0}";
 static const wchar_t kPreviewClsidStr[] = L"{AD87F6CE-5B03-6E41-C11E-4DB2AC06F5F1}";
+
+TRACELOGGING_DEFINE_PROVIDER(g_hPreviewProvider, "XISF-PreviewHandler",
+    (0x4fd34fd0, 0x08b3, 0x5d9a, 0x8d, 0x77, 0xb9, 0xd6, 0x70, 0x5d, 0x6b, 0x75));
 
 // ---------------------------------------------------------------------------
 // Minimal IClassFactory wrapper — templated to avoid duplication
@@ -109,19 +103,23 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID /*lpReserved*/)
     {
         g_hInst = hModule;
         DisableThreadLibraryCalls(hModule);
-        EventRegister(&kPreviewHandlerTelemetryProvider, nullptr, nullptr, &g_hPreviewHandlerTelemetryHandle);
-        WritePreviewHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_LIFECYCLE,
-            L"PreviewHandlerDllAttach");
+        TraceLoggingRegister(g_hPreviewProvider);
+        TraceLoggingWrite(g_hPreviewProvider, "PreviewHandlerDllAttach",
+            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE));
+        if (g_xisfPreviewHandlerTelemetryHook) {
+            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_LIFECYCLE, L"PreviewHandlerDllAttach");
+        }
     }
     else if (dwReason == DLL_PROCESS_DETACH)
     {
-        if (g_hPreviewHandlerTelemetryHandle != 0)
-        {
-            WritePreviewHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_LIFECYCLE,
-                L"PreviewHandlerDllDetach");
-            EventUnregister(g_hPreviewHandlerTelemetryHandle);
-            g_hPreviewHandlerTelemetryHandle = 0;
+        TraceLoggingWrite(g_hPreviewProvider, "PreviewHandlerDllDetach",
+            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE));
+        if (g_xisfPreviewHandlerTelemetryHook) {
+            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_LIFECYCLE, L"PreviewHandlerDllDetach");
         }
+        TraceLoggingUnregister(g_hPreviewProvider);
     }
     return TRUE;
 }

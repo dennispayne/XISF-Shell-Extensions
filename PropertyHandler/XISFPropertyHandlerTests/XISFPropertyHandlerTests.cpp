@@ -32,6 +32,12 @@
 #include "..\XISFPropertyHandler\src\HandlerSettings.cpp"
 #include "..\XISFPropertyHandler\src\ClassFactory.cpp"
 
+// TraceLogging provider stub — test module needs its own definition since
+// dllmain.cpp (which normally defines it) is not compiled into the test DLL.
+#include "PropertyHandlerTraceLogging.h"
+TRACELOGGING_DEFINE_PROVIDER(g_hPropertyProvider, "XISF-PropertyHandler",
+    (0x6f6b0c9d, 0x6b76, 0x5a24, 0xbc, 0x3d, 0x70, 0x83, 0x14, 0xe9, 0x6f, 0x2b));
+
 #pragma comment(lib, "Ole32.lib")
 #pragma comment(lib, "Propsys.lib")
 #pragma comment(lib, "Shlwapi.lib")

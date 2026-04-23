@@ -32,6 +32,7 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <Import Project="$(MSBuildThisFileDirectory)..\..\build\version.props" />
+  <Import Project="$(MSBuildThisFileDirectory)..\..\build\debug.props" />
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
   <ImportGroup Label="Shared">
@@ -103,6 +104,7 @@
     <ClInclude Include="src\HandlerSettings.h" />
     <ClInclude Include="src\PropertyStore.h" />
     <ClInclude Include="src\DSOAliasDB.h" />
+    <ClInclude Include="src\PropertyHandlerTraceLogging.h" />
     <ClInclude Include="src\resource.h" />
     <ClInclude Include="src\XISFParser.h" />
   </ItemGroup>

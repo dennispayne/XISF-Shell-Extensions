@@ -25,6 +25,7 @@
 #include "CatalogSpec.h"
 #include "CatalogInstaller.h"
 #include "Sha256.h"
+#include "HandlerDllPath.h"
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "comdlg32.lib")
@@ -185,7 +186,6 @@ std::wstring FindSolutionRoot()
 
 std::wstring BuildHandlerDllPath(bool propertyHandler)
 {
-    namespace fs = std::filesystem;
     auto root = FindSolutionRoot();
     if (root.empty()) return L"";
 #ifdef _DEBUG
@@ -193,17 +193,7 @@ std::wstring BuildHandlerDllPath(bool propertyHandler)
 #else
     constexpr const wchar_t* cfg = L"Release";
 #endif
-    fs::path p(root);
-    if (propertyHandler) {
-        p /= L"PropertyHandler/XISFPropertyHandler/x64";
-        p /= cfg;
-        p /= L"XISFPropertyHandler.dll";
-    } else {
-        p /= L"PreviewHandler/XISFPreviewHandler/x64";
-        p /= cfg;
-        p /= L"XISFPreviewHandler.dll";
-    }
-    return p.wstring();
+    return hostpaths::ResolveHandlerDllPath(root, propertyHandler, cfg);
 }
 
 bool RunProcessHiddenAndWait(const std::wstring& exe, const std::wstring& args, DWORD* exitCode)
@@ -1000,8 +990,9 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             else if (id == IDC_STATIC_NGC_MATCH) color = g_ngcIconColor;
             else if (id == IDC_STATIC_ADD_MATCH) color = g_addIconColor;
             SetTextColor(hdc, color);
-            SetBkMode(hdc, TRANSPARENT);
-            return reinterpret_cast<INT_PTR>(GetStockObject(NULL_BRUSH));
+            SetBkColor(hdc, GetSysColor(COLOR_BTNFACE));
+            SetBkMode(hdc, OPAQUE);
+            return reinterpret_cast<INT_PTR>(GetSysColorBrush(COLOR_BTNFACE));
         }
         break;
     }

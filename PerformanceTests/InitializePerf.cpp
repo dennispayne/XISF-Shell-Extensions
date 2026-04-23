@@ -19,6 +19,15 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 long g_cDllRef = 0;
 HINSTANCE g_hInst = nullptr;
 
+// TraceLogging provider stubs — test module needs its own definitions since
+// dllmain.cpp is not compiled into the test DLL.
+#include "PropertyHandlerTraceLogging.h"
+#include "PreviewHandlerTraceLogging.h"
+TRACELOGGING_DEFINE_PROVIDER(g_hPropertyProvider, "XISF-PropertyHandler",
+    (0x6f6b0c9d, 0x6b76, 0x5a24, 0xbc, 0x3d, 0x70, 0x83, 0x14, 0xe9, 0x6f, 0x2b));
+TRACELOGGING_DEFINE_PROVIDER(g_hPreviewProvider, "XISF-PreviewHandler",
+    (0x4fd34fd0, 0x08b3, 0x5d9a, 0x8d, 0x77, 0xb9, 0xd6, 0x70, 0x5d, 0x6b, 0x75));
+
 namespace {
     const std::string kPerfXML = R"(<?xml version="1.0" encoding="UTF-8"?>
 <xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
