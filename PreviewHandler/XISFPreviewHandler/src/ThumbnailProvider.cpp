@@ -275,6 +275,7 @@ IFACEMETHODIMP CThumbnailProvider::GetThumbnail(UINT cx, HBITMAP* phbmp,
 
 HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
 {
+    m_histogram.Reset();
     if (!m_pStream || !m_initialized)
     {
         TraceLoggingWrite(g_hPreviewProvider, "ThumbnailDecodeFailed",
@@ -714,6 +715,8 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
 
     bool isColor = (readChannels >= 3);
 
+    m_histogram.Begin(readChannels);
+
     for (UINT dy = 0; dy < thumbH; ++dy)
     {
         UINT bmpY = (thumbH - 1) - dy; // bottom-up
@@ -731,7 +734,9 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
                     float n = (std::max)(0.0f, (std::min)(1.0f,
                               (v - stretch[c].lo) / (stretch[c].hi - stretch[c].lo)));
                     if (isLinear) n = powf(n, kInvGamma);
-                    p[2 - c] = static_cast<uint8_t>(n * 255.0f + 0.5f); // R→[2], G→[1], B→[0]
+                    uint8_t byte = static_cast<uint8_t>(n * 255.0f + 0.5f);
+                    p[2 - c] = byte; // R→[2], G→[1], B→[0]
+                    m_histogram.bins[c][byte]++;
                 }
             }
             else
@@ -742,6 +747,7 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
                 if (isLinear) n = powf(n, kInvGamma);
                 uint8_t byte = static_cast<uint8_t>(n * 255.0f + 0.5f);
                 p[0] = p[1] = p[2] = byte; // BGR = grey
+                m_histogram.bins[0][byte]++;
             }
         }
     }
@@ -793,6 +799,7 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
         g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
     }}
 
+    m_histogram.Commit();
     return hbmp;
 }
 

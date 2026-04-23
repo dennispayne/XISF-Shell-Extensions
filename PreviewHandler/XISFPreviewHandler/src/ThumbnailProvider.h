@@ -4,6 +4,7 @@
 #include <thumbcache.h>
 #include <wincodec.h>
 #include <string>
+#include "Histogram.h"
 #include "XISFParser.h"
 
 class CThumbnailProvider :
@@ -31,10 +32,17 @@ private:
     IStream*              m_pStream;
     xisf::XISFRawMetadata m_metadata;
     bool                  m_initialized;
+    HistogramData         m_histogram;
 
     /// Generate a preview bitmap from attached pixel data (grayscale UInt16
     /// auto-stretch to 8-bit). Falls back to CreatePlaceholderBitmap on error.
     HBITMAP CreatePreviewBitmap(UINT cx);
+
+public:
+    /// Returns the histogram accumulated during the last CreatePreviewBitmap().
+    const HistogramData& GetHistogram() const { return m_histogram; }
+
+private:
 
     /// Create a dark-blue cx×cx bitmap showing basic file info as text.
     HBITMAP CreatePlaceholderBitmap(UINT cx);

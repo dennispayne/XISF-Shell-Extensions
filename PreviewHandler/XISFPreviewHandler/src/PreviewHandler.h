@@ -4,6 +4,7 @@
 #include <shobjidl.h>
 #include <shlobj.h>
 #include <string>
+#include "Histogram.h"
 #include "XISFParser.h"
 
 class CPreviewHandler :
@@ -46,6 +47,7 @@ private:
     COLORREF              m_clrText;
     LOGFONTW              m_lf;
     xisf::XISFRawMetadata m_metadata;
+    HistogramData         m_histogram;
     bool                  m_initialized;
 
     void CreatePreviewWindow();
