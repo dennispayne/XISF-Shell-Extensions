@@ -85,3 +85,4 @@ TestResults/
 # Downloaded catalog data (optional local data files)
 PropertyHandler/XISFPropertyHandler/data/NGC.csv
 PropertyHandler/XISFPropertyHandler/data/addendum.csv
+PropertyHandler/XISFPropertyHandler/data/sharpless.csv
