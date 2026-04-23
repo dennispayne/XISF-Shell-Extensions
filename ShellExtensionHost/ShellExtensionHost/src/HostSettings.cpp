@@ -32,7 +32,9 @@ static void WriteDword(const wchar_t* name, bool value)
 
 bool IsPropertyEnabled()           { return ReadDword(L"PropertyEnabled", true); }
 bool IsPreviewEnabled()            { return ReadDword(L"PreviewEnabled",  true); }
+bool IsFilterEnabled()             { return ReadDword(L"FilterEnabled",   true); }
 void SetPropertyEnabled(bool e)    { WriteDword(L"PropertyEnabled", e); }
 void SetPreviewEnabled(bool e)     { WriteDword(L"PreviewEnabled",  e); }
+void SetFilterEnabled(bool e)      { WriteDword(L"FilterEnabled",   e); }
 
 } // namespace xisf::hostsettings

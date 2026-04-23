@@ -132,7 +132,11 @@ IFACEMETHODIMP CXISFFilter::Load(LPCOLESTR pszFileName, DWORD /*dwMode*/)
     WideCharToMultiByte(CP_UTF8, 0, pszFileName, -1, path.data(), needed, nullptr, nullptr);
 
     xisf::ParseResult result = xisf::XISFParser::ParseFile(path);
-    if (!result.ok()) return E_FAIL;
+    if (!result.ok()) {
+        WriteFilterTelemetry(TRACE_LEVEL_WARNING, XISF_FILTER_KEYWORD_PARSE,
+                              L"FilterError IPersistFile::Load parse failed");
+        return E_FAIL;
+    }
 
     m_textChunks = result.metadata.GetSearchableTextChunks();
     m_currentChunk = 0;
@@ -177,6 +181,11 @@ IFACEMETHODIMP CXISFFilter::Init(ULONG /*grfFlags*/, ULONG cAttributes,
     m_currentChunk = 0;
     m_currentOffset = 0;
     m_initialized = true;
+
+    WriteFilterTelemetry(TRACE_LEVEL_INFORMATION, XISF_FILTER_KEYWORD_FILTER,
+                          L"FilterInitialized chunkCount=%u",
+                          static_cast<unsigned>(m_textChunks.size()));
+
     return S_OK;
 }
 
@@ -201,6 +210,10 @@ IFACEMETHODIMP CXISFFilter::GetChunk(STAT_CHUNK* pStat)
     pStat->cwcLenSource = 0;
 
     m_currentOffset = 0;
+
+    WriteFilterTelemetry(TRACE_LEVEL_VERBOSE, XISF_FILTER_KEYWORD_FILTER,
+                          L"FilterChunkEmitted chunkId=%lu", pStat->idChunk);
+
     return S_OK;
 }
 
@@ -265,25 +278,45 @@ HRESULT CXISFFilter::ParseFromStream(IStream* pStm)
     char preamble[16] = {};
     ULONG cbRead = 0;
     HRESULT hr = pStm->Read(preamble, 16, &cbRead);
-    if (FAILED(hr) || cbRead != 16) return E_FAIL;
+    if (FAILED(hr) || cbRead != 16) {
+        WriteFilterTelemetry(TRACE_LEVEL_WARNING, XISF_FILTER_KEYWORD_PARSE,
+                              L"FilterError preamble read failed");
+        return E_FAIL;
+    }
 
     // Verify signature
     static const char kSignature[8] = {'X','I','S','F','0','1','0','0'};
-    if (memcmp(preamble, kSignature, 8) != 0) return E_FAIL;
+    if (memcmp(preamble, kSignature, 8) != 0) {
+        WriteFilterTelemetry(TRACE_LEVEL_WARNING, XISF_FILTER_KEYWORD_PARSE,
+                              L"FilterError invalid XISF signature");
+        return E_FAIL;
+    }
 
     // Decode XML header length (little-endian uint32 at offset 8)
     uint32_t headerLength = 0;
     memcpy(&headerLength, preamble + 8, sizeof(uint32_t));
 
-    if (headerLength > xisf::XISFParser::kMaxHeaderBytes) return E_FAIL;
+    if (headerLength > xisf::XISFParser::kMaxHeaderBytes) {
+        WriteFilterTelemetry(TRACE_LEVEL_WARNING, XISF_FILTER_KEYWORD_PARSE,
+                              L"FilterError header too large: %u bytes", headerLength);
+        return E_FAIL;
+    }
 
     // Read the XML header
     std::string xml(headerLength, '\0');
     hr = pStm->Read(xml.data(), headerLength, &cbRead);
-    if (FAILED(hr) || cbRead != headerLength) return E_FAIL;
+    if (FAILED(hr) || cbRead != headerLength) {
+        WriteFilterTelemetry(TRACE_LEVEL_WARNING, XISF_FILTER_KEYWORD_PARSE,
+                              L"FilterError XML header read failed");
+        return E_FAIL;
+    }
 
     xisf::ParseResult result = xisf::XISFParser::ParseXMLString(xml);
-    if (!result.ok()) return E_FAIL;
+    if (!result.ok()) {
+        WriteFilterTelemetry(TRACE_LEVEL_WARNING, XISF_FILTER_KEYWORD_PARSE,
+                              L"FilterError XML parse failed");
+        return E_FAIL;
+    }
 
     m_textChunks = result.metadata.GetSearchableTextChunks();
     m_currentChunk = 0;

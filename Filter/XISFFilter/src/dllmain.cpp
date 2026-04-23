@@ -5,6 +5,7 @@
 #include <shlwapi.h>
 #include <olectl.h>
 #include "FilterTelemetry.h"
+#include <strsafe.h>
 #include <new>
 #include <wchar.h>
 #include "ClassFactory.h"
@@ -12,6 +13,24 @@
 
 TRACELOGGING_DEFINE_PROVIDER(g_hFilterProvider, "XISF-Filter",
     (0x3a4b5c6d, 0x7e8f, 0x9012, 0xab, 0x34, 0xcd, 0x56, 0xef, 0x78, 0x90, 0x12));
+
+// Single definition for the test hook pointer.
+extern "C" XISFFilterTelemetryHook g_xisfFilterTelemetryHook = nullptr;
+
+void WriteFilterTelemetry(UCHAR level, ULONGLONG keyword, PCWSTR format, ...) {
+    const bool hookEnabled = (g_xisfFilterTelemetryHook != nullptr);
+    wchar_t buffer[768] = {};
+    va_list args;
+    va_start(args, format);
+    StringCchVPrintfW(buffer, ARRAYSIZE(buffer), format, args);
+    va_end(args);
+
+    EventWriteString(g_hFilterProvider->RegHandle, level, keyword, buffer);
+
+    if (hookEnabled) {
+        g_xisfFilterTelemetryHook(level, keyword, buffer);
+    }
+}
 
 HINSTANCE g_hInst = nullptr;
 long g_cDllRef = 0;
