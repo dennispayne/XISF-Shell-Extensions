@@ -1,15 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Shared debug launch configuration for handler DLL projects.
-  Configures F5 (Start Debugging) to launch Explorer under the debugger
+  Shared debug configuration for handler DLL projects.
+  Configures F5 (Start Debugging) to attach to the running Explorer process
   so breakpoints in in-process COM handler DLLs are hit.
 
-  Workflow: Kill Explorer → F5 on handler DLL project → Explorer launches
-  under debugger → browse to .xisf file → breakpoints hit in DLL code.
+  Workflow:
+    1. Set a handler DLL project as Startup Project.
+    2. Set breakpoints in handler code.
+    3. Press F5 — VS builds, releases any DLL lock, and attaches to Explorer.
+    4. Browse to a .xisf file in Explorer — breakpoints fire.
+    5. Stop Debugging (Shift+F5) detaches without killing Explorer.
+
+  Build events (Debug only):
+    Pre-build:  If the output DLL is locked by Explorer/prevhost/indexer,
+                kills those hosts to release the lock so the linker succeeds.
+                No-op when the DLL is not locked (normal builds are unaffected).
+    Post-build: Ensures Explorer is running before F5 tries to attach.
+
+  Note: Re-registration is NOT needed for same-path code rebuilds. The
+  registry already points to the output DLL. Re-register only when the
+  output path, CLSID, or property schema (propdesc) changes.
+
+  Alternative: Debug → Attach to Process (Ctrl+Alt+P), filter for explorer.exe.
+  Alternative: In Task Manager, right-click Explorer → Debug to attach VS.
 -->
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LocalDebuggerCommand>$(SystemRoot)\explorer.exe</LocalDebuggerCommand>
+    <LocalDebuggerAttach>true</LocalDebuggerAttach>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+    <PreBuildEventUseInBuild>true</PreBuildEventUseInBuild>
+    <PostBuildEventUseInBuild>true</PostBuildEventUseInBuild>
   </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <PreBuildEvent>
+      <Command>powershell -NoProfile -ExecutionPolicy Bypass -File "$(MSBuildThisFileDirectory)pre-build-debug.ps1" "$(TargetPath)"</Command>
+    </PreBuildEvent>
+    <PostBuildEvent>
+      <Command>powershell -NoProfile -ExecutionPolicy Bypass -File "$(MSBuildThisFileDirectory)post-build-debug.ps1"</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
 </Project>
