@@ -800,6 +800,32 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
     }}
 
     m_histogram.Commit();
+
+    // Compute summary statistics for the histogram telemetry event.
+    uint32_t maxBinValue = 0;
+    uint64_t totalPixelCount = 0;
+    for (uint32_t c = 0; c < m_histogram.channelCount; ++c)
+    {
+        for (uint32_t b = 0; b < HistogramData::kBinCount; ++b)
+        {
+            uint32_t v = m_histogram.bins[c][b];
+            if (v > maxBinValue) maxBinValue = v;
+            totalPixelCount += v;
+        }
+    }
+
+    TraceLoggingWrite(g_hPreviewProvider, "HistogramCompleted",
+        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
+        TraceLoggingUInt32(m_histogram.channelCount, "ChannelCount"),
+        TraceLoggingUInt32(maxBinValue, "MaxBinValue"),
+        TraceLoggingUInt64(totalPixelCount, "TotalPixelCount"));
+    if (g_xisfPreviewHandlerTelemetryHook) {
+        wchar_t _buf[256]; swprintf_s(_buf, L"HistogramCompleted ChannelCount=%u MaxBinValue=%u TotalPixelCount=%llu",
+            m_histogram.channelCount, maxBinValue, static_cast<unsigned long long>(totalPixelCount));
+        g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
+    }
+
     return hbmp;
 }
 

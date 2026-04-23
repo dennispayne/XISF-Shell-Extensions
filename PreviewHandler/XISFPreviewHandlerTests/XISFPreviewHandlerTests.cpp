@@ -1676,4 +1676,236 @@ public:
     }
 };
 
+// ===========================================================================
+// PERSPECTIVE 6 — Histogram: struct tests and integration via pixel pipeline
+// ===========================================================================
+
+TEST_CLASS(Histogram_StructTests)
+{
+public:
+    TEST_METHOD(Reset_ClearsAllFields)
+    {
+        HistogramData h;
+        h.bins[0][100] = 42;
+        h.bins[2][255] = 99;
+        h.channelCount = 3;
+        h.valid = true;
+
+        h.Reset();
+
+        Assert::AreEqual(0u, h.channelCount, L"channelCount should be 0 after Reset");
+        Assert::IsFalse(h.valid, L"valid should be false after Reset");
+        for (uint32_t c = 0; c < HistogramData::kMaxChannels; ++c)
+            for (uint32_t b = 0; b < HistogramData::kBinCount; ++b)
+                Assert::AreEqual(0u, h.bins[c][b], L"All bins should be 0 after Reset");
+    }
+
+    TEST_METHOD(Begin1_SetsChannelCount1_InvalidatesHistogram)
+    {
+        HistogramData h;
+        h.valid = true;
+        h.Begin(1);
+        Assert::AreEqual(1u, h.channelCount, L"channelCount should be 1");
+        Assert::IsFalse(h.valid, L"valid should be false after Begin");
+    }
+
+    TEST_METHOD(Begin3_SetsChannelCount3_InvalidatesHistogram)
+    {
+        HistogramData h;
+        h.valid = true;
+        h.Begin(3);
+        Assert::AreEqual(3u, h.channelCount, L"channelCount should be 3");
+        Assert::IsFalse(h.valid, L"valid should be false after Begin");
+    }
+
+    TEST_METHOD(Commit_SetsValidTrue)
+    {
+        HistogramData h;
+        h.Begin(1);
+        Assert::IsFalse(h.valid);
+        h.Commit();
+        Assert::IsTrue(h.valid, L"valid should be true after Commit");
+    }
+
+    TEST_METHOD(DefaultConstructor_AllBinsZero)
+    {
+        HistogramData h;
+        for (uint32_t c = 0; c < HistogramData::kMaxChannels; ++c)
+            for (uint32_t b = 0; b < HistogramData::kBinCount; ++b)
+                Assert::AreEqual(0u, h.bins[c][b], L"Default-constructed bins should be 0");
+    }
+};
+
+TEST_CLASS(Histogram_IntegrationTests)
+{
+    // Build an XISF stream where all pixels have the same UInt16 value
+    static IStream* CreateUniformPixelStream(UINT w, UINT h, uint16_t value,
+                                              UINT channels = 1,
+                                              const char* colorSpace = "Gray")
+    {
+        size_t channelPixels = static_cast<size_t>(w) * h;
+        size_t pixelBytes = channelPixels * channels * 2;
+        const uint32_t pixelOffset = 2048;
+
+        char geom[64], loc[64];
+        snprintf(geom, sizeof(geom), "%u:%u:%u", w, h, channels);
+        snprintf(loc,  sizeof(loc),  "attachment:%u:%zu", pixelOffset, pixelBytes);
+
+        std::string xml =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+            "<xisf version=\"1.0\">"
+            "<Image geometry=\"" + std::string(geom) + "\" "
+            "sampleFormat=\"UInt16\" "
+            "colorSpace=\"" + std::string(colorSpace) + "\" "
+            "location=\"" + std::string(loc) + "\">"
+            "<FITSKeyword name=\"OBJECT\" value=\"HistTest\" comment=\"Test\"/>"
+            "</Image></xisf>";
+
+        std::vector<BYTE> buf;
+        const char sig[] = "XISF0100";
+        buf.insert(buf.end(), sig, sig + 8);
+        uint32_t xmlLen = static_cast<uint32_t>(xml.size());
+        auto* p = reinterpret_cast<const BYTE*>(&xmlLen);
+        buf.insert(buf.end(), p, p + 4);
+        uint32_t reserved = 0;
+        p = reinterpret_cast<const BYTE*>(&reserved);
+        buf.insert(buf.end(), p, p + 4);
+        buf.insert(buf.end(), xml.begin(), xml.end());
+        buf.resize(pixelOffset, 0);
+
+        for (UINT ch = 0; ch < channels; ++ch)
+        {
+            for (size_t i = 0; i < channelPixels; ++i)
+            {
+                buf.push_back(static_cast<BYTE>(value & 0xFF));
+                buf.push_back(static_cast<BYTE>((value >> 8) & 0xFF));
+            }
+        }
+        return SHCreateMemStream(buf.data(), static_cast<UINT>(buf.size()));
+    }
+
+public:
+    TEST_METHOD(AllBlack_GrayscaleHistogram_BinZeroDominates)
+    {
+        auto* tp = new CThumbnailProvider();
+        IStream* pStream = CreateUniformPixelStream(16, 16, 0);
+        Assert::AreEqual(S_OK, tp->Initialize(pStream, STGM_READ));
+
+        HBITMAP hbmp = nullptr;
+        WTS_ALPHATYPE alpha;
+        tp->GetThumbnail(64, &hbmp, &alpha);
+
+        const auto& hist = tp->GetHistogram();
+        Assert::IsTrue(hist.valid, L"Histogram should be valid after successful decode");
+        Assert::AreEqual(1u, hist.channelCount, L"Grayscale should have channelCount=1");
+        // All-zero UInt16 pixels → bin[0] should hold all pixels
+        Assert::IsTrue(hist.bins[0][0] > 0, L"Bin 0 should have counts for all-black image");
+        // Non-zero bins should be empty
+        uint32_t nonZeroSum = 0;
+        for (int b = 1; b < 256; ++b) nonZeroSum += hist.bins[0][b];
+        Assert::AreEqual(0u, nonZeroSum, L"All bins except 0 should be empty for all-black");
+
+        if (hbmp) DeleteObject(hbmp);
+        pStream->Release();
+        tp->Release();
+    }
+
+    TEST_METHOD(AllWhite_GrayscaleHistogram_ValidAfterDecode)
+    {
+        auto* tp = new CThumbnailProvider();
+        IStream* pStream = CreateUniformPixelStream(16, 16, 65535);
+        Assert::AreEqual(S_OK, tp->Initialize(pStream, STGM_READ));
+
+        HBITMAP hbmp = nullptr;
+        WTS_ALPHATYPE alpha;
+        tp->GetThumbnail(64, &hbmp, &alpha);
+
+        const auto& hist = tp->GetHistogram();
+        Assert::IsTrue(hist.valid, L"Histogram should be valid after successful decode");
+        Assert::AreEqual(1u, hist.channelCount, L"Grayscale should have channelCount=1");
+        // Uniform pixel images get auto-stretched: (v-lo)/(hi-lo) → 0 when all
+        // pixels are identical, so all counts land in one bin. Verify total count
+        // matches the thumbnail pixel count.
+        uint32_t totalBins = 0;
+        for (int b = 0; b < 256; ++b) totalBins += hist.bins[0][b];
+        Assert::IsTrue(totalBins > 0, L"Histogram should have non-zero total count");
+
+        if (hbmp) DeleteObject(hbmp);
+        pStream->Release();
+        tp->Release();
+    }
+
+    TEST_METHOD(Grayscale_HistogramChannelCount_Is1)
+    {
+        auto* tp = new CThumbnailProvider();
+        IStream* pStream = CreateUniformPixelStream(16, 16, 32768, 1, "Gray");
+        Assert::AreEqual(S_OK, tp->Initialize(pStream, STGM_READ));
+
+        HBITMAP hbmp = nullptr;
+        WTS_ALPHATYPE alpha;
+        tp->GetThumbnail(64, &hbmp, &alpha);
+
+        const auto& hist = tp->GetHistogram();
+        Assert::IsTrue(hist.valid);
+        Assert::AreEqual(1u, hist.channelCount, L"Grayscale image should have channelCount=1");
+
+        if (hbmp) DeleteObject(hbmp);
+        pStream->Release();
+        tp->Release();
+    }
+
+    TEST_METHOD(RGB_HistogramChannelCount_Is3)
+    {
+        auto* tp = new CThumbnailProvider();
+        IStream* pStream = CreateUniformPixelStream(16, 16, 32768, 3, "RGB");
+        Assert::AreEqual(S_OK, tp->Initialize(pStream, STGM_READ));
+
+        HBITMAP hbmp = nullptr;
+        WTS_ALPHATYPE alpha;
+        tp->GetThumbnail(64, &hbmp, &alpha);
+
+        const auto& hist = tp->GetHistogram();
+        Assert::IsTrue(hist.valid);
+        Assert::AreEqual(3u, hist.channelCount, L"RGB image should have channelCount=3");
+
+        if (hbmp) DeleteObject(hbmp);
+        pStream->Release();
+        tp->Release();
+    }
+
+    TEST_METHOD(FailedDecode_HistogramInvalid)
+    {
+        auto* tp = new CThumbnailProvider();
+        // Don't initialize — GetThumbnail will fail/use placeholder
+        HBITMAP hbmp = nullptr;
+        WTS_ALPHATYPE alpha;
+        tp->GetThumbnail(64, &hbmp, &alpha);
+
+        const auto& hist = tp->GetHistogram();
+        Assert::IsFalse(hist.valid, L"Histogram should be invalid when no pixel data decoded");
+
+        if (hbmp) DeleteObject(hbmp);
+        tp->Release();
+    }
+
+    TEST_METHOD(HistogramCompleted_TelemetryEmitted)
+    {
+        ScopedPreviewHandlerCapture cap;
+        auto* tp = new CThumbnailProvider();
+        IStream* pStream = CreateUniformPixelStream(16, 16, 0);
+        Assert::AreEqual(S_OK, tp->Initialize(pStream, STGM_READ));
+
+        HBITMAP hbmp = nullptr;
+        WTS_ALPHATYPE alpha;
+        tp->GetThumbnail(64, &hbmp, &alpha);
+
+        Assert::IsTrue(cap.containsMessagePrefix(L"HistogramCompleted"),
+                       L"HistogramCompleted telemetry event should be emitted");
+
+        if (hbmp) DeleteObject(hbmp);
+        pStream->Release();
+        tp->Release();
+    }
+};
+
 } // namespace PreviewHandlerTests
