@@ -1334,7 +1334,9 @@ public:
         IPropertyStore* ps = nullptr;
         h->QueryInterface(IID_PPV_ARGS(&ps));
         DWORD count = 0; ps->GetCount(&count);
-        Assert::AreEqual(DWORD(0), count);
+        // DataState is derived from Image element attributes (sampleFormat/colorSpace),
+        // so even an "empty" XISF with those attributes produces one property.
+        Assert::AreEqual(DWORD(1), count);
         ps->Release(); pi->Release(); s->Release(); h->Release();
     }
     TEST_METHOD(AllProperties_HaveNonEmptyValues) {
@@ -1711,6 +1713,44 @@ public:
                        L"FullDetails must include XISF.ObjectName");
     }
 
+    TEST_METHOD(DllRegisterServer_SetsKindMapPicture) {
+        if (!IsProcessElevated()) { Logger::WriteMessage("SKIPPED: not elevated"); return; }
+        auto dllPath = GetHandlerDllPath();
+        if (!fs::exists(dllPath)) { Logger::WriteMessage("SKIPPED: DLL not built"); return; }
+
+        ScopedHandlerRegistration reg(dllPath);
+        Assert::IsTrue(reg.ok);
+
+        wchar_t buf[64] = {};
+        DWORD cb = sizeof(buf);
+        LONG lr = RegGetValueW(HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\KindMap",
+            L".xisf", RRF_RT_REG_SZ, nullptr, buf, &cb);
+        Assert::AreEqual(ERROR_SUCCESS, lr, L"KindMap .xisf value must exist");
+        Assert::AreEqual(std::wstring(L"picture"), std::wstring(buf),
+                         L"KindMap .xisf must be 'picture'");
+    }
+
+    TEST_METHOD(DllUnregisterServer_RemovesKindMapEntry) {
+        if (!IsProcessElevated()) { Logger::WriteMessage("SKIPPED: not elevated"); return; }
+        auto dllPath = GetHandlerDllPath();
+        if (!fs::exists(dllPath)) { Logger::WriteMessage("SKIPPED: DLL not built"); return; }
+
+        // Register then immediately unregister
+        {
+            ScopedHandlerRegistration reg(dllPath);
+            Assert::IsTrue(reg.ok);
+        } // destructor calls DllUnregisterServer
+
+        wchar_t buf[64] = {};
+        DWORD cb = sizeof(buf);
+        LONG lr = RegGetValueW(HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\KindMap",
+            L".xisf", RRF_RT_REG_SZ, nullptr, buf, &cb);
+        Assert::AreNotEqual(ERROR_SUCCESS, lr,
+                            L"KindMap .xisf must be removed after DllUnregisterServer");
+    }
+
     TEST_METHOD(DllUnregisterServer_InvalidatesPropertySchema) {
         if (!IsProcessElevated()) { Logger::WriteMessage("SKIPPED: not elevated"); return; }
         auto dllPath = GetHandlerDllPath();
@@ -1774,6 +1814,7 @@ public:
             PKEY_XISF_WindSpeed.pid,
             PKEY_XISF_GuideRA.pid,
             PKEY_XISF_GuideDec.pid,
+            PKEY_XISF_DataState.pid,
         };
 
         for (const auto& pid : expectedKeys) {
@@ -1785,6 +1826,159 @@ public:
             Assert::IsTrue(FAILED(hr), L"Property description should be unavailable after unregister");
             if (pd) pd->Release();
         }
+    }
+};
+
+// ===========================================================================
+// DataState property — Linear / Non-Linear detection
+// ===========================================================================
+
+TEST_CLASS(PropertyHandler_DataState) {
+public:
+    TEST_METHOD(Float32_Gray_IsLinear) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:1" sampleFormat="Float32" colorSpace="Gray" location="attachment:0:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_DataState, &pv);
+        Assert::AreEqual(USHORT(VT_LPWSTR), pv.vt);
+        Assert::AreEqual(L"Linear", pv.pwszVal);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+
+    TEST_METHOD(Float64_RGB_IsLinear) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:3" sampleFormat="Float64" colorSpace="RGB" location="attachment:0:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_DataState, &pv);
+        Assert::AreEqual(USHORT(VT_LPWSTR), pv.vt);
+        Assert::AreEqual(L"Linear", pv.pwszVal);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+
+    TEST_METHOD(UInt16_NoColorSpace_IsLinear) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:1" sampleFormat="UInt16" location="attachment:0:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_DataState, &pv);
+        Assert::AreEqual(USHORT(VT_LPWSTR), pv.vt);
+        Assert::AreEqual(L"Non-Linear", pv.pwszVal);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+
+    TEST_METHOD(UInt8_AnyColorSpace_IsNonLinear) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:3" sampleFormat="UInt8" colorSpace="RGB" location="attachment:0:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_DataState, &pv);
+        Assert::AreEqual(USHORT(VT_LPWSTR), pv.vt);
+        Assert::AreEqual(L"Non-Linear", pv.pwszVal);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+
+    TEST_METHOD(GraySRGB_IsNonLinear) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:1" sampleFormat="Float32" colorSpace="GraySRGB" location="attachment:0:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_DataState, &pv);
+        Assert::AreEqual(USHORT(VT_LPWSTR), pv.vt);
+        Assert::AreEqual(L"Non-Linear", pv.pwszVal);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+
+    TEST_METHOD(RGBSRGB_IsNonLinear) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:3" sampleFormat="Float64" colorSpace="RGBSRGB" location="attachment:0:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_DataState, &pv);
+        Assert::AreEqual(USHORT(VT_LPWSTR), pv.vt);
+        Assert::AreEqual(L"Non-Linear", pv.pwszVal);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+
+    TEST_METHOD(MissingSampleFormatAndColorSpace_PropertyNotSet) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:1" location="attachment:0:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_DataState, &pv);
+        Assert::AreEqual(USHORT(VT_EMPTY), pv.vt);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
     }
 };
 

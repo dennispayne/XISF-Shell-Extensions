@@ -319,5 +319,13 @@
       <typeInfo type="Double" isInnate="false" isViewable="true" />
       <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
     </propertyDescription>
+    <propertyDescription name="XISF.DataState" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="55">
+      <searchInfo inInvertedIndex="true" isColumn="true" />
+      <labelInfo label="Data State" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="80" displayType="String">
+        <stringFormat formatAs="General" />
+      </displayInfo>
+    </propertyDescription>
   </propertyDescriptionList>
 </schema>

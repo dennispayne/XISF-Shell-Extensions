@@ -833,6 +833,27 @@ void CXISFPropertyHandler::PopulateProperties() {
         }}
     }
 
+    // Data State (Linear / Non-Linear) derived from Image element attributes
+    {
+        auto sfIt = m_metadata.imageAttributes.find("sampleFormat");
+        auto csIt = m_metadata.imageAttributes.find("colorSpace");
+        std::string sampleFormat = (sfIt != m_metadata.imageAttributes.end()) ? sfIt->second : "";
+        std::string colorSpace   = (csIt != m_metadata.imageAttributes.end()) ? csIt->second : "";
+
+        if (!sampleFormat.empty() || !colorSpace.empty()) {
+            bool isFloat32 = (sampleFormat == "Float32");
+            bool isFloat64 = (sampleFormat == "Float64");
+            bool isUInt8   = (sampleFormat == "UInt8");
+
+            bool isLinear = (isFloat32 || isFloat64);
+            if (colorSpace == "Gray" || colorSpace == "RGB") isLinear = true;
+            if (colorSpace == "GraySRGB" || colorSpace == "RGBSRGB") isLinear = false;
+            if (isUInt8) isLinear = false;
+
+            AddStringProp(PKEY_XISF_DataState, isLinear ? "Linear" : "Non-Linear");
+        }
+    }
+
     // System.Photo projection (registry-controlled)
     UINT32 projectionPropCount = 0;
     if (s_projectionEnabled) {

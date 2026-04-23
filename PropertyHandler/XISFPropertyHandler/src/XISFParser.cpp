@@ -153,6 +153,12 @@ ParseResult XISFParser::ExtractMetadataFromXML(const std::string& xml) {
         result.metadata.properties.push_back(std::move(prop));
     }
 
+    // Parse first <Image> element attributes (sampleFormat, colorSpace, etc.).
+    auto imageElements = FindElements(xml, "Image");
+    if (!imageElements.empty()) {
+        result.metadata.imageAttributes = std::move(imageElements[0]);
+    }
+
     result.metadata.buildIndices();
 
     return result;

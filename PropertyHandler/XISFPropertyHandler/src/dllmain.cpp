@@ -94,6 +94,10 @@ STDAPI DllRegisterServer(void) {
     if (FAILED(hr)) return SELFREG_E_CLASS;
     hr = SetRegSZValue(HKEY_CLASSES_ROOT, kExtKey, L"PerceivedType", L"image");
     if (FAILED(hr)) return SELFREG_E_CLASS;
+    hr = SetRegSZValue(HKEY_LOCAL_MACHINE,
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\KindMap",
+        L".xisf", L"picture");
+    if (FAILED(hr)) return SELFREG_E_CLASS;
     hr = SetRegSZValue(HKEY_CLASSES_ROOT, kProgID, nullptr, L"XISF Image File");
     if (FAILED(hr)) return SELFREG_E_CLASS;
     hr = SetRegSZValue(HKEY_CLASSES_ROOT, kProgID, L"FullDetails",
@@ -113,12 +117,13 @@ STDAPI DllRegisterServer(void) {
         L"XISF.StarFWHM;XISF.SkyQuality;XISF.SkyBrightness;XISF.CloudCover;"
         L"XISF.Pressure;XISF.SkyTemp;XISF.WindSpeed;"
         L"XISF.GuideRA;XISF.GuideDec;"
-        L"XISF.ObjectRA;XISF.ObjectDec");
+        L"XISF.ObjectRA;XISF.ObjectDec;"
+        L"XISF.DataState");
     if (FAILED(hr)) return SELFREG_E_CLASS;
     hr = SetRegSZValue(HKEY_CLASSES_ROOT, kProgID, L"PreviewDetails",
         L"prop:XISF.ObjectName;XISF.ExposureTime;XISF.FilterName;XISF.CameraModel;"
         L"XISF.Gain;XISF.SensorTemperature;XISF.Telescope;XISF.FocalLength;XISF.FNumber;"
-        L"XISF.Constellation;XISF.MatchedObjects");
+        L"XISF.Constellation;XISF.MatchedObjects;XISF.DataState");
     if (FAILED(hr)) return SELFREG_E_CLASS;
     hr = SetRegSZValue(HKEY_CLASSES_ROOT, kProgID, L"InfoTip",
         L"prop:System.ItemTypeText;System.Size;XISF.ObjectName;XISF.ExposureTime;XISF.FilterName;XISF.CameraModel;XISF.Constellation;XISF.MatchedObjects");
@@ -148,6 +153,16 @@ STDAPI DllUnregisterServer(void) {
         PathRemoveFileSpecW(szPropdesc);
         PathAppendW(szPropdesc, L"xisf.propdesc");
         PSUnregisterPropertySchema(szPropdesc);
+    }
+    // Remove KindMap entry
+    {
+        HKEY hKindMap = nullptr;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\KindMap",
+            0, KEY_SET_VALUE, &hKindMap) == ERROR_SUCCESS) {
+            RegDeleteValueW(hKindMap, L".xisf");
+            RegCloseKey(hKindMap);
+        }
     }
     RegDeleteTreeW(HKEY_LOCAL_MACHINE, kSearchExtKey);
     RegDeleteTreeW(HKEY_LOCAL_MACHINE, kPropertyHandlersKey);
