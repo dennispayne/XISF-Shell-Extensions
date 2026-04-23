@@ -62,6 +62,33 @@ jobs:
       - name: Setup VSTest
         uses: darenm/Setup-VSTest@v1.3
 
+      - name: Download OpenNGC catalogs
+        shell: pwsh
+        run: |
+          $catalogDir = Join-Path $env:LOCALAPPDATA 'XISFShellExtension\catalogs'
+          New-Item -ItemType Directory -Path $catalogDir -Force | Out-Null
+          $catalogs = @(
+            @{
+              Name = 'NGC.csv'
+              Url  = 'https://raw.githubusercontent.com/mattiaverga/OpenNGC/36cb178a0f69dba8bfc03a99c10512831edf1c6b/database_files/NGC.csv'
+              Sha256 = '840fe0c9ee1332e551b2e722a0e92726cd7b157914a3d2177602832aadd3aa9e'
+            },
+            @{
+              Name = 'addendum.csv'
+              Url  = 'https://raw.githubusercontent.com/mattiaverga/OpenNGC/36cb178a0f69dba8bfc03a99c10512831edf1c6b/database_files/addendum.csv'
+              Sha256 = '1d8f0914e643ada325a5a94d88d8fefad6a4937a2f77cc34f21483af22b11983'
+            }
+          )
+          foreach ($cat in $catalogs) {
+            $dest = Join-Path $catalogDir $cat.Name
+            Invoke-WebRequest -Uri $cat.Url -OutFile $dest -UseBasicParsing
+            $hash = (Get-FileHash -Algorithm SHA256 $dest).Hash.ToLower()
+            if ($hash -ne $cat.Sha256) {
+              throw "SHA-256 mismatch for $($cat.Name): expected $($cat.Sha256), got $hash"
+            }
+            Write-Host "OK  $($cat.Name) ($hash)"
+          }
+
       - name: Run unit tests
         shell: pwsh
         run: |
