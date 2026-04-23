@@ -5,8 +5,10 @@
 //
 #include "PreviewHandler.h"
 #include "PreviewHandlerTelemetry.h"
+#include "ThumbnailProvider.h"
 
 #include <shlwapi.h>
+#include <cmath>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -32,6 +34,10 @@ CPreviewHandler::CPreviewHandler()
     , m_clrBackground(RGB(18, 18, 32))
     , m_clrText(RGB(220, 220, 220))
     , m_metadata{}
+    , m_pStream(nullptr)
+    , m_hbmPreview(nullptr)
+    , m_previewWidth(0)
+    , m_previewHeight(0)
     , m_initialized(false)
 {
     std::memset(&m_lf, 0, sizeof(m_lf));
@@ -51,6 +57,16 @@ CPreviewHandler::~CPreviewHandler()
     {
         DestroyWindow(m_hwndPreview);
         m_hwndPreview = nullptr;
+    }
+    if (m_hbmPreview)
+    {
+        DeleteObject(m_hbmPreview);
+        m_hbmPreview = nullptr;
+    }
+    if (m_pStream)
+    {
+        m_pStream->Release();
+        m_pStream = nullptr;
     }
     InterlockedDecrement(&g_cDllRef);
 }
@@ -187,6 +203,10 @@ IFACEMETHODIMP CPreviewHandler::Initialize(IStream* pStream, DWORD /*grfMode*/)
     }
     m_metadata = std::move(result.metadata);
 
+    // Keep a reference to the stream for thumbnail/histogram generation
+    m_pStream = pStream;
+    m_pStream->AddRef();
+
     m_initialized = true;
     TraceLoggingWrite(g_hPreviewProvider, "PreviewInitialized",
         TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
@@ -250,6 +270,35 @@ IFACEMETHODIMP CPreviewHandler::DoPreview()
         return E_FAIL;
     }
 
+    // Generate a preview bitmap via CThumbnailProvider, which also
+    // accumulates the histogram during pixel streaming.
+    if (m_pStream && !m_hbmPreview)
+    {
+        CThumbnailProvider* pThumb = new (std::nothrow) CThumbnailProvider();
+        if (pThumb)
+        {
+            HRESULT hrThumb = pThumb->Initialize(m_pStream, STGM_READ);
+            if (SUCCEEDED(hrThumb))
+            {
+                UINT cx = static_cast<UINT>(m_rcPreview.right - m_rcPreview.left);
+                if (cx < 64) cx = 256;
+                WTS_ALPHATYPE alpha = WTSAT_UNKNOWN;
+                HBITMAP hbm = nullptr;
+                hrThumb = pThumb->GetThumbnail(cx, &hbm, &alpha);
+                if (SUCCEEDED(hrThumb) && hbm)
+                {
+                    m_hbmPreview = hbm;
+                    BITMAP bm{};
+                    GetObject(m_hbmPreview, sizeof(bm), &bm);
+                    m_previewWidth  = bm.bmWidth;
+                    m_previewHeight = bm.bmHeight;
+                }
+                m_histogram = pThumb->GetHistogram();
+            }
+            pThumb->Release();
+        }
+    }
+
     CreatePreviewWindow();
 
     if (!m_hwndPreview)
@@ -278,6 +327,17 @@ IFACEMETHODIMP CPreviewHandler::Unload()
         DestroyWindow(m_hwndPreview);
         m_hwndPreview = nullptr;
     }
+    if (m_hbmPreview)
+    {
+        DeleteObject(m_hbmPreview);
+        m_hbmPreview = nullptr;
+    }
+    if (m_pStream)
+    {
+        m_pStream->Release();
+        m_pStream = nullptr;
+    }
+    m_histogram.Reset();
     TraceLoggingWrite(g_hPreviewProvider, "PreviewUnloaded",
         TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
         TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE));
@@ -409,6 +469,51 @@ LRESULT CALLBACK CPreviewHandler::PreviewWndProc(HWND hwnd, UINT msg,
         int x      = rcClient.left + margin;
         int y      = rcClient.top  + margin;
         int lineH  = abs(pThis->m_lf.lfHeight) + 4;
+        int clientW = rcClient.right - rcClient.left;
+
+        // ----- Section 1: Image preview -----
+        if (pThis->m_hbmPreview && pThis->m_previewWidth > 0 &&
+            pThis->m_previewHeight > 0)
+        {
+            int availW = clientW - 2 * margin;
+            // Scale to fit width, capping height at 60% of client area
+            int maxH  = (rcClient.bottom - rcClient.top) * 60 / 100;
+            int drawW = availW;
+            int drawH = MulDiv(pThis->m_previewHeight, drawW,
+                               pThis->m_previewWidth);
+            if (drawH > maxH)
+            {
+                drawH = maxH;
+                drawW = MulDiv(pThis->m_previewWidth, drawH,
+                               pThis->m_previewHeight);
+            }
+
+            HDC hdcMem = CreateCompatibleDC(hdc);
+            HGDIOBJ hOldBmp = SelectObject(hdcMem, pThis->m_hbmPreview);
+            SetStretchBltMode(hdc, HALFTONE);
+            SetBrushOrgEx(hdc, 0, 0, nullptr);
+            int imgX = x + (availW - drawW) / 2;
+            StretchBlt(hdc, imgX, y, drawW, drawH,
+                       hdcMem, 0, 0,
+                       pThis->m_previewWidth, pThis->m_previewHeight,
+                       SRCCOPY);
+            SelectObject(hdcMem, hOldBmp);
+            DeleteDC(hdcMem);
+
+            y += drawH + margin;
+        }
+
+        // ----- Section 2: Histogram -----
+        if (pThis->m_histogram.valid)
+        {
+            int histH = 130;
+            RECT rcHist = { x, y,
+                            rcClient.right - margin, y + histH };
+            PaintHistogram(hdc, rcHist, pThis->m_histogram);
+            y += histH + margin;
+        }
+
+        // ----- Section 3: Metadata text -----
 
         // Helper: draw a label (accent colour) + value (body colour) on one line
         auto DrawField = [&](const wchar_t* label, const std::string& value)
@@ -491,4 +596,112 @@ LRESULT CALLBACK CPreviewHandler::PreviewWndProc(HWND hwnd, UINT msg,
         return 1; // handled in WM_PAINT
 
     return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+// ---------------------------------------------------------------------------
+// Histogram rendering (pure GDI)
+// ---------------------------------------------------------------------------
+
+void CPreviewHandler::PaintHistogram(HDC hdc, const RECT& rcArea,
+                                     const HistogramData& hist)
+{
+    // Background fill — slightly lighter than the main background
+    HBRUSH hBgBrush = CreateSolidBrush(RGB(25, 25, 40));
+    FillRect(hdc, &rcArea, hBgBrush);
+    DeleteObject(hBgBrush);
+
+    // Subtle border
+    HPEN hBorderPen = CreatePen(PS_SOLID, 1, RGB(60, 60, 90));
+    HGDIOBJ hOldPen = SelectObject(hdc, hBorderPen);
+    HGDIOBJ hOldBrush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    Rectangle(hdc, rcArea.left, rcArea.top, rcArea.right, rcArea.bottom);
+    SelectObject(hdc, hOldBrush);
+    SelectObject(hdc, hOldPen);
+    DeleteObject(hBorderPen);
+
+    // Inner plot area with padding
+    const int pad = 6;
+    int plotLeft   = rcArea.left   + pad;
+    int plotTop    = rcArea.top    + pad;
+    int plotRight  = rcArea.right  - pad;
+    int plotBottom = rcArea.bottom - pad;
+    int plotW = plotRight - plotLeft;
+    int plotH = plotBottom - plotTop;
+    if (plotW < 16 || plotH < 16) return;
+
+    // Axes frame in light gray
+    HPEN hAxisPen = CreatePen(PS_SOLID, 1, RGB(100, 100, 120));
+    hOldPen = SelectObject(hdc, hAxisPen);
+    // Bottom axis
+    MoveToEx(hdc, plotLeft, plotBottom, nullptr);
+    LineTo(hdc, plotRight, plotBottom);
+    // Left axis
+    MoveToEx(hdc, plotLeft, plotTop, nullptr);
+    LineTo(hdc, plotLeft, plotBottom);
+    SelectObject(hdc, hOldPen);
+    DeleteObject(hAxisPen);
+
+    // Compute log-scale max across all channels
+    double logMax = 0.0;
+    for (uint32_t ch = 0; ch < hist.channelCount; ++ch)
+    {
+        for (uint32_t b = 0; b < HistogramData::kBinCount; ++b)
+        {
+            double v = std::log(1.0 + hist.bins[ch][b]);
+            if (v > logMax) logMax = v;
+        }
+    }
+    if (logMax <= 0.0) return; // nothing to draw
+
+    // Channel colours — draw back-to-front for RGB overlap
+    // For RGB: Blue behind, Green middle, Red front
+    // For grayscale: single light gray pass
+    struct ChannelStyle { uint32_t idx; COLORREF color; };
+    ChannelStyle styles[3]{};
+    int nStyles = 0;
+
+    if (hist.channelCount == 1)
+    {
+        styles[0] = { 0, RGB(200, 200, 220) };
+        nStyles = 1;
+    }
+    else
+    {
+        styles[0] = { 2, RGB(60, 80, 220) };   // Blue behind
+        styles[1] = { 1, RGB(40, 200, 80) };   // Green middle
+        styles[2] = { 0, RGB(220, 50, 50) };   // Red front
+        nStyles = 3;
+    }
+
+    // Draw each channel as filled vertical bars
+    int drawLeft = plotLeft + 1;
+    int drawW    = plotRight - drawLeft;
+
+    for (int s = 0; s < nStyles; ++s)
+    {
+        uint32_t ch = styles[s].idx;
+        HPEN hChPen = CreatePen(PS_SOLID, 1, styles[s].color);
+        hOldPen = SelectObject(hdc, hChPen);
+
+        for (int i = 0; i < HistogramData::kBinCount; ++i)
+        {
+            double v = std::log(1.0 + hist.bins[ch][i]);
+            int barH = static_cast<int>(v / logMax * (plotH - 1));
+            if (barH < 1) continue;
+
+            // Map bin index to x pixel range
+            int x0 = drawLeft + MulDiv(i,     drawW, HistogramData::kBinCount);
+            int x1 = drawLeft + MulDiv(i + 1, drawW, HistogramData::kBinCount);
+
+            // Draw vertical lines filling the bar
+            for (int px = x0; px < x1; ++px)
+            {
+                MoveToEx(hdc, px, plotBottom - 1, nullptr);
+                LineTo(hdc, px, plotBottom - 1 - barH);
+            }
+        }
+
+        SelectObject(hdc, hOldPen);
+        DeleteObject(hChPen);
+    }
 }

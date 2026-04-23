@@ -4,6 +4,7 @@
 #include <shobjidl.h>
 #include <shlobj.h>
 #include <string>
+#include <cmath>
 #include "Histogram.h"
 #include "XISFParser.h"
 
@@ -48,10 +49,16 @@ private:
     LOGFONTW              m_lf;
     xisf::XISFRawMetadata m_metadata;
     HistogramData         m_histogram;
+    IStream*              m_pStream;
+    HBITMAP               m_hbmPreview;
+    int                   m_previewWidth;
+    int                   m_previewHeight;
     bool                  m_initialized;
 
     void CreatePreviewWindow();
     void UpdatePreviewWindow();
+    static void PaintHistogram(HDC hdc, const RECT& rcArea,
+                               const HistogramData& hist);
 
     static LRESULT CALLBACK PreviewWndProc(HWND hwnd, UINT msg,
                                             WPARAM wp, LPARAM lp);
