@@ -82,6 +82,6 @@ sandbox/
 # Test results / coverage
 TestResults/
 
-# Downloaded catalog data (fetched by HelperScripts/fetch-catalogs.ps1)
+# Downloaded catalog data (optional local data files)
 PropertyHandler/XISFPropertyHandler/data/NGC.csv
 PropertyHandler/XISFPropertyHandler/data/addendum.csv

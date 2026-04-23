@@ -59,8 +59,9 @@ Get-AppxPackage *XISF* | Remove-AppxPackage
 
 ### Developer install (unpackaged)
 
-For local development without MSIX, see `HelperScripts\Register-XISFHandler.ps1`
-and the [Contributing](CONTRIBUTING.md) guide.
+For local development without MSIX, use the **XISF Shell Extension** app
+(`ShellExtensionHost.exe`) to toggle handler registration, and see the
+[Contributing](CONTRIBUTING.md) guide.
 
 ## Enabling / disabling handlers at runtime
 
@@ -114,7 +115,6 @@ XISF-Shell-Extensions/
 ├── Packaging/
 │   ├── XISFShellExtensions/          # MSIX manifest
 │   └── Shared/Assets/
-├── HelperScripts/                   # Dev scripts (regsvr32, catalogs)
 ├── docs/                            # Design docs
 ├── build/                           # Shared MSBuild props (versioning)
 ├── version.json                     # SemVer source of truth

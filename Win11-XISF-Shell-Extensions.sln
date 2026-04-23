@@ -24,13 +24,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PerformanceTests", "Perform
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "PerformanceTests", "PerformanceTests", "{84BAAC9F-994B-4C6E-B41A-F503EE515F8D}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "HelperScripts", "HelperScripts", "{A6AC7AB7-050B-40EE-A9E7-5BDEB22DA4F7}"
-	ProjectSection(SolutionItems) = preProject
-		HelperScripts\fetch-catalogs.ps1 = HelperScripts\fetch-catalogs.ps1
-		HelperScripts\Register-XISFHandler.ps1 = HelperScripts\Register-XISFHandler.ps1
-		HelperScripts\Set-XISFColumns.ps1 = HelperScripts\Set-XISFColumns.ps1
-	EndProjectSection
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Packaging", "Packaging", "{CAFE0001-0000-0000-0000-000000000001}"
 	ProjectSection(SolutionItems) = preProject
 		Packaging\build-msix.ps1 = Packaging\build-msix.ps1

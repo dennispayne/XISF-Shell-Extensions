@@ -10,17 +10,13 @@ workflow for contributions.
   - **Desktop development with C++** workload
   - Windows SDK **10.0.26100.0** (or latest)
   - MSVC v143 (or newer) toolset
-- PowerShell 5.1 or PowerShell 7+ for helper scripts.
+- PowerShell 5.1 or PowerShell 7+.
 
 ## Building
 
 1. Clone the repository.
-2. Fetch the OpenNGC catalogs (one-time; the Property Handler embeds them):
-   ```powershell
-   .\HelperScripts\fetch-catalogs.ps1
-   ```
-3. Open `Win11-XISF-Shell-Extensions.sln` in Visual Studio.
-4. Select `Release|x64` (or `Debug|x64`) and build the solution.
+2. Open `Win11-XISF-Shell-Extensions.sln` in Visual Studio.
+3. Select `Release|x64` (or `Debug|x64`) and build the solution.
 
 ## Running tests
 
@@ -33,15 +29,9 @@ vstest.console.exe .\x64\Release\XISFPropertyHandlerTests.dll .\x64\Release\XISF
 
 ## Registering handlers for local testing
 
-See `HelperScripts\Register-XISFHandler.ps1`:
-
-```powershell
-# Register both from a Release build
-.\HelperScripts\Register-XISFHandler.ps1 -Handler Property,Preview -Configuration Release
-
-# Unregister
-.\HelperScripts\Register-XISFHandler.ps1 -Handler Property,Preview -Unregister
-```
+For local development without MSIX, launch **XISF Shell Extension** from the
+Start menu (or run `ShellExtensionHost.exe` from your build output) and use the
+handler toggles to enable/disable registration.
 
 Or install an MSIX package built from `Packaging\` (see `docs/msix-packaging.md`).
 
