@@ -109,7 +109,6 @@
     <ClInclude Include="src\XISFParser.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="data\sharpless.csv" />
     <None Include="src\XISFPropertyHandler.def" />
   </ItemGroup>
   <ItemGroup>
