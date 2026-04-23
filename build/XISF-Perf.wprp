@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  XISF-Perf.wprp — Windows Performance Recorder profile for XISF Shell Extensions.
+
+  Captures ETW events from both XISF handler providers (PropertyHandler and
+  PreviewHandler) along with CPU sampling and file I/O stacks.  Produces an
+  .etl trace suitable for analysis in WPA (Windows Performance Analyzer) or
+  PerfView.
+
+  ╔══════════════════════════════════════════════════════════════════════╗
+  ║  USAGE                                                              ║
+  ║                                                                     ║
+  ║  1. Start collection:                                               ║
+  ║       wpr -start build\XISF-Perf.wprp                              ║
+  ║                                                                     ║
+  ║  2. In Explorer, browse to a folder with .xisf files.               ║
+  ║     Toggle between list/detail/thumbnail views to exercise          ║
+  ║     both PropertyHandler and PreviewHandler code paths.             ║
+  ║                                                                     ║
+  ║  3. Stop collection and save:                                       ║
+  ║       wpr -stop xisf-trace.etl                                      ║
+  ║                                                                     ║
+  ║  4. Open in WPA or PerfView:                                        ║
+  ║       wpa xisf-trace.etl                                            ║
+  ║                                                                     ║
+  ║  TIPS                                                               ║
+  ║  • In WPA, filter Generic Events by provider name                   ║
+  ║    "XISF-PropertyHandler" or "XISF-PreviewHandler" to see only      ║
+  ║    handler events.                                                  ║
+  ║  • The DurationMs field in key events (PropertyStoreInitialize-     ║
+  ║    Completed, PropertyPopulation, CatalogConfigured) gives wall-    ║
+  ║    clock timing without needing WPA's timestamp math.               ║
+  ║  • CPU Sampling stacks show where time is spent inside the DLL.     ║
+  ║  • File I/O events reveal catalog/stream read latencies.            ║
+  ╚══════════════════════════════════════════════════════════════════════╝
+-->
+<WindowsPerformanceRecorder
+    Version="1.0"
+    Author="XISF Shell Extensions"
+    Team="XISF"
+    Comments="Performance profiling for XISF PropertyHandler and PreviewHandler"
+    Tag="XISFPerf">
+
+  <Profiles>
+
+    <!-- ================================================================
+         EVENT COLLECTORS
+         ================================================================ -->
+
+    <EventCollector Id="EC_XISF" Name="XISF Event Collector">
+      <BufferSize Value="256" />
+      <Buffers Value="64" />
+    </EventCollector>
+
+    <!-- ================================================================
+         EVENT PROVIDERS
+         ================================================================ -->
+
+    <!-- XISF-PropertyHandler: {6F6B0C9D-6B76-5A24-BC3D-708314E96F2B} -->
+    <EventProvider Id="EP_PropertyHandler"
+                   Name="6F6B0C9D-6B76-5A24-BC3D-708314E96F2B"
+                   Level="5"
+                   NonPagedMemory="true">
+      <Keywords>
+        <Keyword Value="0xFFFF" />
+      </Keywords>
+    </EventProvider>
+
+    <!-- XISF-PreviewHandler: {4FD34FD0-08B3-5D9A-8D77-B9D6705D6B75} -->
+    <EventProvider Id="EP_PreviewHandler"
+                   Name="4FD34FD0-08B3-5D9A-8D77-B9D6705D6B75"
+                   Level="5"
+                   NonPagedMemory="true">
+      <Keywords>
+        <Keyword Value="0xFFFF" />
+      </Keywords>
+    </EventProvider>
+
+    <!-- Microsoft-Windows-Kernel-File (file I/O) -->
+    <EventProvider Id="EP_FileIO"
+                   Name="EDD08927-9CC4-4E65-B970-C2560FB5C289"
+                   Level="4"
+                   Stack="true">
+      <Keywords>
+        <Keyword Value="0x1030" />
+      </Keywords>
+    </EventProvider>
+
+    <!-- ================================================================
+         PROFILES
+         ================================================================ -->
+
+    <!-- Light profile: XISF events only (minimal overhead) -->
+    <Profile Id="XISFEventsOnly.Verbose.File"
+             Name="XISFEventsOnly"
+             Description="XISF handler ETW events only (minimal overhead)"
+             LoggingMode="File"
+             DetailLevel="Verbose">
+      <Collectors>
+        <EventCollectorId Value="EC_XISF">
+          <EventProviders>
+            <EventProviderId Value="EP_PropertyHandler" />
+            <EventProviderId Value="EP_PreviewHandler" />
+          </EventProviders>
+        </EventCollectorId>
+      </Collectors>
+    </Profile>
+
+    <!-- Full profile: XISF events + CPU sampling + File I/O -->
+    <Profile Id="XISFFull.Verbose.File"
+             Name="XISFFull"
+             Description="XISF events + CPU sampling + File I/O stacks"
+             LoggingMode="File"
+             DetailLevel="Verbose"
+             Default="true">
+      <Collectors>
+        <EventCollectorId Value="EC_XISF">
+          <EventProviders>
+            <EventProviderId Value="EP_PropertyHandler" />
+            <EventProviderId Value="EP_PreviewHandler" />
+            <EventProviderId Value="EP_FileIO" />
+          </EventProviders>
+        </EventCollectorId>
+      </Collectors>
+    </Profile>
+
+  </Profiles>
+
+</WindowsPerformanceRecorder>

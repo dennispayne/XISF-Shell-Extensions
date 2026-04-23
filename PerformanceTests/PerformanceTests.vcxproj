@@ -96,6 +96,9 @@
     <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\PropertyStore.cpp" />
     <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\DSOCatalog.cpp" />
     <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\ConstellationDB.cpp" />
+    <ClCompile Include="ConcurrencyStress.cpp" />
+    <ClCompile Include="MemoryLeakTest.cpp" />
+    <ClCompile Include="ParserPerf.cpp" />
     <ClCompile Include="PropertyStorePerf.cpp" />
     <ClCompile Include="ThumbnailPerf.cpp" />
     <ClCompile Include="..\PreviewHandler\XISFPreviewHandler\src\ThumbnailProvider.cpp" />

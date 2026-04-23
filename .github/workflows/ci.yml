@@ -51,6 +51,16 @@ jobs:
           if ($tests.Count -eq 0) { throw "No test DLLs found." }
           vstest.console.exe $tests --Platform:x64 --Logger:trx --ResultsDirectory:TestResults
 
+      - name: Run performance tests (synthetic only)
+        shell: pwsh
+        run: |
+          $perf = 'x64\Release\PerformanceTests.dll'
+          if (Test-Path $perf) {
+            vstest.console.exe $perf --Platform:x64 --Logger:trx --ResultsDirectory:TestResults\Perf
+          } else {
+            Write-Warning "PerformanceTests.dll not found — skipping perf tests"
+          }
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
