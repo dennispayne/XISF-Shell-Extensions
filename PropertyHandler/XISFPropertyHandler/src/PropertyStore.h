@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <mutex>
 #include "XISFParser.h"
 #include "DSOCatalog.h"
 #include "ConstellationDB.h"
@@ -89,7 +90,7 @@ struct PropertyEntry {
     PropertyEntry& operator=(const PropertyEntry&) = delete;
 };
 
-class CXISFPropertyHandler : public IPropertyStore, public IInitializeWithStream {
+class CXISFPropertyHandler : public IPropertyStore, public IInitializeWithStream, public IPropertyStoreCapabilities {
 public:
     CXISFPropertyHandler();
     ~CXISFPropertyHandler();
@@ -102,12 +103,14 @@ public:
     IFACEMETHODIMP GetValue(REFPROPERTYKEY key, PROPVARIANT* pPropVar) override;
     IFACEMETHODIMP SetValue(REFPROPERTYKEY key, REFPROPVARIANT propVar) override;
     IFACEMETHODIMP Commit() override;
+    IFACEMETHODIMP IsPropertyWritable(REFPROPERTYKEY key) override;
     static void SetDSODatabasePath(const std::wstring& path);
 private:
     long m_cRef;
     bool m_initialized;
     std::vector<PropertyEntry> m_properties;
     xisf::XISFRawMetadata m_metadata;
+    mutable std::mutex m_propertyLock;
     static std::wstring s_dsoDbPath;
     static std::shared_ptr<xisf::DSOCatalog> s_dsoCatalog;
     static std::vector<std::string> s_catalogPriority;

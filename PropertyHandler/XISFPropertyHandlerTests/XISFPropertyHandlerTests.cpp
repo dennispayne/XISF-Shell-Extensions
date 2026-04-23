@@ -667,6 +667,13 @@ public:
         Assert::AreEqual(S_OK, hr);
         pi->Release(); h->Release();
     }
+    TEST_METHOD(Handler_ImplementsIPropertyStoreCapabilities) {
+        auto* h = new CXISFPropertyHandler();
+        IPropertyStoreCapabilities* caps = nullptr;
+        HRESULT hr = h->QueryInterface(IID_PPV_ARGS(&caps));
+        Assert::AreEqual(S_OK, hr);
+        caps->Release(); h->Release();
+    }
     TEST_METHOD(Handler_RejectsUnsupportedInterface) {
         auto* h = new CXISFPropertyHandler();
         IDispatch* pd = nullptr;
@@ -828,6 +835,17 @@ public:
         h->QueryInterface(IID_PPV_ARGS(&ps));
         Assert::AreEqual(STG_E_ACCESSDENIED, ps->Commit());
         ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+    TEST_METHOD(IsPropertyWritable_AlwaysFalse) {
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(kHandlerXML);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStoreCapabilities* caps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&caps));
+        Assert::AreEqual(S_FALSE, caps->IsPropertyWritable(PKEY_XISF_ObjectName));
+        caps->Release(); pi->Release(); s->Release(); h->Release();
     }
     TEST_METHOD(AddRef_Release_Symmetry) {
         auto* h = new CXISFPropertyHandler();

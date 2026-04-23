@@ -86,6 +86,8 @@ IFACEMETHODIMP CXISFPropertyHandler::QueryInterface(REFIID riid, void** ppv) {
         *ppv = static_cast<IPropertyStore*>(this);
     else if (IsEqualIID(riid, IID_IInitializeWithStream))
         *ppv = static_cast<IInitializeWithStream*>(this);
+    else if (IsEqualIID(riid, IID_IPropertyStoreCapabilities))
+        *ppv = static_cast<IPropertyStoreCapabilities*>(this);
     else return E_NOINTERFACE;
     AddRef(); return S_OK;
 }
@@ -492,7 +494,10 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
         }}
     }
 
-    PopulateProperties();
+    {
+        std::lock_guard<std::mutex> lock(m_propertyLock);
+        PopulateProperties();
+    }
     m_initialized = true;
 
     { UINT32 _propCount = static_cast<UINT32>(m_properties.size()); ULONGLONG _dur = GetTickCount64() - initStart;
@@ -858,10 +863,12 @@ void CXISFPropertyHandler::PopulateProperties() {
         for (const auto& n : allNames) keywords.push_back(n);
     }
     // Also add matched object names/aliases for search (reuse earlier cone search)
-    for (const auto& r : coneResults) {
-        const auto& entry = s_dsoCatalog->GetEntry(r.entryIndex);
-        auto names = s_dsoCatalog->GetAllNames(entry);
-        for (const auto& n : names) keywords.push_back(n);
+    if (s_dsoCatalog) {
+        for (const auto& r : coneResults) {
+            const auto& entry = s_dsoCatalog->GetEntry(r.entryIndex);
+            auto names = s_dsoCatalog->GetAllNames(entry);
+            for (const auto& n : names) keywords.push_back(n);
+        }
     }
     // Deduplicate keywords
     if (!keywords.empty()) {
@@ -914,12 +921,14 @@ void CXISFPropertyHandler::PopulateProperties() {
 
 IFACEMETHODIMP CXISFPropertyHandler::GetCount(DWORD* cProps) {
     if (!cProps) return E_POINTER;
+    std::lock_guard<std::mutex> lock(m_propertyLock);
     *cProps = static_cast<DWORD>(m_properties.size());
     return S_OK;
 }
 
 IFACEMETHODIMP CXISFPropertyHandler::GetAt(DWORD iProp, PROPERTYKEY* pkey) {
     if (!pkey) return E_POINTER;
+    std::lock_guard<std::mutex> lock(m_propertyLock);
     if (iProp >= m_properties.size()) return E_INVALIDARG;
     *pkey = m_properties[iProp].key;
     return S_OK;
@@ -928,6 +937,7 @@ IFACEMETHODIMP CXISFPropertyHandler::GetAt(DWORD iProp, PROPERTYKEY* pkey) {
 IFACEMETHODIMP CXISFPropertyHandler::GetValue(REFPROPERTYKEY key, PROPVARIANT* pPropVar) {
     if (!pPropVar) return E_POINTER;
     PropVariantInit(pPropVar);
+    std::lock_guard<std::mutex> lock(m_propertyLock);
     for (const auto& pe : m_properties) {
         if (IsEqualPropertyKey(pe.key, key)) return PropVariantCopy(pPropVar, &pe.value);
     }
@@ -940,4 +950,8 @@ IFACEMETHODIMP CXISFPropertyHandler::SetValue(REFPROPERTYKEY, REFPROPVARIANT) {
 
 IFACEMETHODIMP CXISFPropertyHandler::Commit() {
     return STG_E_ACCESSDENIED;
+}
+
+IFACEMETHODIMP CXISFPropertyHandler::IsPropertyWritable(REFPROPERTYKEY) {
+    return S_FALSE;
 }
