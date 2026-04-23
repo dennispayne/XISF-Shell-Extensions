@@ -67,6 +67,10 @@ IFACEMETHODIMP CClassFactory::CreateInstance(IUnknown* pUnkOuter,
     if (pUnkOuter != nullptr)
         return CLASS_E_NOAGGREGATION;
 
+    // Runtime toggle: when disabled via HKCU, Explorer falls back to default behavior.
+    if (!xisf::IsPropertyHandlerEnabled())
+        return CLASS_E_CLASSNOTAVAILABLE;
+
     CXISFPropertyHandler* pHandler = new (std::nothrow) CXISFPropertyHandler();
     if (pHandler == nullptr)
         return E_OUTOFMEMORY;

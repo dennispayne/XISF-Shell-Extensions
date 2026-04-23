@@ -333,6 +333,54 @@ namespace ShellExtensionHostTests_HostSettings
             Assert::IsTrue(xisf::hostsettings::IsPropertyEnabled());
             Assert::IsFalse(xisf::hostsettings::IsPreviewEnabled());
         }
+
+        TEST_METHOD(PropertyToggle_DefaultAbsent_IsEnabled)
+        {
+            HkcuGuard g;
+            HkcuGuard::DeleteValue(L"PropertyEnabled");
+            Assert::IsTrue(xisf::hostsettings::IsPropertyEnabled(),
+                L"Property handler activation must default to enabled when key is absent");
+        }
+
+        TEST_METHOD(PropertyToggle_DisabledValue_IsDisabled)
+        {
+            HkcuGuard g;
+            HkcuGuard::WriteDword(L"PropertyEnabled", 0);
+            Assert::IsFalse(xisf::hostsettings::IsPropertyEnabled(),
+                L"Property handler activation must be disabled when PropertyEnabled=0");
+        }
+
+        TEST_METHOD(PropertyToggle_EnabledValue_IsEnabled)
+        {
+            HkcuGuard g;
+            HkcuGuard::WriteDword(L"PropertyEnabled", 1);
+            Assert::IsTrue(xisf::hostsettings::IsPropertyEnabled(),
+                L"Property handler activation must be enabled when PropertyEnabled=1");
+        }
+
+        TEST_METHOD(PreviewToggle_DefaultAbsent_IsEnabled)
+        {
+            HkcuGuard g;
+            HkcuGuard::DeleteValue(L"PreviewEnabled");
+            Assert::IsTrue(xisf::hostsettings::IsPreviewEnabled(),
+                L"Preview handler activation must default to enabled when key is absent");
+        }
+
+        TEST_METHOD(PreviewToggle_DisabledValue_IsDisabled)
+        {
+            HkcuGuard g;
+            HkcuGuard::WriteDword(L"PreviewEnabled", 0);
+            Assert::IsFalse(xisf::hostsettings::IsPreviewEnabled(),
+                L"Preview handler activation must be disabled when PreviewEnabled=0");
+        }
+
+        TEST_METHOD(PreviewToggle_EnabledValue_IsEnabled)
+        {
+            HkcuGuard g;
+            HkcuGuard::WriteDword(L"PreviewEnabled", 1);
+            Assert::IsTrue(xisf::hostsettings::IsPreviewEnabled(),
+                L"Preview handler activation must be enabled when PreviewEnabled=1");
+        }
     };
 }
 

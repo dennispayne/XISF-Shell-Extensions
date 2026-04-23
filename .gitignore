@@ -60,6 +60,10 @@ ServiceFabricBackup/
 
 # Misc
 *.aps
+RCA*
+RCB*
+RCC*
+RCD*
 *.ncb
 *.opensdf
 *.sdf
