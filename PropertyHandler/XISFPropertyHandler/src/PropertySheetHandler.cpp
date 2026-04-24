@@ -1,11 +1,13 @@
-// PropertySheetHandler.cpp — IShellPropSheetExt implementation for XISF histogram tab
+// PropertySheetHandler.cpp — IShellPropSheetExt implementation for XISF Astro Details tab
 #include "PropertySheetHandler.h"
 #include "PropertyHandlerTraceLogging.h"
 #include "XISFParser.h"
 #include <shlwapi.h>
+#include <propsys.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <cstdio>
 #include <vector>
 #include <objidl.h>
 #include <gdiplus.h>
@@ -14,9 +16,12 @@
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "gdiplus.lib")
+#pragma comment(lib, "propsys.lib")
 
 extern HINSTANCE g_hInst;
 extern long g_cDllRef;
+
+#define IDC_ANALYZE 1001
 
 // ---------------------------------------------------------------------------
 // In-memory dialog template — an empty rectangle we paint into
@@ -38,7 +43,8 @@ static struct {
 // ---------------------------------------------------------------------------
 
 CXISFPropertySheetHandler::CXISFPropertySheetHandler()
-    : m_cRef(1), m_hwndPage(nullptr), m_computed(false), m_unavailable(false)
+    : m_cRef(1), m_hwndPage(nullptr), m_hwndButton(nullptr),
+      m_computed(false), m_unavailable(false), m_analyzing(false)
 {
     InterlockedIncrement(&g_cDllRef);
 }
@@ -154,8 +160,8 @@ IFACEMETHODIMP CXISFPropertySheetHandler::AddPages(
     psp.dwFlags   = PSP_USETITLE | PSP_DLGINDIRECT;
     psp.hInstance  = g_hInst;
     psp.pResource  = &s_dlgTemplate.tmpl;
-    psp.pszTitle   = L"Histogram";
-    psp.pfnDlgProc = HistogramDlgProc;
+    psp.pszTitle   = L"Astro Details";
+    psp.pfnDlgProc = AstroDetailsDlgProc;
     psp.lParam     = reinterpret_cast<LPARAM>(this);
 
     HPROPSHEETPAGE hPage = CreatePropertySheetPageW(&psp);
@@ -180,10 +186,77 @@ IFACEMETHODIMP CXISFPropertySheetHandler::ReplacePage(
 }
 
 // ---------------------------------------------------------------------------
+// ReadCachedStats — read stats from the Windows property store (indexer cache)
+// ---------------------------------------------------------------------------
+
+bool CXISFPropertySheetHandler::ReadCachedStats()
+{
+    IPropertyStore* pStore = nullptr;
+    HRESULT hr = SHGetPropertyStoreFromParsingName(
+        m_filePath.c_str(), nullptr, GPS_FASTPROPERTIESONLY, IID_PPV_ARGS(&pStore));
+    if (FAILED(hr) || !pStore) return false;
+
+    // XISF property keys: {7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}
+    PROPERTYKEY keyMedian = {{ 0x7C54FA8B,0x9D63,0x4C10,{0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E} }, 56};
+    PROPERTYKEY keyMean   = {{ 0x7C54FA8B,0x9D63,0x4C10,{0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E} }, 57};
+    PROPERTYKEY keyClipLo = {{ 0x7C54FA8B,0x9D63,0x4C10,{0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E} }, 58};
+    PROPERTYKEY keyClipHi = {{ 0x7C54FA8B,0x9D63,0x4C10,{0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E} }, 59};
+
+    PROPVARIANT pv;
+    PropVariantInit(&pv);
+
+    bool gotMedian = false;
+    hr = pStore->GetValue(keyMedian, &pv);
+    if (SUCCEEDED(hr) && pv.vt == VT_R8) {
+        m_cachedStats.median = pv.dblVal;
+        gotMedian = true;
+    }
+    PropVariantClear(&pv);
+
+    if (gotMedian) {
+        hr = pStore->GetValue(keyMean, &pv);
+        if (SUCCEEDED(hr) && pv.vt == VT_R8)
+            m_cachedStats.mean = pv.dblVal;
+        PropVariantClear(&pv);
+
+        hr = pStore->GetValue(keyClipLo, &pv);
+        if (SUCCEEDED(hr) && pv.vt == VT_R8)
+            m_cachedStats.clippingLow = pv.dblVal;
+        PropVariantClear(&pv);
+
+        hr = pStore->GetValue(keyClipHi, &pv);
+        if (SUCCEEDED(hr) && pv.vt == VT_R8)
+            m_cachedStats.clippingHigh = pv.dblVal;
+        PropVariantClear(&pv);
+
+        m_cachedStats.valid = true;
+    }
+
+    pStore->Release();
+    return m_cachedStats.valid;
+}
+
+// ---------------------------------------------------------------------------
+// StartAnalysis — kick off background computation thread
+// ---------------------------------------------------------------------------
+
+void CXISFPropertySheetHandler::StartAnalysis()
+{
+    m_analyzing.store(true, std::memory_order_release);
+    if (m_hwndButton) ShowWindow(m_hwndButton, SW_HIDE);
+    InvalidateRect(m_hwndPage, nullptr, TRUE);
+    m_computeThread = std::thread([this]() {
+        ComputeAnalysis();
+        if (IsWindow(m_hwndPage))
+            InvalidateRect(m_hwndPage, nullptr, TRUE);
+    });
+}
+
+// ---------------------------------------------------------------------------
 // Dialog proc
 // ---------------------------------------------------------------------------
 
-INT_PTR CALLBACK CXISFPropertySheetHandler::HistogramDlgProc(
+INT_PTR CALLBACK CXISFPropertySheetHandler::AstroDetailsDlgProc(
     HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     CXISFPropertySheetHandler* pThis = reinterpret_cast<CXISFPropertySheetHandler*>(
@@ -200,12 +273,36 @@ INT_PTR CALLBACK CXISFPropertySheetHandler::HistogramDlgProc(
         if (pThis)
         {
             pThis->m_hwndPage = hwnd;
-            // Start background computation
-            pThis->m_computeThread = std::thread([pThis]() {
-                pThis->ComputeHistogram();
-                if (IsWindow(pThis->m_hwndPage))
-                    InvalidateRect(pThis->m_hwndPage, nullptr, TRUE);
-            });
+
+            // Create the Analyze button (centered)
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            int btnW = 120, btnH = 30;
+            int btnX = (rc.right - btnW) / 2;
+            int btnY = (rc.bottom - btnH) / 2;
+            pThis->m_hwndButton = CreateWindowW(L"BUTTON", L"Analyze",
+                WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                btnX, btnY, btnW, btnH, hwnd, (HMENU)IDC_ANALYZE, g_hInst, nullptr);
+            HFONT hFont = CreateFontW(-14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+            SendMessage(pThis->m_hwndButton, WM_SETFONT, (WPARAM)hFont, TRUE);
+
+            // Check indexer cache for pre-computed stats
+            if (pThis->ReadCachedStats())
+            {
+                // Cached stats available — hide button and auto-start for histogram
+                ShowWindow(pThis->m_hwndButton, SW_HIDE);
+                pThis->StartAnalysis();
+            }
+        }
+        return TRUE;
+    }
+
+    case WM_COMMAND:
+    {
+        if (LOWORD(wParam) == IDC_ANALYZE && pThis && !pThis->IsAnalyzing())
+        {
+            pThis->StartAnalysis();
         }
         return TRUE;
     }
@@ -217,13 +314,46 @@ INT_PTR CALLBACK CXISFPropertySheetHandler::HistogramDlgProc(
         RECT rc;
         GetClientRect(hwnd, &rc);
 
+        const int statsAreaHeight = 55;
+
         if (pThis && pThis->IsComputed())
         {
-            PaintHistogram(hdc, rc, pThis->GetHistogram());
+            // Full results: paint stats on top, histogram below
+            RECT rcStats = rc;
+            rcStats.bottom = rcStats.top + statsAreaHeight;
+            PaintStats(hdc, rcStats, pThis->GetStats());
+
+            RECT rcHist = rc;
+            rcHist.top += statsAreaHeight;
+            PaintHistogram(hdc, rcHist, pThis->GetHistogram());
         }
-        else
+        else if (pThis && pThis->HasCachedStats() && pThis->IsAnalyzing())
         {
-            // Dark background with status text (GDI — no GDI+ needed for this)
+            // Cached stats + histogram computing
+            RECT rcStats = rc;
+            rcStats.bottom = rcStats.top + statsAreaHeight;
+            PaintStats(hdc, rcStats, pThis->GetCachedStats());
+
+            RECT rcHist = rc;
+            rcHist.top += statsAreaHeight;
+
+            HBRUSH hBg = CreateSolidBrush(RGB(20, 22, 35));
+            FillRect(hdc, &rcHist, hBg);
+            DeleteObject(hBg);
+
+            HFONT hFont = CreateFontW(-14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+            HGDIOBJ hOldFont = SelectObject(hdc, hFont);
+            SetTextColor(hdc, RGB(150, 155, 175));
+            SetBkMode(hdc, TRANSPARENT);
+            DrawTextW(hdc, L"Computing histogram\u2026", -1, &rcHist,
+                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            SelectObject(hdc, hOldFont);
+            DeleteObject(hFont);
+        }
+        else if (pThis && pThis->IsAnalyzing())
+        {
+            // Analyzing without cached stats
             HBRUSH hBg = CreateSolidBrush(RGB(20, 22, 35));
             FillRect(hdc, &rc, hBg);
             DeleteObject(hBg);
@@ -233,14 +363,33 @@ INT_PTR CALLBACK CXISFPropertySheetHandler::HistogramDlgProc(
             HGDIOBJ hOldFont = SelectObject(hdc, hFont);
             SetTextColor(hdc, RGB(150, 155, 175));
             SetBkMode(hdc, TRANSPARENT);
-
-            const wchar_t* text = (pThis && pThis->IsUnavailable())
-                ? L"Histogram unavailable"
-                : L"Computing histogram\u2026";
-            DrawTextW(hdc, text, -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-
+            DrawTextW(hdc, L"Analyzing\u2026", -1, &rc,
+                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
             SelectObject(hdc, hOldFont);
             DeleteObject(hFont);
+        }
+        else if (pThis && pThis->IsUnavailable())
+        {
+            HBRUSH hBg = CreateSolidBrush(RGB(20, 22, 35));
+            FillRect(hdc, &rc, hBg);
+            DeleteObject(hBg);
+
+            HFONT hFont = CreateFontW(-14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+            HGDIOBJ hOldFont = SelectObject(hdc, hFont);
+            SetTextColor(hdc, RGB(150, 155, 175));
+            SetBkMode(hdc, TRANSPARENT);
+            DrawTextW(hdc, L"Analysis unavailable", -1, &rc,
+                DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            SelectObject(hdc, hOldFont);
+            DeleteObject(hFont);
+        }
+        else
+        {
+            // Nothing yet — dark background (button is visible)
+            HBRUSH hBg = CreateSolidBrush(RGB(20, 22, 35));
+            FillRect(hdc, &rc, hBg);
+            DeleteObject(hBg);
         }
 
         EndPaint(hwnd, &ps);
@@ -261,7 +410,85 @@ INT_PTR CALLBACK CXISFPropertySheetHandler::HistogramDlgProc(
 }
 
 // ---------------------------------------------------------------------------
-// PaintHistogram — GDI log-scale histogram rendering
+// PaintStats — render pixel statistics in a horizontal row using GDI+
+// ---------------------------------------------------------------------------
+
+void CXISFPropertySheetHandler::PaintStats(
+    HDC hdc, const RECT& rcArea, const PixelStats& stats)
+{
+    Gdiplus::GdiplusStartupInput gdipInput;
+    ULONG_PTR gdipToken = 0;
+    Gdiplus::GdiplusStartup(&gdipToken, &gdipInput, nullptr);
+
+    {
+        Gdiplus::Graphics gfx(hdc);
+        gfx.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
+
+        int areaW = rcArea.right - rcArea.left;
+        int areaH = rcArea.bottom - rcArea.top;
+
+        // Background
+        Gdiplus::SolidBrush bgBrush(Gdiplus::Color(255, 20, 22, 35));
+        gfx.FillRectangle(&bgBrush, rcArea.left, rcArea.top, areaW, areaH);
+
+        Gdiplus::Font font(L"Segoe UI", 9.0f);
+        Gdiplus::SolidBrush dimBrush(Gdiplus::Color(255, 130, 135, 155));
+        Gdiplus::SolidBrush brightBrush(Gdiplus::Color(255, 240, 242, 255));
+
+        // Format stat values
+        wchar_t medianStr[32], meanStr[32], clipLoStr[32], clipHiStr[32];
+        swprintf_s(medianStr, L"%.4f", stats.median);
+        swprintf_s(meanStr,   L"%.4f", stats.mean);
+        swprintf_s(clipLoStr, L"%.1f%%", stats.clippingLow);
+        swprintf_s(clipHiStr, L"%.1f%%", stats.clippingHigh);
+
+        struct StatItem { const wchar_t* label; const wchar_t* value; };
+        StatItem items[] = {
+            { L"Median: ",        medianStr },
+            { L"Mean: ",          meanStr },
+            { L"Clipping Low: ",  clipLoStr },
+            { L"Clipping High: ", clipHiStr },
+        };
+
+        // Measure total width to center the row
+        Gdiplus::StringFormat sfNear;
+        sfNear.SetAlignment(Gdiplus::StringAlignmentNear);
+        sfNear.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
+
+        float totalW = 0;
+        const float spacing = 24.0f;
+        struct MeasuredItem { float labelW; float valueW; };
+        MeasuredItem measured[4] = {};
+
+        for (int i = 0; i < 4; ++i) {
+            Gdiplus::RectF bounds;
+            gfx.MeasureString(items[i].label, -1, &font, Gdiplus::PointF(0, 0), &sfNear, &bounds);
+            measured[i].labelW = bounds.Width;
+            gfx.MeasureString(items[i].value, -1, &font, Gdiplus::PointF(0, 0), &sfNear, &bounds);
+            measured[i].valueW = bounds.Width;
+            totalW += measured[i].labelW + measured[i].valueW;
+        }
+        totalW += spacing * 3; // spacing between items
+
+        float x = rcArea.left + (areaW - totalW) / 2.0f;
+        float y = rcArea.top + (areaH - 16.0f) / 2.0f;
+
+        for (int i = 0; i < 4; ++i) {
+            Gdiplus::PointF ptLabel(x, y);
+            gfx.DrawString(items[i].label, -1, &font, ptLabel, &sfNear, &dimBrush);
+            x += measured[i].labelW;
+
+            Gdiplus::PointF ptValue(x, y);
+            gfx.DrawString(items[i].value, -1, &font, ptValue, &sfNear, &brightBrush);
+            x += measured[i].valueW + spacing;
+        }
+    }
+
+    Gdiplus::GdiplusShutdown(gdipToken);
+}
+
+// ---------------------------------------------------------------------------
+// PaintHistogram — GDI+ log-scale histogram rendering
 // (Ported from PreviewHandler)
 // ---------------------------------------------------------------------------
 
@@ -409,10 +636,10 @@ void CXISFPropertySheetHandler::PaintHistogram(
 }
 
 // ---------------------------------------------------------------------------
-// ComputeHistogram — background thread: parse XISF and bin pixel samples
+// ComputeAnalysis — background thread: parse XISF, bin pixels, compute stats
 // ---------------------------------------------------------------------------
 
-void CXISFPropertySheetHandler::ComputeHistogram()
+void CXISFPropertySheetHandler::ComputeAnalysis()
 {
     // Open file via SHCreateStreamOnFileEx
     IStream* pStream = nullptr;
@@ -422,6 +649,7 @@ void CXISFPropertySheetHandler::ComputeHistogram()
     if (FAILED(hr) || !pStream)
     {
         m_unavailable.store(true, std::memory_order_release);
+        m_analyzing.store(false, std::memory_order_release);
         return;
     }
 
@@ -437,6 +665,7 @@ void CXISFPropertySheetHandler::ComputeHistogram()
     {
         pStream->Release();
         m_unavailable.store(true, std::memory_order_release);
+        m_analyzing.store(false, std::memory_order_release);
         return;
     }
 
@@ -445,6 +674,7 @@ void CXISFPropertySheetHandler::ComputeHistogram()
     {
         pStream->Release();
         m_unavailable.store(true, std::memory_order_release);
+        m_analyzing.store(false, std::memory_order_release);
         return;
     }
 
@@ -454,6 +684,7 @@ void CXISFPropertySheetHandler::ComputeHistogram()
     {
         pStream->Release();
         m_unavailable.store(true, std::memory_order_release);
+        m_analyzing.store(false, std::memory_order_release);
         return;
     }
 
@@ -464,6 +695,7 @@ void CXISFPropertySheetHandler::ComputeHistogram()
     {
         pStream->Release();
         m_unavailable.store(true, std::memory_order_release);
+        m_analyzing.store(false, std::memory_order_release);
         return;
     }
 
@@ -531,6 +763,7 @@ void CXISFPropertySheetHandler::ComputeHistogram()
     if (candidates.empty()) {
         pStream->Release();
         m_unavailable.store(true, std::memory_order_release);
+        m_analyzing.store(false, std::memory_order_release);
         return;
     }
 
@@ -550,6 +783,7 @@ void CXISFPropertySheetHandler::ComputeHistogram()
     if (geometry.empty() || location.empty()) {
         pStream->Release();
         m_unavailable.store(true, std::memory_order_release);
+        m_analyzing.store(false, std::memory_order_release);
         return;
     }
 
@@ -567,6 +801,7 @@ void CXISFPropertySheetHandler::ComputeHistogram()
     if (imgW == 0 || imgH == 0) {
         pStream->Release();
         m_unavailable.store(true, std::memory_order_release);
+        m_analyzing.store(false, std::memory_order_release);
         return;
     }
 
@@ -582,6 +817,7 @@ void CXISFPropertySheetHandler::ComputeHistogram()
     if (attachSize == 0) {
         pStream->Release();
         m_unavailable.store(true, std::memory_order_release);
+        m_analyzing.store(false, std::memory_order_release);
         return;
     }
 
@@ -613,6 +849,10 @@ void CXISFPropertySheetHandler::ComputeHistogram()
     size_t rowBytes = static_cast<size_t>(imgW) * bps;
     std::vector<uint8_t> rowBuf(rowBytes);
 
+    // Reserve space for sample collection (stats computation)
+    std::vector<float> allSamples;
+    allSamples.reserve(kMaxTotalSamples);
+
     m_histogram.Begin(readChannels);
 
     for (UINT ch = 0; ch < readChannels; ++ch) {
@@ -624,6 +864,7 @@ void CXISFPropertySheetHandler::ComputeHistogram()
             if (FAILED(pStream->Seek(seekPos, STREAM_SEEK_SET, nullptr))) {
                 pStream->Release();
                 m_unavailable.store(true, std::memory_order_release);
+                m_analyzing.store(false, std::memory_order_release);
                 return;
             }
 
@@ -632,6 +873,7 @@ void CXISFPropertySheetHandler::ComputeHistogram()
                 || cbRowRead < rowBytes) {
                 pStream->Release();
                 m_unavailable.store(true, std::memory_order_release);
+                m_analyzing.store(false, std::memory_order_release);
                 return;
             }
 
@@ -652,12 +894,38 @@ void CXISFPropertySheetHandler::ComputeHistogram()
 
                 uint8_t binIdx = static_cast<uint8_t>((std::min)(255.0f, val * 256.0f));
                 m_histogram.bins[ch][binIdx]++;
+                allSamples.push_back(val);
             }
         }
     }
 
     m_histogram.Commit();
+
+    // Compute stats from collected samples
+    if (!allSamples.empty()) {
+        // Mean
+        double sum = 0;
+        for (float v : allSamples) sum += v;
+        m_stats.mean = sum / allSamples.size();
+
+        // Median (nth_element is O(n))
+        size_t mid = allSamples.size() / 2;
+        std::nth_element(allSamples.begin(), allSamples.begin() + mid, allSamples.end());
+        m_stats.median = allSamples[mid];
+
+        // Clipping
+        size_t clipLo = 0, clipHi = 0;
+        for (float v : allSamples) {
+            if (v <= 0.0f) clipLo++;
+            if (v >= 1.0f) clipHi++;
+        }
+        m_stats.clippingLow = 100.0 * clipLo / allSamples.size();
+        m_stats.clippingHigh = 100.0 * clipHi / allSamples.size();
+        m_stats.valid = true;
+    }
+
     m_computed.store(true, std::memory_order_release);
+    m_analyzing.store(false, std::memory_order_release);
 
     pStream->Release();
 }
