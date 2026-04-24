@@ -1225,7 +1225,8 @@ void CXISFPropertyHandler::ComputePixelStats() {
         return;
     }
 
-    // Compute stats
+    // Compute stats — round to display precision since propdesc formatDec
+    // is not supported by Windows and General format shows full precision
     double mean = runningSum / samples.size();
 
     // Median via nth_element (O(n))
@@ -1235,6 +1236,12 @@ void CXISFPropertyHandler::ComputePixelStats() {
 
     double clipLowPct = 100.0 * clipLow / samples.size();
     double clipHighPct = 100.0 * clipHigh / samples.size();
+
+    // Round: Median/Mean to 4 decimal places, Clipping to 1
+    median = std::round(median * 10000.0) / 10000.0;
+    mean = std::round(mean * 10000.0) / 10000.0;
+    clipLowPct = std::round(clipLowPct * 10.0) / 10.0;
+    clipHighPct = std::round(clipHighPct * 10.0) / 10.0;
 
     // Update the VT_EMPTY placeholder entries
     for (auto& pe : m_properties) {
