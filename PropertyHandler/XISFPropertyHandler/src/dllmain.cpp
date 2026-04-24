@@ -162,9 +162,16 @@ STDAPI DllRegisterServer(void) {
     if (FAILED(hr)) return SELFREG_E_CLASS;
     hr = SetRegSZValue(HKEY_CLASSES_ROOT, szPSInProc, L"ThreadingModel", L"Apartment");
     if (FAILED(hr)) return SELFREG_E_CLASS;
+    // SystemFileAssociations is the reliable path — works regardless of which ProgID
+    // Explorer resolves (e.g. XISFFile vs Pleiades Astrophoto.PixInsight.xisf)
     hr = SetRegSZValue(HKEY_CLASSES_ROOT,
-        L".xisf\\shellex\\PropertySheetHandlers\\XISFHistogram",
+        L"SystemFileAssociations\\.xisf\\shellex\\PropertySheetHandlers\\XISFHistogram",
         nullptr, kPropSheetClsidStr);
+    if (FAILED(hr)) return SELFREG_E_CLASS;
+    // Add to Approved shell extensions list
+    hr = SetRegSZValue(HKEY_LOCAL_MACHINE,
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Approved",
+        kPropSheetClsidStr, L"XISF Histogram Property Sheet");
     if (FAILED(hr)) return SELFREG_E_CLASS;
 
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
@@ -216,7 +223,25 @@ STDAPI DllUnregisterServer(void) {
     // ---- Property Sheet handler cleanup ----
     wchar_t szPSClsid[128]; swprintf_s(szPSClsid, L"CLSID\\%s", kPropSheetClsidStr);
     RegDeleteTreeW(HKEY_CLASSES_ROOT, szPSClsid);
+    RegDeleteTreeW(HKEY_CLASSES_ROOT,
+        L"SystemFileAssociations\\.xisf\\shellex\\PropertySheetHandlers\\XISFHistogram");
+    // Clean up stale registrations from earlier builds
     RegDeleteTreeW(HKEY_CLASSES_ROOT, L".xisf\\shellex\\PropertySheetHandlers\\XISFHistogram");
+    {
+        wchar_t szPropSheetKey[256];
+        swprintf_s(szPropSheetKey, L"%s\\shellex\\PropertySheetHandlers\\XISFHistogram", kProgID);
+        RegDeleteTreeW(HKEY_CLASSES_ROOT, szPropSheetKey);
+    }
+    // Remove from Approved list
+    {
+        HKEY hApproved = nullptr;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Approved",
+            0, KEY_SET_VALUE, &hApproved) == ERROR_SUCCESS) {
+            RegDeleteValueW(hApproved, kPropSheetClsidStr);
+            RegCloseKey(hApproved);
+        }
+    }
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return S_OK;
 }
