@@ -503,9 +503,12 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
     }
     m_initialized = true;
 
-    // Store stream for lazy pixel stat computation
+    // Compute pixel stats eagerly during initialization so the cost is paid once
+    // (Explorer may create multiple handler instances per file; lazy GetValue()
+    // would re-compute each time).
     m_pStream = pStream;
     m_pStream->AddRef();
+    ComputePixelStats();
 
     { UINT32 _propCount = static_cast<UINT32>(m_properties.size()); ULONGLONG _dur = GetTickCount64() - initStart;
     TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeCompleted",
@@ -993,11 +996,6 @@ IFACEMETHODIMP CXISFPropertyHandler::GetValue(REFPROPERTYKEY key, PROPVARIANT* p
     PropVariantInit(pPropVar);
     std::lock_guard<std::mutex> lock(m_propertyLock);
 
-    // Trigger lazy pixel stats computation on first request
-    if (IsPixelStatKey(key) && m_pixelStatsState == PixelStatsState::NotStarted) {
-        ComputePixelStats();
-    }
-
     for (const auto& pe : m_properties) {
         if (IsEqualPropertyKey(pe.key, key)) return PropVariantCopy(pPropVar, &pe.value);
     }
@@ -1149,16 +1147,21 @@ void CXISFPropertyHandler::ComputePixelStats() {
     UINT readChannels = (imgC >= 3) ? 3 : 1;
     size_t channelPixels = static_cast<size_t>(imgW) * imgH;
 
-    // Subsample strategy: read every Nth row, target ~1024 rows
+    // Subsample strategy: target ~1024 rows, cap total samples at ~1M for fast compute
+    constexpr size_t kMaxTotalSamples = 1024 * 1024;
+
     UINT sampleRows = (std::min)(imgH, 1024u);
     UINT rowStride = (std::max)(1u, imgH / sampleRows);
 
     // Collect normalized pixel samples (pooled across all channels)
-    size_t maxSamples = static_cast<size_t>(imgW) * sampleRows * readChannels;
+    // Cap columns so total samples (cols × rows × channels) stays under budget
     UINT sampleCols = imgW;
     UINT colStride = 1;
-    if (maxSamples > 4 * 1024 * 1024) {
-        sampleCols = (std::min)(imgW, 4096u);
+    size_t maxSamples = static_cast<size_t>(sampleCols) * sampleRows * readChannels;
+    if (maxSamples > kMaxTotalSamples) {
+        // Solve for sampleCols: sampleCols = budget / (rows × channels)
+        UINT targetCols = static_cast<UINT>(kMaxTotalSamples / (static_cast<size_t>(sampleRows) * readChannels));
+        sampleCols = (std::max)(1u, (std::min)(imgW, targetCols));
         colStride = (std::max)(1u, imgW / sampleCols);
         maxSamples = static_cast<size_t>(sampleCols) * sampleRows * readChannels;
     }
