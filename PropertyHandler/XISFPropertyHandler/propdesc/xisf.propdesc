@@ -331,25 +331,25 @@
       <searchInfo inInvertedIndex="false" isColumn="true" />
       <labelInfo label="Astro Pixel Median" />
       <typeInfo type="Double" isInnate="false" isViewable="true" />
-      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="Number" formatDec="4" /></displayInfo>
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
     </propertyDescription>
     <propertyDescription name="XISF.Mean" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="57">
       <searchInfo inInvertedIndex="false" isColumn="true" />
       <labelInfo label="Astro Pixel Mean" />
       <typeInfo type="Double" isInnate="false" isViewable="true" />
-      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="Number" formatDec="4" /></displayInfo>
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
     </propertyDescription>
     <propertyDescription name="XISF.ClippingLow" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="58">
       <searchInfo inInvertedIndex="false" isColumn="true" />
       <labelInfo label="Astro Clipping Low (%)" />
       <typeInfo type="Double" isInnate="false" isViewable="true" />
-      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="Number" formatDec="1" /></displayInfo>
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
     </propertyDescription>
     <propertyDescription name="XISF.ClippingHigh" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="59">
       <searchInfo inInvertedIndex="false" isColumn="true" />
       <labelInfo label="Astro Clipping High (%)" />
       <typeInfo type="Double" isInnate="false" isViewable="true" />
-      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="Number" formatDec="1" /></displayInfo>
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
     </propertyDescription>
   </propertyDescriptionList>
 </schema>
