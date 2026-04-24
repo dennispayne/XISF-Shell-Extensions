@@ -26,7 +26,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "PerformanceTests", "Perform
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "XISFFilter", "Filter\XISFFilter\XISFFilter.vcxproj", "{B4E7F2A1-3D8C-4F5E-9A1B-6C2D8E4F7A3B}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "XISFFilterTests", "Filter\XISFFilterTests\XISFFilterTests.vcxproj", "{A1B2C3D4-E5F6-7890-ABCD-FILTER000001}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "XISFFilterTests", "Filter\XISFFilterTests\XISFFilterTests.vcxproj", "{AB027F72-FE24-4FE3-B7FD-183AE95BCDB6}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Filter", "Filter", "{10000001-0000-0000-0000-000000000006}"
 EndProject
@@ -39,14 +39,14 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{CAFE0002-0000-0000-0000-000000000001}"
 	ProjectSection(SolutionItems) = preProject
 		.gitignore = .gitignore
-		README.md = README.md
 		CHANGELOG.md = CHANGELOG.md
-		CONTRIBUTING.md = CONTRIBUTING.md
-		CODE_OF_CONDUCT.md = CODE_OF_CONDUCT.md
-		SECURITY.md = SECURITY.md
-		LICENSE = LICENSE
-		version.json = version.json
 		CodeCoverage.runsettings = CodeCoverage.runsettings
+		CODE_OF_CONDUCT.md = CODE_OF_CONDUCT.md
+		CONTRIBUTING.md = CONTRIBUTING.md
+		LICENSE = LICENSE
+		README.md = README.md
+		SECURITY.md = SECURITY.md
+		version.json = version.json
 		Win11-XISF-Shell-Extensions.sln = Win11-XISF-Shell-Extensions.sln
 	EndProjectSection
 EndProject
@@ -58,9 +58,9 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{CAFE0004-0000-0000-0000-000000000001}"
 	ProjectSection(SolutionItems) = preProject
 		docs\handlers-overview.md = docs\handlers-overview.md
-		docs\property-handler.md = docs\property-handler.md
-		docs\preview-handler.md = docs\preview-handler.md
 		docs\msix-packaging.md = docs\msix-packaging.md
+		docs\preview-handler.md = docs\preview-handler.md
+		docs\property-handler.md = docs\property-handler.md
 		docs\telemetry.md = docs\telemetry.md
 	EndProjectSection
 EndProject
@@ -74,6 +74,20 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{
 	ProjectSection(SolutionItems) = preProject
 		.github\workflows\ci.yml = .github\workflows\ci.yml
 		.github\workflows\release.yml = .github\workflows\release.yml
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "repo root", "repo root", "{9FD08C55-1265-4E9E-8AF1-53C849FAEE77}"
+	ProjectSection(SolutionItems) = preProject
+		.gitignore = .gitignore
+		CHANGELOG.md = CHANGELOG.md
+		CodeCoverage.runsettings = CodeCoverage.runsettings
+		CODE_OF_CONDUCT.md = CODE_OF_CONDUCT.md
+		CONTRIBUTING.md = CONTRIBUTING.md
+		LICENSE = LICENSE
+		README.md = README.md
+		SECURITY.md = SECURITY.md
+		version.json = version.json
+		Win11-XISF-Shell-Extensions.sln = Win11-XISF-Shell-Extensions.sln
 	EndProjectSection
 EndProject
 Global
@@ -114,10 +128,10 @@ Global
 		{B4E7F2A1-3D8C-4F5E-9A1B-6C2D8E4F7A3B}.Debug|x64.Build.0 = Debug|x64
 		{B4E7F2A1-3D8C-4F5E-9A1B-6C2D8E4F7A3B}.Release|x64.ActiveCfg = Release|x64
 		{B4E7F2A1-3D8C-4F5E-9A1B-6C2D8E4F7A3B}.Release|x64.Build.0 = Release|x64
-		{A1B2C3D4-E5F6-7890-ABCD-FILTER000001}.Debug|x64.ActiveCfg = Debug|x64
-		{A1B2C3D4-E5F6-7890-ABCD-FILTER000001}.Debug|x64.Build.0 = Debug|x64
-		{A1B2C3D4-E5F6-7890-ABCD-FILTER000001}.Release|x64.ActiveCfg = Release|x64
-		{A1B2C3D4-E5F6-7890-ABCD-FILTER000001}.Release|x64.Build.0 = Release|x64
+		{AB027F72-FE24-4FE3-B7FD-183AE95BCDB6}.Debug|x64.ActiveCfg = Debug|x64
+		{AB027F72-FE24-4FE3-B7FD-183AE95BCDB6}.Debug|x64.Build.0 = Debug|x64
+		{AB027F72-FE24-4FE3-B7FD-183AE95BCDB6}.Release|x64.ActiveCfg = Release|x64
+		{AB027F72-FE24-4FE3-B7FD-183AE95BCDB6}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -131,8 +145,11 @@ Global
 		{E2F3A4B5-C6D7-8901-BCDE-F01234567890} = {10000001-0000-0000-0000-000000000005}
 		{F3079C99-44B3-CEC6-C1D0-E54F888F4D80} = {84BAAC9F-994B-4C6E-B41A-F503EE515F8D}
 		{B4E7F2A1-3D8C-4F5E-9A1B-6C2D8E4F7A3B} = {10000001-0000-0000-0000-000000000006}
-		{A1B2C3D4-E5F6-7890-ABCD-FILTER000001} = {10000001-0000-0000-0000-000000000006}
+		{AB027F72-FE24-4FE3-B7FD-183AE95BCDB6} = {10000001-0000-0000-0000-000000000006}
+		{CAFE0001-0000-0000-0000-000000000001} = {CAFE0002-0000-0000-0000-000000000001}
+		{CAFE0003-0000-0000-0000-000000000001} = {CAFE0002-0000-0000-0000-000000000001}
 		{CAFE0006-0000-0000-0000-000000000001} = {CAFE0005-0000-0000-0000-000000000001}
+		{9FD08C55-1265-4E9E-8AF1-53C849FAEE77} = {CAFE0002-0000-0000-0000-000000000001}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {6D5DCEB3-7DBA-46D0-8A5D-0ED883A9A1B8}

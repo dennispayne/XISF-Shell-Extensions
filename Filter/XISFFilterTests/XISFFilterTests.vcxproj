@@ -12,7 +12,7 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>
-    <ProjectGuid>{A1B2C3D4-E5F6-7890-ABCD-FILTER000001}</ProjectGuid>
+    <ProjectGuid>{AB027F72-FE24-4FE3-B7FD-183AE95BCDB6}</ProjectGuid>
     <RootNamespace>XISFFilterTests</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
     <TargetName>XISFFilterTests</TargetName>
