@@ -23,6 +23,13 @@ extern long g_cDllRef;
 
 #define IDC_ANALYZE 1001
 
+// Helper: convert a Windows system color index to a GDI+ Color
+static Gdiplus::Color GdipFromSysColor(int sysIndex, BYTE alpha = 255)
+{
+    COLORREF cr = GetSysColor(sysIndex);
+    return Gdiplus::Color(alpha, GetRValue(cr), GetGValue(cr), GetBValue(cr));
+}
+
 // ---------------------------------------------------------------------------
 // In-memory dialog template — an empty rectangle we paint into
 // ---------------------------------------------------------------------------
@@ -337,14 +344,14 @@ INT_PTR CALLBACK CXISFPropertySheetHandler::AstroDetailsDlgProc(
             RECT rcHist = rc;
             rcHist.top += statsAreaHeight;
 
-            HBRUSH hBg = CreateSolidBrush(RGB(20, 22, 35));
+            HBRUSH hBg = CreateSolidBrush(GetSysColor(COLOR_WINDOW));
             FillRect(hdc, &rcHist, hBg);
             DeleteObject(hBg);
 
             HFONT hFont = CreateFontW(-14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                 DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
             HGDIOBJ hOldFont = SelectObject(hdc, hFont);
-            SetTextColor(hdc, RGB(150, 155, 175));
+            SetTextColor(hdc, GetSysColor(COLOR_GRAYTEXT));
             SetBkMode(hdc, TRANSPARENT);
             DrawTextW(hdc, L"Computing histogram\u2026", -1, &rcHist,
                 DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -354,14 +361,14 @@ INT_PTR CALLBACK CXISFPropertySheetHandler::AstroDetailsDlgProc(
         else if (pThis && pThis->IsAnalyzing())
         {
             // Analyzing without cached stats
-            HBRUSH hBg = CreateSolidBrush(RGB(20, 22, 35));
+            HBRUSH hBg = CreateSolidBrush(GetSysColor(COLOR_WINDOW));
             FillRect(hdc, &rc, hBg);
             DeleteObject(hBg);
 
             HFONT hFont = CreateFontW(-14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                 DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
             HGDIOBJ hOldFont = SelectObject(hdc, hFont);
-            SetTextColor(hdc, RGB(150, 155, 175));
+            SetTextColor(hdc, GetSysColor(COLOR_GRAYTEXT));
             SetBkMode(hdc, TRANSPARENT);
             DrawTextW(hdc, L"Analyzing\u2026", -1, &rc,
                 DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -370,14 +377,14 @@ INT_PTR CALLBACK CXISFPropertySheetHandler::AstroDetailsDlgProc(
         }
         else if (pThis && pThis->IsUnavailable())
         {
-            HBRUSH hBg = CreateSolidBrush(RGB(20, 22, 35));
+            HBRUSH hBg = CreateSolidBrush(GetSysColor(COLOR_WINDOW));
             FillRect(hdc, &rc, hBg);
             DeleteObject(hBg);
 
             HFONT hFont = CreateFontW(-14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                 DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
             HGDIOBJ hOldFont = SelectObject(hdc, hFont);
-            SetTextColor(hdc, RGB(150, 155, 175));
+            SetTextColor(hdc, GetSysColor(COLOR_GRAYTEXT));
             SetBkMode(hdc, TRANSPARENT);
             DrawTextW(hdc, L"Analysis unavailable", -1, &rc,
                 DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -386,8 +393,8 @@ INT_PTR CALLBACK CXISFPropertySheetHandler::AstroDetailsDlgProc(
         }
         else
         {
-            // Nothing yet — dark background (button is visible)
-            HBRUSH hBg = CreateSolidBrush(RGB(20, 22, 35));
+            // Nothing yet — window background (button is visible)
+            HBRUSH hBg = CreateSolidBrush(GetSysColor(COLOR_WINDOW));
             FillRect(hdc, &rc, hBg);
             DeleteObject(hBg);
         }
@@ -427,8 +434,8 @@ void CXISFPropertySheetHandler::PaintStats(
         int areaW = rcArea.right - rcArea.left;
         int areaH = rcArea.bottom - rcArea.top;
 
-        // Background
-        Gdiplus::SolidBrush bgBrush(Gdiplus::Color(255, 20, 22, 35));
+        // Background — use system window color
+        Gdiplus::SolidBrush bgBrush(GdipFromSysColor(COLOR_WINDOW));
         gfx.FillRectangle(&bgBrush, rcArea.left, rcArea.top, areaW, areaH);
 
         // Format values
@@ -448,9 +455,12 @@ void CXISFPropertySheetHandler::PaintStats(
         const int nItems = 4;
 
         Gdiplus::Font font(L"Segoe UI", 9.0f);
-        Gdiplus::SolidBrush labelBrush(Gdiplus::Color(255, 130, 135, 155));
-        Gdiplus::SolidBrush valueBrush(Gdiplus::Color(255, 230, 235, 250));
-        Gdiplus::Pen sepPen(Gdiplus::Color(40, 100, 110, 140), 1.0f);
+        Gdiplus::SolidBrush labelBrush(GdipFromSysColor(COLOR_GRAYTEXT));
+        Gdiplus::SolidBrush valueBrush(GdipFromSysColor(COLOR_WINDOWTEXT));
+
+        // Separator: blend between window and button-face
+        COLORREF crSep = GetSysColor(COLOR_BTNFACE);
+        Gdiplus::Pen sepPen(Gdiplus::Color(80, GetRValue(crSep), GetGValue(crSep), GetBValue(crSep)), 1.0f);
 
         // Layout: vertical list, two columns (label | value)
         const float padX = 12.0f;
@@ -468,8 +478,8 @@ void CXISFPropertySheetHandler::PaintStats(
         sfRight.SetLineAlignment(Gdiplus::StringAlignmentCenter);
         sfRight.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
 
-        // Alternating row shading
-        Gdiplus::SolidBrush altBrush(Gdiplus::Color(15, 255, 255, 255));
+        // Alternating row shading — subtle tint of button-face over window
+        Gdiplus::SolidBrush altBrush(GdipFromSysColor(COLOR_BTNFACE, 30));
 
         for (int i = 0; i < nItems; ++i) {
             float y = startY + i * rowH;
