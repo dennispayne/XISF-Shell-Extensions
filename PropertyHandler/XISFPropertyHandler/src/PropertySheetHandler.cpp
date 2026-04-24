@@ -7,10 +7,13 @@
 #include <cmath>
 #include <cstdlib>
 #include <vector>
+#include <objidl.h>
+#include <gdiplus.h>
 
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "comctl32.lib")
+#pragma comment(lib, "gdiplus.lib")
 
 extern HINSTANCE g_hInst;
 extern long g_cDllRef;
@@ -220,17 +223,24 @@ INT_PTR CALLBACK CXISFPropertySheetHandler::HistogramDlgProc(
         }
         else
         {
-            HBRUSH hBg = CreateSolidBrush(RGB(25, 25, 40));
+            // Dark background with status text (GDI — no GDI+ needed for this)
+            HBRUSH hBg = CreateSolidBrush(RGB(20, 22, 35));
             FillRect(hdc, &rc, hBg);
             DeleteObject(hBg);
 
-            SetTextColor(hdc, RGB(200, 200, 220));
+            HFONT hFont = CreateFontW(-14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+            HGDIOBJ hOldFont = SelectObject(hdc, hFont);
+            SetTextColor(hdc, RGB(150, 155, 175));
             SetBkMode(hdc, TRANSPARENT);
 
             const wchar_t* text = (pThis && pThis->IsUnavailable())
                 ? L"Histogram unavailable"
-                : L"Computing histogram...";
+                : L"Computing histogram\u2026";
             DrawTextW(hdc, text, -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+            SelectObject(hdc, hOldFont);
+            DeleteObject(hFont);
         }
 
         EndPaint(hwnd, &ps);
@@ -258,99 +268,144 @@ INT_PTR CALLBACK CXISFPropertySheetHandler::HistogramDlgProc(
 void CXISFPropertySheetHandler::PaintHistogram(
     HDC hdc, const RECT& rcArea, const HistogramData& hist)
 {
-    // Background fill
-    HBRUSH hBgBrush = CreateSolidBrush(RGB(25, 25, 40));
-    FillRect(hdc, &rcArea, hBgBrush);
-    DeleteObject(hBgBrush);
+    // Initialize GDI+
+    Gdiplus::GdiplusStartupInput gdipInput;
+    ULONG_PTR gdipToken = 0;
+    Gdiplus::GdiplusStartup(&gdipToken, &gdipInput, nullptr);
 
-    // Subtle border
-    HPEN hBorderPen = CreatePen(PS_SOLID, 1, RGB(60, 60, 90));
-    HGDIOBJ hOldPen = SelectObject(hdc, hBorderPen);
-    HGDIOBJ hOldBrush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
-    Rectangle(hdc, rcArea.left, rcArea.top, rcArea.right, rcArea.bottom);
-    SelectObject(hdc, hOldBrush);
-    SelectObject(hdc, hOldPen);
-    DeleteObject(hBorderPen);
-
-    // Inner plot area with padding
-    const int pad = 6;
-    int plotLeft   = rcArea.left   + pad;
-    int plotTop    = rcArea.top    + pad;
-    int plotRight  = rcArea.right  - pad;
-    int plotBottom = rcArea.bottom - pad;
-    int plotW = plotRight - plotLeft;
-    int plotH = plotBottom - plotTop;
-    if (plotW < 16 || plotH < 16) return;
-
-    // Axes frame in light gray
-    HPEN hAxisPen = CreatePen(PS_SOLID, 1, RGB(100, 100, 120));
-    hOldPen = SelectObject(hdc, hAxisPen);
-    MoveToEx(hdc, plotLeft, plotBottom, nullptr);
-    LineTo(hdc, plotRight, plotBottom);
-    MoveToEx(hdc, plotLeft, plotTop, nullptr);
-    LineTo(hdc, plotLeft, plotBottom);
-    SelectObject(hdc, hOldPen);
-    DeleteObject(hAxisPen);
-
-    // Compute log-scale max across all channels
-    double logMax = 0.0;
-    for (uint32_t ch = 0; ch < hist.channelCount; ++ch)
     {
-        for (uint32_t b = 0; b < HistogramData::kBinCount; ++b)
-        {
-            double v = std::log(1.0 + hist.bins[ch][b]);
-            if (v > logMax) logMax = v;
+        Gdiplus::Graphics gfx(hdc);
+        gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        gfx.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
+
+        int areaW = rcArea.right - rcArea.left;
+        int areaH = rcArea.bottom - rcArea.top;
+
+        // Background
+        Gdiplus::SolidBrush bgBrush(Gdiplus::Color(255, 20, 22, 35));
+        gfx.FillRectangle(&bgBrush, rcArea.left, rcArea.top, areaW, areaH);
+
+        // Plot area with margins for labels
+        const int marginLeft = 10, marginRight = 14;
+        const int marginTop = 28, marginBottom = 24;
+        int plotLeft   = rcArea.left + marginLeft;
+        int plotTop    = rcArea.top  + marginTop;
+        int plotRight  = rcArea.right - marginRight;
+        int plotBottom = rcArea.bottom - marginBottom;
+        int plotW = plotRight - plotLeft;
+        int plotH = plotBottom - plotTop;
+        if (plotW < 32 || plotH < 32) { Gdiplus::GdiplusShutdown(gdipToken); return; }
+
+        // Title
+        Gdiplus::Font titleFont(L"Segoe UI", 10.0f, Gdiplus::FontStyleBold);
+        Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, 200, 205, 220));
+        Gdiplus::StringFormat sfCenter;
+        sfCenter.SetAlignment(Gdiplus::StringAlignmentCenter);
+        Gdiplus::RectF titleRect((float)rcArea.left, (float)rcArea.top + 4.0f,
+                                  (float)areaW, (float)marginTop - 4.0f);
+        const wchar_t* title = (hist.channelCount == 1) ? L"Luminance Histogram" : L"RGB Histogram";
+        gfx.DrawString(title, -1, &titleFont, titleRect, &sfCenter, &textBrush);
+
+        // Plot background (slightly lighter)
+        Gdiplus::SolidBrush plotBg(Gdiplus::Color(255, 28, 30, 48));
+        gfx.FillRectangle(&plotBg, plotLeft, plotTop, plotW, plotH);
+
+        // Subtle grid lines
+        Gdiplus::Pen gridPen(Gdiplus::Color(40, 100, 110, 140), 1.0f);
+        for (int g = 1; g <= 3; ++g) {
+            int gy = plotBottom - (plotH * g / 4);
+            gfx.DrawLine(&gridPen, plotLeft, gy, plotRight, gy);
         }
-    }
-    if (logMax <= 0.0) return;
+        for (int g = 1; g <= 3; ++g) {
+            int gx = plotLeft + (plotW * g / 4);
+            gfx.DrawLine(&gridPen, gx, plotTop, gx, plotBottom);
+        }
 
-    // Channel colours — draw back-to-front for RGB overlap
-    struct ChannelStyle { uint32_t idx; COLORREF color; };
-    ChannelStyle styles[3]{};
-    int nStyles = 0;
+        // Compute log-scale max across all channels
+        double logMax = 0.0;
+        for (uint32_t ch = 0; ch < hist.channelCount; ++ch)
+            for (uint32_t b = 0; b < HistogramData::kBinCount; ++b) {
+                double v = std::log(1.0 + hist.bins[ch][b]);
+                if (v > logMax) logMax = v;
+            }
 
-    if (hist.channelCount == 1)
-    {
-        styles[0] = { 0, RGB(200, 200, 220) };
-        nStyles = 1;
-    }
-    else
-    {
-        styles[0] = { 2, RGB(60, 80, 220) };   // Blue behind
-        styles[1] = { 1, RGB(40, 200, 80) };   // Green middle
-        styles[2] = { 0, RGB(220, 50, 50) };   // Red front
-        nStyles = 3;
-    }
+        if (logMax > 0.0) {
+            // Channel styles
+            struct ChStyle { uint32_t idx; Gdiplus::Color lineColor; Gdiplus::Color fillColor; };
+            ChStyle styles[3]{};
+            int nStyles = 0;
 
-    // Draw each channel as filled vertical bars
-    int drawLeft = plotLeft + 1;
-    int drawW    = plotRight - drawLeft;
+            if (hist.channelCount == 1) {
+                styles[0] = { 0, Gdiplus::Color(255, 180, 190, 220),
+                                 Gdiplus::Color(60, 140, 160, 220) };
+                nStyles = 1;
+            } else {
+                // Draw back-to-front: Blue, Green, Red
+                styles[0] = { 2, Gdiplus::Color(220, 50, 80, 230),
+                                 Gdiplus::Color(50, 40, 70, 220) };
+                styles[1] = { 1, Gdiplus::Color(220, 30, 200, 80),
+                                 Gdiplus::Color(50, 30, 190, 70) };
+                styles[2] = { 0, Gdiplus::Color(220, 230, 50, 50),
+                                 Gdiplus::Color(50, 220, 40, 40) };
+                nStyles = 3;
+            }
 
-    for (int s = 0; s < nStyles; ++s)
-    {
-        uint32_t ch = styles[s].idx;
-        HPEN hChPen = CreatePen(PS_SOLID, 1, styles[s].color);
-        hOldPen = SelectObject(hdc, hChPen);
+            for (int s = 0; s < nStyles; ++s) {
+                uint32_t ch = styles[s].idx;
 
-        for (int i = 0; i < static_cast<int>(HistogramData::kBinCount); ++i)
-        {
-            double v = std::log(1.0 + hist.bins[ch][i]);
-            int barH = static_cast<int>(v / logMax * (plotH - 1));
-            if (barH < 1) continue;
+                // Build polyline points (256 bins + 2 closing points for filled area)
+                const int nBins = static_cast<int>(HistogramData::kBinCount);
+                std::vector<Gdiplus::PointF> pts(nBins + 2);
 
-            int x0 = drawLeft + MulDiv(i,     drawW, HistogramData::kBinCount);
-            int x1 = drawLeft + MulDiv(i + 1, drawW, HistogramData::kBinCount);
+                for (int i = 0; i < nBins; ++i) {
+                    double v = std::log(1.0 + hist.bins[ch][i]);
+                    float h = static_cast<float>(v / logMax * (plotH - 1));
+                    float x = static_cast<float>(plotLeft) + (static_cast<float>(i) + 0.5f)
+                              / nBins * plotW;
+                    float y = static_cast<float>(plotBottom) - h;
+                    pts[i] = Gdiplus::PointF(x, y);
+                }
+                // Close the polygon along the bottom
+                pts[nBins]     = Gdiplus::PointF(static_cast<float>(plotRight),
+                                                  static_cast<float>(plotBottom));
+                pts[nBins + 1] = Gdiplus::PointF(static_cast<float>(plotLeft),
+                                                  static_cast<float>(plotBottom));
 
-            for (int px = x0; px < x1; ++px)
-            {
-                MoveToEx(hdc, px, plotBottom - 1, nullptr);
-                LineTo(hdc, px, plotBottom - 1 - barH);
+                // Filled area (semi-transparent)
+                Gdiplus::SolidBrush fillBrush(styles[s].fillColor);
+                gfx.FillPolygon(&fillBrush, pts.data(), nBins + 2);
+
+                // Smooth curve on top (anti-aliased)
+                Gdiplus::Pen linePen(styles[s].lineColor, 1.5f);
+                gfx.DrawCurve(&linePen, pts.data(), nBins, 0.3f);
             }
         }
 
-        SelectObject(hdc, hOldPen);
-        DeleteObject(hChPen);
+        // Plot border
+        Gdiplus::Pen borderPen(Gdiplus::Color(180, 70, 75, 100), 1.0f);
+        gfx.DrawRectangle(&borderPen, plotLeft, plotTop, plotW, plotH);
+
+        // Axis labels
+        Gdiplus::Font labelFont(L"Segoe UI", 7.5f);
+        Gdiplus::SolidBrush labelBrush(Gdiplus::Color(180, 150, 155, 175));
+        Gdiplus::StringFormat sfLeft;
+        sfLeft.SetAlignment(Gdiplus::StringAlignmentNear);
+        Gdiplus::StringFormat sfRight;
+        sfRight.SetAlignment(Gdiplus::StringAlignmentFar);
+
+        float labelY = static_cast<float>(plotBottom + 4);
+        Gdiplus::RectF r0((float)plotLeft, labelY, 40.0f, 16.0f);
+        gfx.DrawString(L"0", -1, &labelFont, r0, &sfLeft, &labelBrush);
+
+        Gdiplus::RectF r1((float)(plotRight - 40), labelY, 40.0f, 16.0f);
+        gfx.DrawString(L"1", -1, &labelFont, r1, &sfRight, &labelBrush);
+
+        // Center label
+        Gdiplus::RectF rc5((float)plotLeft, labelY, (float)plotW, 16.0f);
+        gfx.DrawString(L"Pixel Value", -1, &labelFont, rc5, &sfCenter, &labelBrush);
     }
+
+    Gdiplus::GdiplusShutdown(gdipToken);
 }
 
 // ---------------------------------------------------------------------------
