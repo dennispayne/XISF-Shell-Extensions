@@ -1,15 +1,14 @@
-// ClassFactory.h — IClassFactory for CXISFPropertyHandler (Property Handler)
+// ClassFactory.h — IClassFactory for CXISFPropertyHandler and CXISFPropertySheetHandler
 #pragma once
 #include <windows.h>
 #include <unknwn.h>
 
-// Forward declaration of the handler created by this factory
-class CXISFPropertyHandler;
-
 class CClassFactory : public IClassFactory
 {
 public:
-    CClassFactory();
+    enum class HandlerType { PropertyStore, PropertySheet };
+
+    explicit CClassFactory(HandlerType type = HandlerType::PropertyStore);
 
     // IUnknown
     IFACEMETHODIMP QueryInterface(REFIID riid, void** ppv) override;
@@ -22,4 +21,5 @@ public:
 
 private:
     long m_cRef;
+    HandlerType m_type;
 };

@@ -89,6 +89,7 @@
     <ClCompile Include="..\XISFPropertyHandler\src\PropertyStore.cpp" />
     <ClCompile Include="..\XISFPropertyHandler\src\DSOCatalog.cpp" />
     <ClCompile Include="..\XISFPropertyHandler\src\ConstellationDB.cpp" />
+    <ClCompile Include="..\XISFPropertyHandler\src\PropertySheetHandler.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

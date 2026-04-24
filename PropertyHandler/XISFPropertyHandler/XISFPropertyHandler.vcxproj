@@ -95,6 +95,7 @@
     <ClCompile Include="src\HandlerSettings.cpp" />
     <ClCompile Include="src\PropertyStore.cpp" />
     <ClCompile Include="src\DSOAliasDB.cpp" />
+    <ClCompile Include="src\PropertySheetHandler.cpp" />
     <ClCompile Include="src\XISFParser.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -104,6 +105,7 @@
     <ClInclude Include="src\HandlerSettings.h" />
     <ClInclude Include="src\PropertyStore.h" />
     <ClInclude Include="src\DSOAliasDB.h" />
+    <ClInclude Include="src\PropertySheetHandler.h" />
     <ClInclude Include="src\PropertyHandlerTraceLogging.h" />
     <ClInclude Include="src\resource.h" />
     <ClInclude Include="src\XISFParser.h" />

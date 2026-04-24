@@ -14,6 +14,10 @@
 DEFINE_GUID(CLSID_XISFPropertyHandler,
     0x7C54FA8B, 0x9D63, 0x4C10, 0x8F, 0xBE, 0x1A, 0x5A, 0x0F, 0x9A, 0x3B, 0x2E);
 
+// {A3B7C8D9-E1F2-4A5B-8C6D-7E8F9A0B1C2D}
+DEFINE_GUID(CLSID_XISFPropertySheet,
+    0xA3B7C8D9, 0xE1F2, 0x4A5B, 0x8C, 0x6D, 0x7E, 0x8F, 0x9A, 0x0B, 0x1C, 0x2D);
+
 TRACELOGGING_DEFINE_PROVIDER(g_hPropertyProvider, "XISF-PropertyHandler",
     (0x6f6b0c9d, 0x6b76, 0x5a24, 0xbc, 0x3d, 0x70, 0x83, 0x14, 0xe9, 0x6f, 0x2b));
 
@@ -21,6 +25,7 @@ HINSTANCE g_hInst = nullptr;
 long g_cDllRef = 0;
 
 static const wchar_t kClsidStr[] = L"{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}";
+static const wchar_t kPropSheetClsidStr[] = L"{A3B7C8D9-E1F2-4A5B-8C6D-7E8F9A0B1C2D}";
 static const wchar_t kPropertyHandlersKey[] =
     L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\PropertySystem\\PropertyHandlers\\.xisf";
 static const wchar_t kExtKey[] = L".xisf";
@@ -45,8 +50,16 @@ STDAPI DllCanUnloadNow(void) { return (g_cDllRef == 0) ? S_OK : S_FALSE; }
 STDAPI DllGetClassObject(_In_ REFCLSID rclsid, _In_ REFIID riid, _Outptr_ void** ppv) {
     if (!ppv) return E_POINTER;
     *ppv = nullptr;
-    if (!IsEqualCLSID(rclsid, CLSID_XISFPropertyHandler)) return CLASS_E_CLASSNOTAVAILABLE;
-    CClassFactory* pf = new (std::nothrow) CClassFactory();
+
+    CClassFactory* pf = nullptr;
+    if (IsEqualCLSID(rclsid, CLSID_XISFPropertyHandler)) {
+        pf = new (std::nothrow) CClassFactory(CClassFactory::HandlerType::PropertyStore);
+    } else if (IsEqualCLSID(rclsid, CLSID_XISFPropertySheet)) {
+        pf = new (std::nothrow) CClassFactory(CClassFactory::HandlerType::PropertySheet);
+    } else {
+        return CLASS_E_CLASSNOTAVAILABLE;
+    }
+
     if (!pf) return E_OUTOFMEMORY;
     HRESULT hr = pf->QueryInterface(riid, ppv);
     pf->Release();
@@ -139,6 +152,21 @@ STDAPI DllRegisterServer(void) {
     }
     // Register with Windows Search indexer so .xisf is indexed automatically
     SetRegDWORDValue(HKEY_LOCAL_MACHINE, kSearchExtKey, L"Enabled", 1);
+
+    // ---- Property Sheet handler (Histogram tab) ----
+    wchar_t szPSClsid[128]; swprintf_s(szPSClsid, L"CLSID\\%s", kPropSheetClsidStr);
+    hr = SetRegSZValue(HKEY_CLASSES_ROOT, szPSClsid, nullptr, L"XISF Histogram Property Sheet");
+    if (FAILED(hr)) return SELFREG_E_CLASS;
+    wchar_t szPSInProc[256]; swprintf_s(szPSInProc, L"CLSID\\%s\\InProcServer32", kPropSheetClsidStr);
+    hr = SetRegSZValue(HKEY_CLASSES_ROOT, szPSInProc, nullptr, szDllPath);
+    if (FAILED(hr)) return SELFREG_E_CLASS;
+    hr = SetRegSZValue(HKEY_CLASSES_ROOT, szPSInProc, L"ThreadingModel", L"Apartment");
+    if (FAILED(hr)) return SELFREG_E_CLASS;
+    hr = SetRegSZValue(HKEY_CLASSES_ROOT,
+        L".xisf\\shellex\\PropertySheetHandlers\\XISFHistogram",
+        nullptr, kPropSheetClsidStr);
+    if (FAILED(hr)) return SELFREG_E_CLASS;
+
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return S_OK;
 }
@@ -185,6 +213,10 @@ STDAPI DllUnregisterServer(void) {
         }
     }
     RegDeleteTreeW(HKEY_CLASSES_ROOT, kProgID);
+    // ---- Property Sheet handler cleanup ----
+    wchar_t szPSClsid[128]; swprintf_s(szPSClsid, L"CLSID\\%s", kPropSheetClsidStr);
+    RegDeleteTreeW(HKEY_CLASSES_ROOT, szPSClsid);
+    RegDeleteTreeW(HKEY_CLASSES_ROOT, L".xisf\\shellex\\PropertySheetHandlers\\XISFHistogram");
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return S_OK;
 }

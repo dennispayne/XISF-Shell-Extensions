@@ -1,6 +1,7 @@
-// ClassFactory.cpp — IClassFactory implementation for CXISFPropertyHandler (Property Handler)
+// ClassFactory.cpp — IClassFactory implementation for PropertyStore and PropertySheet handlers
 #include "ClassFactory.h"
 #include "PropertyStore.h"
+#include "PropertySheetHandler.h"
 #include "HandlerSettings.h"
 #include <new>
 
@@ -10,7 +11,7 @@ extern long g_cDllRef;
 // Constructor
 // ---------------------------------------------------------------------------
 
-CClassFactory::CClassFactory() : m_cRef(1)
+CClassFactory::CClassFactory(HandlerType type) : m_cRef(1), m_type(type)
 {
     InterlockedIncrement(&g_cDllRef);
 }
@@ -67,17 +68,30 @@ IFACEMETHODIMP CClassFactory::CreateInstance(IUnknown* pUnkOuter,
     if (pUnkOuter != nullptr)
         return CLASS_E_NOAGGREGATION;
 
-    // Runtime toggle: when disabled via HKCU, Explorer falls back to default behavior.
-    if (!xisf::IsPropertyHandlerEnabled())
-        return CLASS_E_CLASSNOTAVAILABLE;
+    if (m_type == HandlerType::PropertyStore)
+    {
+        // Runtime toggle: when disabled via HKCU, Explorer falls back to default behavior.
+        if (!xisf::IsPropertyHandlerEnabled())
+            return CLASS_E_CLASSNOTAVAILABLE;
 
-    CXISFPropertyHandler* pHandler = new (std::nothrow) CXISFPropertyHandler();
-    if (pHandler == nullptr)
-        return E_OUTOFMEMORY;
+        CXISFPropertyHandler* pHandler = new (std::nothrow) CXISFPropertyHandler();
+        if (pHandler == nullptr)
+            return E_OUTOFMEMORY;
 
-    HRESULT hr = pHandler->QueryInterface(riid, ppv);
-    pHandler->Release();
-    return hr;
+        HRESULT hr = pHandler->QueryInterface(riid, ppv);
+        pHandler->Release();
+        return hr;
+    }
+    else // HandlerType::PropertySheet
+    {
+        CXISFPropertySheetHandler* pHandler = new (std::nothrow) CXISFPropertySheetHandler();
+        if (pHandler == nullptr)
+            return E_OUTOFMEMORY;
+
+        HRESULT hr = pHandler->QueryInterface(riid, ppv);
+        pHandler->Release();
+        return hr;
+    }
 }
 
 IFACEMETHODIMP CClassFactory::LockServer(BOOL fLock)
