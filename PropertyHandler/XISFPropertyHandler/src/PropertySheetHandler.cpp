@@ -193,17 +193,44 @@ IFACEMETHODIMP CXISFPropertySheetHandler::ReplacePage(
 }
 
 // ---------------------------------------------------------------------------
-// ReadCachedStats — read stats from the Windows property store (indexer cache)
+// ReadCachedStats — read stats via property store (indexer cache or handler)
+// Tries GPS_FASTPROPERTIESONLY first (instant from indexer), then falls back
+// to GPS_HANDLERPROPERTIESONLY (loads our handler, computes stats ~50-100ms).
 // ---------------------------------------------------------------------------
 
 bool CXISFPropertySheetHandler::ReadCachedStats()
 {
     IPropertyStore* pStore = nullptr;
+
+    // Try indexer cache first (instant)
     HRESULT hr = SHGetPropertyStoreFromParsingName(
         m_filePath.c_str(), nullptr, GPS_FASTPROPERTIESONLY, IID_PPV_ARGS(&pStore));
-    if (FAILED(hr) || !pStore) return false;
 
-    // XISF property keys: {7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}
+    bool gotStats = false;
+    if (SUCCEEDED(hr) && pStore)
+    {
+        gotStats = ReadStatsFromStore(pStore);
+        pStore->Release();
+        pStore = nullptr;
+    }
+
+    // Fall back to handler (computes stats on the fly)
+    if (!gotStats)
+    {
+        hr = SHGetPropertyStoreFromParsingName(
+            m_filePath.c_str(), nullptr, GPS_HANDLERPROPERTIESONLY, IID_PPV_ARGS(&pStore));
+        if (SUCCEEDED(hr) && pStore)
+        {
+            gotStats = ReadStatsFromStore(pStore);
+            pStore->Release();
+        }
+    }
+
+    return gotStats;
+}
+
+bool CXISFPropertySheetHandler::ReadStatsFromStore(IPropertyStore* pStore)
+{
     PROPERTYKEY keyMedian = {{ 0x7C54FA8B,0x9D63,0x4C10,{0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E} }, 56};
     PROPERTYKEY keyMean   = {{ 0x7C54FA8B,0x9D63,0x4C10,{0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E} }, 57};
     PROPERTYKEY keyClipLo = {{ 0x7C54FA8B,0x9D63,0x4C10,{0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E} }, 58};
@@ -213,7 +240,7 @@ bool CXISFPropertySheetHandler::ReadCachedStats()
     PropVariantInit(&pv);
 
     bool gotMedian = false;
-    hr = pStore->GetValue(keyMedian, &pv);
+    HRESULT hr = pStore->GetValue(keyMedian, &pv);
     if (SUCCEEDED(hr) && pv.vt == VT_R8) {
         m_cachedStats.median = pv.dblVal;
         gotMedian = true;
@@ -239,7 +266,6 @@ bool CXISFPropertySheetHandler::ReadCachedStats()
         m_cachedStats.valid = true;
     }
 
-    pStore->Release();
     return m_cachedStats.valid;
 }
 

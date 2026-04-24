@@ -86,6 +86,7 @@ public:
 private:
     void ComputeAnalysis();
     bool ReadCachedStats();
+    bool ReadStatsFromStore(IPropertyStore* pStore);
     void StartAnalysis();
 
     static INT_PTR CALLBACK AstroDetailsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
