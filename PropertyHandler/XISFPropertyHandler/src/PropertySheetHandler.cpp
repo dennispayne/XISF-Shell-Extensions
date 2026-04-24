@@ -314,7 +314,7 @@ INT_PTR CALLBACK CXISFPropertySheetHandler::AstroDetailsDlgProc(
         RECT rc;
         GetClientRect(hwnd, &rc);
 
-        const int statsAreaHeight = 55;
+        const int statsAreaHeight = 88;
 
         if (pThis && pThis->IsComputed())
         {
@@ -431,11 +431,7 @@ void CXISFPropertySheetHandler::PaintStats(
         Gdiplus::SolidBrush bgBrush(Gdiplus::Color(255, 20, 22, 35));
         gfx.FillRectangle(&bgBrush, rcArea.left, rcArea.top, areaW, areaH);
 
-        Gdiplus::Font font(L"Segoe UI", 9.0f);
-        Gdiplus::SolidBrush dimBrush(Gdiplus::Color(255, 130, 135, 155));
-        Gdiplus::SolidBrush brightBrush(Gdiplus::Color(255, 240, 242, 255));
-
-        // Format stat values
+        // Format values
         wchar_t medianStr[32], meanStr[32], clipLoStr[32], clipHiStr[32];
         swprintf_s(medianStr, L"%.4f", stats.median);
         swprintf_s(meanStr,   L"%.4f", stats.mean);
@@ -444,44 +440,64 @@ void CXISFPropertySheetHandler::PaintStats(
 
         struct StatItem { const wchar_t* label; const wchar_t* value; };
         StatItem items[] = {
-            { L"Median: ",        medianStr },
-            { L"Mean: ",          meanStr },
-            { L"Clipping Low: ",  clipLoStr },
-            { L"Clipping High: ", clipHiStr },
+            { L"Pixel Median",   medianStr },
+            { L"Pixel Mean",     meanStr },
+            { L"Clipping Low",   clipLoStr },
+            { L"Clipping High",  clipHiStr },
         };
+        const int nItems = 4;
 
-        // Measure total width to center the row
-        Gdiplus::StringFormat sfNear;
-        sfNear.SetAlignment(Gdiplus::StringAlignmentNear);
-        sfNear.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
+        Gdiplus::Font font(L"Segoe UI", 9.0f);
+        Gdiplus::SolidBrush labelBrush(Gdiplus::Color(255, 130, 135, 155));
+        Gdiplus::SolidBrush valueBrush(Gdiplus::Color(255, 230, 235, 250));
+        Gdiplus::Pen sepPen(Gdiplus::Color(40, 100, 110, 140), 1.0f);
 
-        float totalW = 0;
-        const float spacing = 24.0f;
-        struct MeasuredItem { float labelW; float valueW; };
-        MeasuredItem measured[4] = {};
+        // Layout: vertical list, two columns (label | value)
+        const float padX = 12.0f;
+        const float rowH = 20.0f;
+        const float startY = static_cast<float>(rcArea.top) + 4.0f;
+        float labelColW = static_cast<float>(areaW) * 0.42f;
 
-        for (int i = 0; i < 4; ++i) {
-            Gdiplus::RectF bounds;
-            gfx.MeasureString(items[i].label, -1, &font, Gdiplus::PointF(0, 0), &sfNear, &bounds);
-            measured[i].labelW = bounds.Width;
-            gfx.MeasureString(items[i].value, -1, &font, Gdiplus::PointF(0, 0), &sfNear, &bounds);
-            measured[i].valueW = bounds.Width;
-            totalW += measured[i].labelW + measured[i].valueW;
+        Gdiplus::StringFormat sfLeft;
+        sfLeft.SetAlignment(Gdiplus::StringAlignmentNear);
+        sfLeft.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+        sfLeft.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
+
+        Gdiplus::StringFormat sfRight;
+        sfRight.SetAlignment(Gdiplus::StringAlignmentNear);
+        sfRight.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+        sfRight.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
+
+        // Alternating row shading
+        Gdiplus::SolidBrush altBrush(Gdiplus::Color(15, 255, 255, 255));
+
+        for (int i = 0; i < nItems; ++i) {
+            float y = startY + i * rowH;
+
+            // Alternating row background
+            if (i % 2 == 1)
+                gfx.FillRectangle(&altBrush, (float)rcArea.left, y,
+                                  (float)areaW, rowH);
+
+            // Separator line
+            gfx.DrawLine(&sepPen, (float)rcArea.left + padX, y,
+                         (float)rcArea.right - padX, y);
+
+            // Label (left column)
+            Gdiplus::RectF rcLabel(static_cast<float>(rcArea.left) + padX, y,
+                                    labelColW - padX, rowH);
+            gfx.DrawString(items[i].label, -1, &font, rcLabel, &sfLeft, &labelBrush);
+
+            // Value (right column)
+            Gdiplus::RectF rcValue(static_cast<float>(rcArea.left) + labelColW, y,
+                                    static_cast<float>(areaW) - labelColW - padX, rowH);
+            gfx.DrawString(items[i].value, -1, &font, rcValue, &sfRight, &valueBrush);
         }
-        totalW += spacing * 3; // spacing between items
 
-        float x = rcArea.left + (areaW - totalW) / 2.0f;
-        float y = rcArea.top + (areaH - 16.0f) / 2.0f;
-
-        for (int i = 0; i < 4; ++i) {
-            Gdiplus::PointF ptLabel(x, y);
-            gfx.DrawString(items[i].label, -1, &font, ptLabel, &sfNear, &dimBrush);
-            x += measured[i].labelW;
-
-            Gdiplus::PointF ptValue(x, y);
-            gfx.DrawString(items[i].value, -1, &font, ptValue, &sfNear, &brightBrush);
-            x += measured[i].valueW + spacing;
-        }
+        // Bottom separator
+        float bottomY = startY + nItems * rowH;
+        gfx.DrawLine(&sepPen, (float)rcArea.left + padX, bottomY,
+                     (float)rcArea.right - padX, bottomY);
     }
 
     Gdiplus::GdiplusShutdown(gdipToken);
