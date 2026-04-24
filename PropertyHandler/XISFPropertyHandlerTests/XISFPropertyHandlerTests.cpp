@@ -1336,7 +1336,8 @@ public:
         DWORD count = 0; ps->GetCount(&count);
         // DataState is derived from Image element attributes (sampleFormat/colorSpace),
         // so even an "empty" XISF with those attributes produces one property.
-        Assert::AreEqual(DWORD(1), count);
+        // Plus 4 pixel stat placeholders (VT_EMPTY until lazily computed).
+        Assert::AreEqual(DWORD(5), count);
         ps->Release(); pi->Release(); s->Release(); h->Release();
     }
     TEST_METHOD(AllProperties_HaveNonEmptyValues) {
@@ -1351,6 +1352,8 @@ public:
         for (DWORD i = 0; i < count; ++i) {
             PROPERTYKEY pk = {};
             ps->GetAt(i, &pk);
+            // Skip pixel stat placeholders — they are VT_EMPTY until lazily computed
+            if (CXISFPropertyHandler::IsPixelStatKey(pk)) continue;
             PROPVARIANT pv; PropVariantInit(&pv);
             ps->GetValue(pk, &pv);
             Assert::AreNotEqual(USHORT(VT_EMPTY), pv.vt,
@@ -1815,6 +1818,10 @@ public:
             PKEY_XISF_GuideRA.pid,
             PKEY_XISF_GuideDec.pid,
             PKEY_XISF_DataState.pid,
+            PKEY_XISF_Median.pid,
+            PKEY_XISF_Mean.pid,
+            PKEY_XISF_ClippingLow.pid,
+            PKEY_XISF_ClippingHigh.pid,
         };
 
         for (const auto& pid : expectedKeys) {
@@ -1979,6 +1986,391 @@ public:
         Assert::AreEqual(USHORT(VT_EMPTY), pv.vt);
         PropVariantClear(&pv);
         ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+};
+
+// ===========================================================================
+// Pixel Statistics — lazy compute from pixel attachment data
+// ===========================================================================
+
+// Create an XISF stream with pixel attachment data
+IStream* CreateXISFStreamWithPixels(const std::string& xml, const std::vector<uint8_t>& pixelData) {
+    std::vector<BYTE> buf;
+    const char sig[] = "XISF0100";
+    buf.insert(buf.end(), sig, sig + 8);
+    uint32_t xmlLen = static_cast<uint32_t>(xml.size());
+    auto* p = reinterpret_cast<const BYTE*>(&xmlLen);
+    buf.insert(buf.end(), p, p + 4);
+    uint32_t reserved = 0;
+    p = reinterpret_cast<const BYTE*>(&reserved);
+    buf.insert(buf.end(), p, p + 4);
+    buf.insert(buf.end(), xml.begin(), xml.end());
+    // Append pixel data (at offset = 16 + xmlLen)
+    buf.insert(buf.end(), pixelData.begin(), pixelData.end());
+    return SHCreateMemStream(buf.data(), static_cast<UINT>(buf.size()));
+}
+
+// Build XML for a mono UInt16 image with attachment at the correct offset
+std::string BuildPixelXml(UINT w, UINT h, UINT channels, const std::string& sampleFormat, size_t pixelDataSize) {
+    // Compute offset: 16 bytes preamble + xml length (we'll pad to make it work)
+    // We use a two-pass approach: build XML with placeholder, measure, rebuild
+    char geom[64];
+    snprintf(geom, sizeof(geom), "%u:%u:%u", w, h, channels);
+    // First pass with placeholder offset to measure XML size
+    std::string xmlTemplate = std::string(R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry=")") + geom + R"(" sampleFormat=")" + sampleFormat + R"(" location="attachment:)";
+    std::string xmlSuffix = std::string(R"(">
+  </Image>
+</xisf>)");
+    // Estimate the offset
+    size_t estimatedXmlLen = xmlTemplate.size() + 32 + xmlSuffix.size(); // 32 for offset:size digits
+    size_t offset = 16 + estimatedXmlLen;
+    // Build with actual offset
+    char locBuf[64];
+    snprintf(locBuf, sizeof(locBuf), "%zu:%zu", offset, pixelDataSize);
+    std::string xml = xmlTemplate + locBuf + xmlSuffix;
+    // Recalculate — if xml.size() changed, adjust
+    while (xml.size() != estimatedXmlLen) {
+        estimatedXmlLen = xml.size();
+        offset = 16 + estimatedXmlLen;
+        snprintf(locBuf, sizeof(locBuf), "%zu:%zu", offset, pixelDataSize);
+        xml = xmlTemplate + locBuf + xmlSuffix;
+    }
+    return xml;
+}
+
+TEST_CLASS(PropertyHandler_PixelStats) {
+public:
+    TEST_METHOD(AllZeroPixels_MedianIsZero) {
+        const UINT w = 8, h = 4, ch = 1;
+        size_t pixelBytes = w * h * ch * 2; // UInt16
+        std::vector<uint8_t> pixels(pixelBytes, 0); // all zero
+        std::string xml = BuildPixelXml(w, h, ch, "UInt16", pixelBytes);
+        IStream* s = CreateXISFStreamWithPixels(xml, pixels);
+        auto* handler = new CXISFPropertyHandler();
+        IInitializeWithStream* pi = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&pi));
+        HRESULT hr = pi->Initialize(s, STGM_READ);
+        Assert::AreEqual(S_OK, hr, L"Initialize should succeed");
+        IPropertyStore* ps = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&ps));
+
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_Median, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt, L"Median should be VT_R8");
+        Assert::IsTrue(pv.dblVal < 0.001, L"Median should be ~0");
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_Mean, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt, L"Mean should be VT_R8");
+        Assert::IsTrue(pv.dblVal < 0.001, L"Mean should be ~0");
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_ClippingLow, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt);
+        Assert::IsTrue(pv.dblVal > 99.0, L"ClipLow should be ~100%");
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_ClippingHigh, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt);
+        Assert::IsTrue(pv.dblVal < 1.0, L"ClipHigh should be ~0%");
+        PropVariantClear(&pv);
+
+        ps->Release(); pi->Release(); s->Release(); handler->Release();
+    }
+
+    TEST_METHOD(AllMaxPixels_MedianIsOne) {
+        const UINT w = 8, h = 4, ch = 1;
+        size_t pixelBytes = w * h * ch * 2;
+        std::vector<uint8_t> pixels(pixelBytes, 0);
+        // Fill with 65535 (0xFFFF)
+        for (size_t i = 0; i < pixelBytes; i += 2) {
+            pixels[i] = 0xFF;
+            pixels[i + 1] = 0xFF;
+        }
+        std::string xml = BuildPixelXml(w, h, ch, "UInt16", pixelBytes);
+        IStream* s = CreateXISFStreamWithPixels(xml, pixels);
+        auto* handler = new CXISFPropertyHandler();
+        IInitializeWithStream* pi = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&ps));
+
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_Median, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt);
+        Assert::IsTrue(pv.dblVal > 0.999, L"Median should be ~1.0");
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_Mean, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt);
+        Assert::IsTrue(pv.dblVal > 0.999, L"Mean should be ~1.0");
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_ClippingLow, &pv);
+        Assert::IsTrue(pv.dblVal < 1.0, L"ClipLow should be ~0%");
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_ClippingHigh, &pv);
+        Assert::IsTrue(pv.dblVal > 99.0, L"ClipHigh should be ~100%");
+        PropVariantClear(&pv);
+
+        ps->Release(); pi->Release(); s->Release(); handler->Release();
+    }
+
+    TEST_METHOD(GradientPixels_MedianIsMidpoint) {
+        const UINT w = 256, h = 1, ch = 1;
+        size_t pixelBytes = w * h * ch * 2;
+        std::vector<uint8_t> pixels(pixelBytes, 0);
+        // Fill with linear gradient 0..65535
+        for (UINT i = 0; i < w; ++i) {
+            uint16_t val = static_cast<uint16_t>((static_cast<uint32_t>(i) * 65535) / (w - 1));
+            pixels[i * 2] = static_cast<uint8_t>(val & 0xFF);
+            pixels[i * 2 + 1] = static_cast<uint8_t>((val >> 8) & 0xFF);
+        }
+        std::string xml = BuildPixelXml(w, h, ch, "UInt16", pixelBytes);
+        IStream* s = CreateXISFStreamWithPixels(xml, pixels);
+        auto* handler = new CXISFPropertyHandler();
+        IInitializeWithStream* pi = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&ps));
+
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_Median, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt);
+        Assert::IsTrue(pv.dblVal > 0.3 && pv.dblVal < 0.7, L"Median should be ~0.5");
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_Mean, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt);
+        Assert::IsTrue(pv.dblVal > 0.4 && pv.dblVal < 0.6, L"Mean should be ~0.5");
+        PropVariantClear(&pv);
+
+        ps->Release(); pi->Release(); s->Release(); handler->Release();
+    }
+
+    TEST_METHOD(NoAttachment_ReturnsEmpty) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:1" sampleFormat="UInt16">
+  </Image>
+</xisf>)";
+        IStream* s = CreateXISFStream(xml);
+        auto* handler = new CXISFPropertyHandler();
+        IInitializeWithStream* pi = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&ps));
+
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_Median, &pv);
+        Assert::AreEqual(USHORT(VT_EMPTY), pv.vt, L"No attachment should yield VT_EMPTY");
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_Mean, &pv);
+        Assert::AreEqual(USHORT(VT_EMPTY), pv.vt);
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_ClippingLow, &pv);
+        Assert::AreEqual(USHORT(VT_EMPTY), pv.vt);
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_ClippingHigh, &pv);
+        Assert::AreEqual(USHORT(VT_EMPTY), pv.vt);
+        PropVariantClear(&pv);
+
+        ps->Release(); pi->Release(); s->Release(); handler->Release();
+    }
+
+    TEST_METHOD(RepeatedGetValue_ComputesOnce) {
+        const UINT w = 8, h = 4, ch = 1;
+        size_t pixelBytes = w * h * ch * 2;
+        std::vector<uint8_t> pixels(pixelBytes, 0);
+        // Half the pixels at 0, half at 65535
+        for (size_t i = pixelBytes / 2; i < pixelBytes; i += 2) {
+            pixels[i] = 0xFF; pixels[i + 1] = 0xFF;
+        }
+        std::string xml = BuildPixelXml(w, h, ch, "UInt16", pixelBytes);
+        IStream* s = CreateXISFStreamWithPixels(xml, pixels);
+        auto* handler = new CXISFPropertyHandler();
+        IInitializeWithStream* pi = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&ps));
+
+        PROPVARIANT pv1; PropVariantInit(&pv1);
+        ps->GetValue(PKEY_XISF_Median, &pv1);
+        Assert::AreEqual(USHORT(VT_R8), pv1.vt);
+        double median1 = pv1.dblVal;
+        PropVariantClear(&pv1);
+
+        PROPVARIANT pv2; PropVariantInit(&pv2);
+        ps->GetValue(PKEY_XISF_Median, &pv2);
+        Assert::AreEqual(USHORT(VT_R8), pv2.vt);
+        Assert::AreEqual(median1, pv2.dblVal, L"Second call should return same value");
+        PropVariantClear(&pv2);
+
+        ps->Release(); pi->Release(); s->Release(); handler->Release();
+    }
+
+    TEST_METHOD(XmlProperties_StillWork) {
+        const UINT w = 8, h = 4, ch = 1;
+        size_t pixelBytes = w * h * ch * 2;
+        std::vector<uint8_t> pixels(pixelBytes, 0);
+        // Build XML with FITS keywords + attachment
+        char geom[64]; snprintf(geom, sizeof(geom), "%u:%u:%u", w, h, ch);
+        std::string xmlTemplate = std::string(R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry=")") + geom + R"(" sampleFormat="UInt16" location="attachment:)";
+        std::string xmlSuffix = R"(">
+    <FITSKeyword name="OBJECT" value="M42" comment="Target"/>
+    <FITSKeyword name="EXPTIME" value="300.0" comment="Exposure"/>
+  </Image>
+</xisf>)";
+        size_t estLen = xmlTemplate.size() + 32 + xmlSuffix.size();
+        size_t offset = 16 + estLen;
+        char locBuf[64]; snprintf(locBuf, sizeof(locBuf), "%zu:%zu", offset, pixelBytes);
+        std::string xml = xmlTemplate + locBuf + xmlSuffix;
+        while (xml.size() != estLen) {
+            estLen = xml.size();
+            offset = 16 + estLen;
+            snprintf(locBuf, sizeof(locBuf), "%zu:%zu", offset, pixelBytes);
+            xml = xmlTemplate + locBuf + xmlSuffix;
+        }
+
+        IStream* s = CreateXISFStreamWithPixels(xml, pixels);
+        auto* handler = new CXISFPropertyHandler();
+        IInitializeWithStream* pi = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&ps));
+
+        // XML property should work
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_ObjectName, &pv);
+        Assert::AreEqual(USHORT(VT_LPWSTR), pv.vt);
+        Assert::AreEqual(L"M42", pv.pwszVal);
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_ExposureTime, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt);
+        Assert::AreEqual(300.0, pv.dblVal);
+        PropVariantClear(&pv);
+
+        // Pixel stats should also work
+        ps->GetValue(PKEY_XISF_Median, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt);
+        PropVariantClear(&pv);
+
+        ps->Release(); pi->Release(); s->Release(); handler->Release();
+    }
+
+    TEST_METHOD(Float32_ClampedValues) {
+        const UINT w = 4, h = 1, ch = 1;
+        size_t pixelBytes = w * h * ch * 4; // Float32
+        std::vector<uint8_t> pixels(pixelBytes, 0);
+        // Write four Float32 values: -0.5, 0.5, 1.5, 2.0
+        float vals[] = { -0.5f, 0.5f, 1.5f, 2.0f };
+        memcpy(pixels.data(), vals, pixelBytes);
+        std::string xml = BuildPixelXml(w, h, ch, "Float32", pixelBytes);
+        IStream* s = CreateXISFStreamWithPixels(xml, pixels);
+        auto* handler = new CXISFPropertyHandler();
+        IInitializeWithStream* pi = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&ps));
+
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_Mean, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt);
+        // After clamping: 0.0, 0.5, 1.0, 1.0 → mean = 0.625
+        Assert::IsTrue(std::abs(pv.dblVal - 0.625) < 0.01, L"Mean should be 0.625 after clamping");
+        PropVariantClear(&pv);
+
+        ps->Release(); pi->Release(); s->Release(); handler->Release();
+    }
+
+    TEST_METHOD(RGBImage_PoolsChannels) {
+        const UINT w = 4, h = 4, ch = 3;
+        size_t pixelBytes = w * h * ch * 2; // UInt16
+        std::vector<uint8_t> pixels(pixelBytes, 0);
+        // Channel 0: all 0, Channel 1: all 32767 (~0.5), Channel 2: all 65535 (~1.0)
+        size_t chSize = w * h * 2;
+        // Ch1: fill with 32767 = 0xFF7F LE
+        for (size_t i = chSize; i < chSize * 2; i += 2) {
+            pixels[i] = 0xFF; pixels[i + 1] = 0x7F;
+        }
+        // Ch2: fill with 65535
+        for (size_t i = chSize * 2; i < chSize * 3; i += 2) {
+            pixels[i] = 0xFF; pixels[i + 1] = 0xFF;
+        }
+        std::string xml = BuildPixelXml(w, h, ch, "UInt16", pixelBytes);
+        IStream* s = CreateXISFStreamWithPixels(xml, pixels);
+        auto* handler = new CXISFPropertyHandler();
+        IInitializeWithStream* pi = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&ps));
+
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_Mean, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt);
+        // Mean of 3 channels pooled: (0 + ~0.5 + ~1.0)/3 ≈ 0.5
+        Assert::IsTrue(pv.dblVal > 0.3 && pv.dblVal < 0.7, L"Mean should pool 3 channels near 0.5");
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_Median, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt);
+        // Sorted: 16 zeros, 16 at ~0.5, 16 at ~1.0 → median = ~0.5
+        Assert::IsTrue(pv.dblVal > 0.3 && pv.dblVal < 0.7, L"Median should be ~0.5 for pooled RGB");
+        PropVariantClear(&pv);
+
+        ps->Release(); pi->Release(); s->Release(); handler->Release();
+    }
+
+    TEST_METHOD(GetCount_IncludesPixelStats) {
+        const UINT w = 8, h = 4, ch = 1;
+        size_t pixelBytes = w * h * ch * 2;
+        std::vector<uint8_t> pixels(pixelBytes, 0);
+        std::string xml = BuildPixelXml(w, h, ch, "UInt16", pixelBytes);
+        IStream* s = CreateXISFStreamWithPixels(xml, pixels);
+        auto* handler = new CXISFPropertyHandler();
+        IInitializeWithStream* pi = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&ps));
+
+        DWORD count = 0;
+        ps->GetCount(&count);
+        // Should include 4 pixel stat placeholders even before computation
+        Assert::IsTrue(count >= 4, L"Count should include 4 pixel stat entries");
+
+        // Verify we can find them via GetAt
+        bool foundMedian = false, foundMean = false, foundClipLow = false, foundClipHigh = false;
+        for (DWORD i = 0; i < count; ++i) {
+            PROPERTYKEY pk;
+            ps->GetAt(i, &pk);
+            if (IsEqualPropertyKey(pk, PKEY_XISF_Median)) foundMedian = true;
+            if (IsEqualPropertyKey(pk, PKEY_XISF_Mean)) foundMean = true;
+            if (IsEqualPropertyKey(pk, PKEY_XISF_ClippingLow)) foundClipLow = true;
+            if (IsEqualPropertyKey(pk, PKEY_XISF_ClippingHigh)) foundClipHigh = true;
+        }
+        Assert::IsTrue(foundMedian, L"Median key should be in property list");
+        Assert::IsTrue(foundMean, L"Mean key should be in property list");
+        Assert::IsTrue(foundClipLow, L"ClippingLow key should be in property list");
+        Assert::IsTrue(foundClipHigh, L"ClippingHigh key should be in property list");
+
+        ps->Release(); pi->Release(); s->Release(); handler->Release();
     }
 };
 

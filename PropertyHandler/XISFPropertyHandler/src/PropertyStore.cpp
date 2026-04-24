@@ -76,8 +76,11 @@ static HRESULT ReadAll(IStream* pStream, void* pv, ULONG cbToRead, ULONG* pcbRea
     return S_OK;
 }
 
-CXISFPropertyHandler::CXISFPropertyHandler() : m_cRef(1), m_initialized(false) { InterlockedIncrement(&g_cDllRef); }
-CXISFPropertyHandler::~CXISFPropertyHandler() { InterlockedDecrement(&g_cDllRef); }
+CXISFPropertyHandler::CXISFPropertyHandler() : m_cRef(1), m_initialized(false), m_pStream(nullptr) { InterlockedIncrement(&g_cDllRef); }
+CXISFPropertyHandler::~CXISFPropertyHandler() {
+    if (m_pStream) { m_pStream->Release(); m_pStream = nullptr; }
+    InterlockedDecrement(&g_cDllRef);
+}
 
 IFACEMETHODIMP CXISFPropertyHandler::QueryInterface(REFIID riid, void** ppv) {
     if (!ppv) return E_POINTER;
@@ -500,6 +503,10 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
     }
     m_initialized = true;
 
+    // Store stream for lazy pixel stat computation
+    m_pStream = pStream;
+    m_pStream->AddRef();
+
     { UINT32 _propCount = static_cast<UINT32>(m_properties.size()); ULONGLONG _dur = GetTickCount64() - initStart;
     TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeCompleted",
         TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
@@ -854,6 +861,32 @@ void CXISFPropertyHandler::PopulateProperties() {
         }
     }
 
+    // Pixel stat placeholders — computed lazily on first GetValue() request
+    {
+        PropertyEntry pe;
+        pe.key = PKEY_XISF_Median;
+        pe.value.vt = VT_EMPTY;
+        m_properties.push_back(std::move(pe));
+    }
+    {
+        PropertyEntry pe;
+        pe.key = PKEY_XISF_Mean;
+        pe.value.vt = VT_EMPTY;
+        m_properties.push_back(std::move(pe));
+    }
+    {
+        PropertyEntry pe;
+        pe.key = PKEY_XISF_ClippingLow;
+        pe.value.vt = VT_EMPTY;
+        m_properties.push_back(std::move(pe));
+    }
+    {
+        PropertyEntry pe;
+        pe.key = PKEY_XISF_ClippingHigh;
+        pe.value.vt = VT_EMPTY;
+        m_properties.push_back(std::move(pe));
+    }
+
     // System.Photo projection (registry-controlled)
     UINT32 projectionPropCount = 0;
     if (s_projectionEnabled) {
@@ -959,10 +992,270 @@ IFACEMETHODIMP CXISFPropertyHandler::GetValue(REFPROPERTYKEY key, PROPVARIANT* p
     if (!pPropVar) return E_POINTER;
     PropVariantInit(pPropVar);
     std::lock_guard<std::mutex> lock(m_propertyLock);
+
+    // Trigger lazy pixel stats computation on first request
+    if (IsPixelStatKey(key) && m_pixelStatsState == PixelStatsState::NotStarted) {
+        ComputePixelStats();
+    }
+
     for (const auto& pe : m_properties) {
         if (IsEqualPropertyKey(pe.key, key)) return PropVariantCopy(pPropVar, &pe.value);
     }
     return S_OK;
+}
+
+bool CXISFPropertyHandler::IsPixelStatKey(REFPROPERTYKEY key) {
+    return IsEqualPropertyKey(key, PKEY_XISF_Median) ||
+           IsEqualPropertyKey(key, PKEY_XISF_Mean) ||
+           IsEqualPropertyKey(key, PKEY_XISF_ClippingLow) ||
+           IsEqualPropertyKey(key, PKEY_XISF_ClippingHigh);
+}
+
+void CXISFPropertyHandler::ComputePixelStats() {
+    const ULONGLONG statsStart = GetTickCount64();
+
+    if (!m_pStream || m_metadata.xmlHeader.empty()) {
+        m_pixelStatsState = PixelStatsState::Unavailable;
+        return;
+    }
+
+    const std::string& xml = m_metadata.xmlHeader;
+
+    // Local attribute parser
+    auto findAttr = [](const std::string& elemText, const std::string& attr) -> std::string {
+        size_t p = 0;
+        while (p < elemText.size()) {
+            size_t ap = elemText.find(attr, p);
+            if (ap == std::string::npos) break;
+            if (ap > 0) {
+                char prev = elemText[ap - 1];
+                if (prev != ' ' && prev != '\t' && prev != '\n' && prev != '\r')
+                { p = ap + attr.size(); continue; }
+            }
+            size_t eq = ap + attr.size();
+            while (eq < elemText.size() && (elemText[eq]==' '||elemText[eq]=='\t')) ++eq;
+            if (eq >= elemText.size() || elemText[eq] != '=') { p = eq; continue; }
+            ++eq;
+            while (eq < elemText.size() && (elemText[eq]==' '||elemText[eq]=='\t')) ++eq;
+            if (eq >= elemText.size()) break;
+            char q = elemText[eq]; if (q!='"' && q!='\'') { p=eq; continue; }
+            ++eq;
+            size_t end = elemText.find(q, eq);
+            if (end == std::string::npos) break;
+            return elemText.substr(eq, end - eq);
+        }
+        return {};
+    };
+
+    // Scan for Image elements with attachments
+    struct ImageCandidate {
+        std::string elemText;
+        ULONGLONG attachSize;
+        bool isThumbnail;
+    };
+    std::vector<ImageCandidate> candidates;
+
+    size_t searchPos = 0;
+    while (true) {
+        size_t imgStart = xml.find("<Image", searchPos);
+        if (imgStart == std::string::npos) break;
+        size_t imgEnd = xml.find('>', imgStart);
+        if (imgEnd == std::string::npos) break;
+        searchPos = imgEnd + 1;
+
+        std::string elem = xml.substr(imgStart + 6, imgEnd - imgStart - 6);
+        std::string loc = findAttr(elem, "location");
+        if (loc.compare(0, 11, "attachment:") != 0) continue;
+
+        std::string id = findAttr(elem, "id");
+        bool isThumb = (id == "thumbnail" || id == "Thumbnail");
+
+        ULONGLONG aSize = 0;
+        {
+            const char* lp = loc.c_str() + 11;
+            char* ep = nullptr;
+            std::strtoull(lp, &ep, 10);
+            if (ep && *ep == ':')
+                aSize = std::strtoull(ep + 1, nullptr, 10);
+        }
+        if (aSize == 0) continue;
+        candidates.push_back({std::move(elem), aSize, isThumb});
+    }
+
+    if (candidates.empty()) {
+        m_pixelStatsState = PixelStatsState::Unavailable;
+        WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PERF,
+            L"PixelStatsUnavailable Reason=NoAttachmentImage");
+        return;
+    }
+
+    // Pick largest non-thumbnail image
+    size_t bestIdx = 0;
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (candidates[i].isThumbnail) continue;
+        if (candidates[i].attachSize > candidates[bestIdx].attachSize || candidates[bestIdx].isThumbnail)
+            bestIdx = i;
+    }
+    const std::string& imgElem = candidates[bestIdx].elemText;
+
+    std::string geometry = findAttr(imgElem, "geometry");
+    std::string location = findAttr(imgElem, "location");
+    std::string sampleFmt = findAttr(imgElem, "sampleFormat");
+
+    if (geometry.empty() || location.empty()) {
+        m_pixelStatsState = PixelStatsState::Unavailable;
+        WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PERF,
+            L"PixelStatsUnavailable Reason=MissingGeometryOrLocation");
+        return;
+    }
+
+    // Parse geometry
+    UINT imgW = 0, imgH = 0, imgC = 1;
+    {
+        char* ep = nullptr;
+        imgW = static_cast<UINT>(std::strtoul(geometry.c_str(), &ep, 10));
+        if (ep && *ep == ':') {
+            imgH = static_cast<UINT>(std::strtoul(ep + 1, &ep, 10));
+            if (ep && *ep == ':')
+                imgC = static_cast<UINT>(std::strtoul(ep + 1, nullptr, 10));
+        }
+    }
+    if (imgW == 0 || imgH == 0) {
+        m_pixelStatsState = PixelStatsState::Unavailable;
+        return;
+    }
+
+    // Parse location offset/size
+    ULONGLONG offset = 0, attachSize = 0;
+    if (location.compare(0, 11, "attachment:") == 0) {
+        const char* lp = location.c_str() + 11;
+        char* ep = nullptr;
+        offset = std::strtoull(lp, &ep, 10);
+        if (ep && *ep == ':')
+            attachSize = std::strtoull(ep + 1, nullptr, 10);
+    }
+    if (attachSize == 0) {
+        m_pixelStatsState = PixelStatsState::Unavailable;
+        return;
+    }
+
+    // Sample format
+    bool isUInt16 = (sampleFmt == "UInt16" || sampleFmt.empty());
+    bool isUInt8 = (sampleFmt == "UInt8");
+    bool isFloat32 = (sampleFmt == "Float32");
+    bool isFloat64 = (sampleFmt == "Float64");
+    size_t bps = isUInt8 ? 1 : isFloat32 ? 4 : isFloat64 ? 8 : 2;
+
+    UINT readChannels = (imgC >= 3) ? 3 : 1;
+    size_t channelPixels = static_cast<size_t>(imgW) * imgH;
+
+    // Subsample strategy: read every Nth row, target ~1024 rows
+    UINT sampleRows = (std::min)(imgH, 1024u);
+    UINT rowStride = (std::max)(1u, imgH / sampleRows);
+
+    // Collect normalized pixel samples (pooled across all channels)
+    size_t maxSamples = static_cast<size_t>(imgW) * sampleRows * readChannels;
+    UINT sampleCols = imgW;
+    UINT colStride = 1;
+    if (maxSamples > 4 * 1024 * 1024) {
+        sampleCols = (std::min)(imgW, 4096u);
+        colStride = (std::max)(1u, imgW / sampleCols);
+        maxSamples = static_cast<size_t>(sampleCols) * sampleRows * readChannels;
+    }
+
+    std::vector<float> samples;
+    samples.reserve(maxSamples);
+
+    size_t rowBytes = static_cast<size_t>(imgW) * bps;
+    std::vector<uint8_t> rowBuf(rowBytes);
+
+    size_t clipLow = 0, clipHigh = 0;
+    double runningSum = 0.0;
+
+    constexpr float kClipLowThresh = 0.001f;
+    constexpr float kClipHighThresh = 0.999f;
+
+    for (UINT ch = 0; ch < readChannels; ++ch) {
+        ULONGLONG chBase = offset + static_cast<ULONGLONG>(ch) * channelPixels * bps;
+
+        for (UINT row = 0; row < imgH; row += rowStride) {
+            LARGE_INTEGER seekPos;
+            seekPos.QuadPart = static_cast<LONGLONG>(chBase + static_cast<ULONGLONG>(row) * rowBytes);
+            if (FAILED(m_pStream->Seek(seekPos, STREAM_SEEK_SET, nullptr))) {
+                m_pixelStatsState = PixelStatsState::Unavailable;
+                WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_PERF,
+                    L"PixelStatsUnavailable Reason=SeekFailed Channel=%u Row=%u", ch, row);
+                return;
+            }
+
+            ULONG cbRead = 0;
+            if (FAILED(m_pStream->Read(rowBuf.data(), static_cast<ULONG>(rowBytes), &cbRead)) || cbRead < rowBytes) {
+                m_pixelStatsState = PixelStatsState::Unavailable;
+                return;
+            }
+
+            for (UINT col = 0; col < imgW; col += colStride) {
+                float val = 0.0f;
+                if (isUInt16) {
+                    uint16_t raw = *reinterpret_cast<const uint16_t*>(rowBuf.data() + col * 2);
+                    val = static_cast<float>(raw) / 65535.0f;
+                } else if (isUInt8) {
+                    val = static_cast<float>(rowBuf[col]) / 255.0f;
+                } else if (isFloat32) {
+                    val = *reinterpret_cast<const float*>(rowBuf.data() + col * 4);
+                    val = (std::max)(0.0f, (std::min)(1.0f, val));
+                } else if (isFloat64) {
+                    double d = *reinterpret_cast<const double*>(rowBuf.data() + col * 8);
+                    val = static_cast<float>((std::max)(0.0, (std::min)(1.0, d)));
+                }
+
+                samples.push_back(val);
+                runningSum += val;
+                if (val <= kClipLowThresh) ++clipLow;
+                if (val >= kClipHighThresh) ++clipHigh;
+            }
+        }
+    }
+
+    if (samples.empty()) {
+        m_pixelStatsState = PixelStatsState::Unavailable;
+        return;
+    }
+
+    // Compute stats
+    double mean = runningSum / samples.size();
+
+    // Median via nth_element (O(n))
+    size_t midIdx = samples.size() / 2;
+    std::nth_element(samples.begin(), samples.begin() + midIdx, samples.end());
+    double median = samples[midIdx];
+
+    double clipLowPct = 100.0 * clipLow / samples.size();
+    double clipHighPct = 100.0 * clipHigh / samples.size();
+
+    // Update the VT_EMPTY placeholder entries
+    for (auto& pe : m_properties) {
+        if (IsEqualPropertyKey(pe.key, PKEY_XISF_Median)) {
+            PropVariantClear(&pe.value);
+            InitPropVariantFromDouble(median, &pe.value);
+        } else if (IsEqualPropertyKey(pe.key, PKEY_XISF_Mean)) {
+            PropVariantClear(&pe.value);
+            InitPropVariantFromDouble(mean, &pe.value);
+        } else if (IsEqualPropertyKey(pe.key, PKEY_XISF_ClippingLow)) {
+            PropVariantClear(&pe.value);
+            InitPropVariantFromDouble(clipLowPct, &pe.value);
+        } else if (IsEqualPropertyKey(pe.key, PKEY_XISF_ClippingHigh)) {
+            PropVariantClear(&pe.value);
+            InitPropVariantFromDouble(clipHighPct, &pe.value);
+        }
+    }
+
+    m_pixelStatsState = PixelStatsState::Computed;
+
+    ULONGLONG statsDur = GetTickCount64() - statsStart;
+    WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PERF,
+        L"PixelStatsComputed Median=%.4f Mean=%.4f ClipLow=%.2f%% ClipHigh=%.2f%% Samples=%zu DurationMs=%llu",
+        median, mean, clipLowPct, clipHighPct, samples.size(), statsDur);
 }
 
 IFACEMETHODIMP CXISFPropertyHandler::SetValue(REFPROPERTYKEY, REFPROPVARIANT) {

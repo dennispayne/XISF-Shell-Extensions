@@ -67,6 +67,10 @@ DEFINE_PROPERTYKEY(PKEY_XISF_WindSpeed, 0x7C54FA8B,0x9D63,0x4C10,0x8F,0xBE,0x1A,
 DEFINE_PROPERTYKEY(PKEY_XISF_GuideRA, 0x7C54FA8B,0x9D63,0x4C10,0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E, 53);
 DEFINE_PROPERTYKEY(PKEY_XISF_GuideDec, 0x7C54FA8B,0x9D63,0x4C10,0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E, 54);
 DEFINE_PROPERTYKEY(PKEY_XISF_DataState, 0x7C54FA8B,0x9D63,0x4C10,0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E, 55);
+DEFINE_PROPERTYKEY(PKEY_XISF_Median, 0x7C54FA8B,0x9D63,0x4C10,0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E, 56);
+DEFINE_PROPERTYKEY(PKEY_XISF_Mean, 0x7C54FA8B,0x9D63,0x4C10,0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E, 57);
+DEFINE_PROPERTYKEY(PKEY_XISF_ClippingLow, 0x7C54FA8B,0x9D63,0x4C10,0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E, 58);
+DEFINE_PROPERTYKEY(PKEY_XISF_ClippingHigh, 0x7C54FA8B,0x9D63,0x4C10,0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E, 59);
 
 struct PropertyEntry {
     PROPERTYKEY key;
@@ -106,6 +110,7 @@ public:
     IFACEMETHODIMP Commit() override;
     IFACEMETHODIMP IsPropertyWritable(REFPROPERTYKEY key) override;
     static void SetDSODatabasePath(const std::wstring& path);
+    static bool IsPixelStatKey(REFPROPERTYKEY key);
 private:
     long m_cRef;
     bool m_initialized;
@@ -118,7 +123,12 @@ private:
     static double s_matchToleranceDeg;
     static bool s_projectionEnabled;
     static bool s_projectionChecked;
+    IStream* m_pStream = nullptr;  // Retained for lazy pixel stats
+    enum class PixelStatsState { NotStarted, Computed, Unavailable };
+    PixelStatsState m_pixelStatsState = PixelStatsState::NotStarted;
+
     void PopulateProperties();
+    void ComputePixelStats();
     void AddStringProp(const PROPERTYKEY& key, const std::string& value);
     void AddDoubleProp(const PROPERTYKEY& key, double value);
     void AddUInt32Prop(const PROPERTYKEY& key, uint32_t value);
