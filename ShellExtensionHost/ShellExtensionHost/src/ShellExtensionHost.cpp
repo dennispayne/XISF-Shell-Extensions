@@ -1087,8 +1087,7 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
                     break;
                 }
             }
-            if (anyMissing && !g_opInProgress.load()) {
-                g_opInProgress = true;
+            if (anyMissing && !g_opInProgress.exchange(true)) {
                 SetBusy(true);
                 SetProgressText(L"Auto-installing missing catalogs\u2026");
                 std::thread([hDlg]() {

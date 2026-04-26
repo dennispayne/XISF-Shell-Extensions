@@ -154,7 +154,7 @@ PixelStatsResult ComputePixelStats(IStream* pStream, const std::string& xmlHeade
     size_t bps = isUInt8 ? 1 : isFloat32 ? 4 : isFloat64 ? 8 : 2;
 
     UINT readChannels = (imgC >= 3) ? 3 : 1;
-    size_t channelPixels = static_cast<size_t>(imgW) * imgH;
+    size_t channelPixels = static_cast<size_t>(imgW) * static_cast<size_t>(imgH);
 
     // Subsample strategy: target ~1024 rows, cap total samples at ~1M for fast compute
     constexpr size_t kMaxTotalSamples = 1024 * 1024;
