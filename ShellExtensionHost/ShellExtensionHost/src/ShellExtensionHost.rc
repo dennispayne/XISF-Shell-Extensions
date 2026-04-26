@@ -15,7 +15,7 @@
 #define XISF_VERSION_STR XISF_STR(XISF_VERSION_TEXT)
 #endif
 
-IDD_SETTINGS DIALOGEX 0, 0, 500, 400
+IDD_SETTINGS DIALOGEX 0, 0, 500, 414
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX
 CAPTION "XISF Shell Extensions Utility"
 FONT 9, "Segoe UI", 400, 0, 0x1
@@ -88,14 +88,14 @@ BEGIN
     RTEXT           "",                 IDC_STATIC_PENDING_TEXT, 370, 334, 110, 14
 
     CONTROL         "", IDC_LINK_VERSION, WC_LINK,
-                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 10, 380, 155, 12
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 10, 366, 480, 12
     AUTOCHECKBOX    "Restart Explorer",
-                    IDC_CHK_RESTART_EXPLORER,   170, 380, 80, 10
+                    IDC_CHK_RESTART_EXPLORER,   10, 392, 80, 10
     PUSHBUTTON      "Advanced",
-                    IDC_BTN_ADVANCED,       290, 378, 60, 14
+                    IDC_BTN_ADVANCED,       290, 392, 60, 14
     PUSHBUTTON      "Apply",
-                    IDC_BTN_APPLY,          356, 378, 60, 14
-    DEFPUSHBUTTON   "Close",            IDOK,               422, 378,  60, 14
+                    IDC_BTN_APPLY,          356, 392, 60, 14
+    DEFPUSHBUTTON   "Close",            IDOK,               422, 392,  60, 14
 END
 
 IDD_ADVANCED DIALOGEX 0, 0, 360, 246
