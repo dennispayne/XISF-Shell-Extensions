@@ -843,6 +843,48 @@ void CXISFPropertyHandler::PopulateProperties() {
         }}
     }
 
+    // Color Space — directly from Image element colorSpace attribute
+    {
+        auto csIt = m_metadata.imageAttributes.find("colorSpace");
+        if (csIt != m_metadata.imageAttributes.end() && !csIt->second.empty()) {
+            AddStringProp(PKEY_XISF_ColorSpace, csIt->second);
+        }
+    }
+
+    // Sample Format — directly from Image element sampleFormat attribute
+    {
+        auto sfIt = m_metadata.imageAttributes.find("sampleFormat");
+        if (sfIt != m_metadata.imageAttributes.end() && !sfIt->second.empty()) {
+            AddStringProp(PKEY_XISF_SampleFormat, sfIt->second);
+        }
+    }
+
+    // Image dimensions and channel count — parsed from geometry "W:H:C"
+    {
+        auto gIt = m_metadata.imageAttributes.find("geometry");
+        if (gIt != m_metadata.imageAttributes.end() && !gIt->second.empty()) {
+            const std::string& geom = gIt->second;
+            auto c1 = geom.find(':');
+            if (c1 != std::string::npos) {
+                auto c2 = geom.find(':', c1 + 1);
+                if (c2 != std::string::npos) {
+                    double w = 0, h = 0, c = 0;
+                    if (TryParseDouble(geom.substr(0, c1), &w) && w > 0)
+                        AddUInt32Prop(PKEY_XISF_ImageWidth, static_cast<uint32_t>(w));
+                    if (TryParseDouble(geom.substr(c1 + 1, c2 - c1 - 1), &h) && h > 0)
+                        AddUInt32Prop(PKEY_XISF_ImageHeight, static_cast<uint32_t>(h));
+                    if (TryParseDouble(geom.substr(c2 + 1), &c) && c > 0)
+                        AddUInt32Prop(PKEY_XISF_ChannelCount, static_cast<uint32_t>(c));
+                }
+            }
+        }
+    }
+
+    // Image Count — number of <Image> elements in the XISF
+    if (m_metadata.imageCount > 0) {
+        AddUInt32Prop(PKEY_XISF_ImageCount, m_metadata.imageCount);
+    }
+
     // Data State (Linear / Non-Linear) derived from Image element attributes
     {
         auto sfIt = m_metadata.imageAttributes.find("sampleFormat");

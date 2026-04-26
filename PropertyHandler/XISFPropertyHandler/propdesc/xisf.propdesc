@@ -351,5 +351,45 @@
       <typeInfo type="Double" isInnate="false" isViewable="true" />
       <displayInfo defaultColumnWidth="80" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
     </propertyDescription>
+    <propertyDescription name="XISF.ColorSpace" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="60">
+      <searchInfo inInvertedIndex="true" isColumn="true" />
+      <labelInfo label="Astro Color Space" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="80" displayType="String">
+        <stringFormat formatAs="General" />
+      </displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.SampleFormat" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="61">
+      <searchInfo inInvertedIndex="true" isColumn="true" />
+      <labelInfo label="Astro Sample Format" />
+      <typeInfo type="String" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="80" displayType="String">
+        <stringFormat formatAs="General" />
+      </displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.ImageWidth" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="62">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Image Width" />
+      <typeInfo type="UInt32" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.ImageHeight" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="63">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Image Height" />
+      <typeInfo type="UInt32" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.ChannelCount" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="64">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Channels" />
+      <typeInfo type="UInt32" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="50" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
+    <propertyDescription name="XISF.ImageCount" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="65">
+      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <labelInfo label="Astro Image Count" />
+      <typeInfo type="UInt32" isInnate="false" isViewable="true" />
+      <displayInfo defaultColumnWidth="50" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
+    </propertyDescription>
   </propertyDescriptionList>
 </schema>

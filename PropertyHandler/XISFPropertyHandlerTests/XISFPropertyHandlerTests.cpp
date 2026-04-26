@@ -1247,8 +1247,8 @@ public:
         IPropertyStore* ps = nullptr;
         h->QueryInterface(IID_PPV_ARGS(&ps));
         DWORD count = 0; ps->GetCount(&count);
-        Assert::IsTrue(count >= 1 && count < 10,
-                       L"Minimal XML should yield only object name + title");
+        Assert::IsTrue(count >= 1 && count < 16,
+                       L"Minimal XML should yield only object name + title + image attrs");
         ps->Release(); pi->Release(); s->Release(); h->Release();
     }
 };
@@ -1336,8 +1336,10 @@ public:
         DWORD count = 0; ps->GetCount(&count);
         // DataState is derived from Image element attributes (sampleFormat/colorSpace),
         // so even an "empty" XISF with those attributes produces one property.
+        // ColorSpace, SampleFormat, ImageWidth, ImageHeight, ChannelCount, and
+        // ImageCount are also extracted from the Image element.
         // Plus 4 pixel stat placeholders (VT_EMPTY until lazily computed).
-        Assert::AreEqual(DWORD(5), count);
+        Assert::AreEqual(DWORD(11), count);
         ps->Release(); pi->Release(); s->Release(); h->Release();
     }
     TEST_METHOD(AllProperties_HaveNonEmptyValues) {
@@ -1818,6 +1820,12 @@ public:
             PKEY_XISF_GuideRA.pid,
             PKEY_XISF_GuideDec.pid,
             PKEY_XISF_DataState.pid,
+            PKEY_XISF_ColorSpace.pid,
+            PKEY_XISF_SampleFormat.pid,
+            PKEY_XISF_ImageWidth.pid,
+            PKEY_XISF_ImageHeight.pid,
+            PKEY_XISF_ChannelCount.pid,
+            PKEY_XISF_ImageCount.pid,
             PKEY_XISF_Median.pid,
             PKEY_XISF_Mean.pid,
             PKEY_XISF_ClippingLow.pid,
@@ -1984,6 +1992,286 @@ public:
         PROPVARIANT pv; PropVariantInit(&pv);
         ps->GetValue(PKEY_XISF_DataState, &pv);
         Assert::AreEqual(USHORT(VT_EMPTY), pv.vt);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+};
+
+// ===========================================================================
+// ColorSpace property — surfaced from Image element colorSpace attribute
+// ===========================================================================
+
+TEST_CLASS(PropertyHandler_ColorSpace) {
+public:
+    TEST_METHOD(Gray_ColorSpace) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:1" sampleFormat="Float32" colorSpace="Gray" location="attachment:0:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_ColorSpace, &pv);
+        Assert::AreEqual(USHORT(VT_LPWSTR), pv.vt);
+        Assert::AreEqual(L"Gray", pv.pwszVal);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+
+    TEST_METHOD(RGB_ColorSpace) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:3" sampleFormat="Float32" colorSpace="RGB" location="attachment:0:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_ColorSpace, &pv);
+        Assert::AreEqual(USHORT(VT_LPWSTR), pv.vt);
+        Assert::AreEqual(L"RGB", pv.pwszVal);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+
+    TEST_METHOD(GraySRGB_ColorSpace) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:1" sampleFormat="Float32" colorSpace="GraySRGB" location="attachment:0:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_ColorSpace, &pv);
+        Assert::AreEqual(USHORT(VT_LPWSTR), pv.vt);
+        Assert::AreEqual(L"GraySRGB", pv.pwszVal);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+
+    TEST_METHOD(RGBSRGB_ColorSpace) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:3" sampleFormat="Float64" colorSpace="RGBSRGB" location="attachment:0:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_ColorSpace, &pv);
+        Assert::AreEqual(USHORT(VT_LPWSTR), pv.vt);
+        Assert::AreEqual(L"RGBSRGB", pv.pwszVal);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+
+    TEST_METHOD(MissingColorSpace_PropertyNotSet) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:1" sampleFormat="Float32" location="attachment:0:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_ColorSpace, &pv);
+        Assert::AreEqual(USHORT(VT_EMPTY), pv.vt);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+};
+
+// ===========================================================================
+// SampleFormat, ImageWidth, ImageHeight, ChannelCount, ImageCount
+// ===========================================================================
+
+TEST_CLASS(PropertyHandler_ImageAttributes) {
+public:
+    TEST_METHOD(SampleFormat_Float32) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:1" sampleFormat="Float32" colorSpace="Gray" location="attachment:0:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_SampleFormat, &pv);
+        Assert::AreEqual(USHORT(VT_LPWSTR), pv.vt);
+        Assert::AreEqual(L"Float32", pv.pwszVal);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+
+    TEST_METHOD(SampleFormat_UInt16) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:1" sampleFormat="UInt16" colorSpace="Gray" location="attachment:0:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_SampleFormat, &pv);
+        Assert::AreEqual(USHORT(VT_LPWSTR), pv.vt);
+        Assert::AreEqual(L"UInt16", pv.pwszVal);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+
+    TEST_METHOD(MissingSampleFormat_PropertyNotSet) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:1" colorSpace="Gray" location="attachment:0:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_SampleFormat, &pv);
+        Assert::AreEqual(USHORT(VT_EMPTY), pv.vt);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+
+    TEST_METHOD(ImageDimensions_Parsed) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="4656:3520:3" sampleFormat="Float32" colorSpace="RGB" location="attachment:0:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_ImageWidth, &pv);
+        Assert::AreEqual(USHORT(VT_UI4), pv.vt);
+        Assert::AreEqual(ULONG(4656), pv.ulVal);
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_ImageHeight, &pv);
+        Assert::AreEqual(USHORT(VT_UI4), pv.vt);
+        Assert::AreEqual(ULONG(3520), pv.ulVal);
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_ChannelCount, &pv);
+        Assert::AreEqual(USHORT(VT_UI4), pv.vt);
+        Assert::AreEqual(ULONG(3), pv.ulVal);
+        PropVariantClear(&pv);
+
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+
+    TEST_METHOD(SingleChannel_Mono) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:1" sampleFormat="UInt16" colorSpace="Gray" location="attachment:0:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_ChannelCount, &pv);
+        Assert::AreEqual(USHORT(VT_UI4), pv.vt);
+        Assert::AreEqual(ULONG(1), pv.ulVal);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+
+    TEST_METHOD(ImageCount_SingleImage) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:1" sampleFormat="UInt16" colorSpace="Gray" location="attachment:0:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_ImageCount, &pv);
+        Assert::AreEqual(USHORT(VT_UI4), pv.vt);
+        Assert::AreEqual(ULONG(1), pv.ulVal);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+
+    TEST_METHOD(ImageCount_MultipleImages) {
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:1" sampleFormat="UInt16" colorSpace="Gray" location="attachment:0:0">
+  </Image>
+  <Image geometry="200:200:3" sampleFormat="Float32" colorSpace="RGB" location="attachment:20000:0">
+  </Image>
+  <Image geometry="50:50:1" sampleFormat="UInt8" colorSpace="Gray" location="attachment:40000:0">
+  </Image>
+</xisf>)";
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStream(xml);
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_ImageCount, &pv);
+        Assert::AreEqual(USHORT(VT_UI4), pv.vt);
+        Assert::AreEqual(ULONG(3), pv.ulVal);
         PropVariantClear(&pv);
         ps->Release(); pi->Release(); s->Release(); h->Release();
     }

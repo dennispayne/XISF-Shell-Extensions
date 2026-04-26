@@ -153,8 +153,9 @@ ParseResult XISFParser::ExtractMetadataFromXML(const std::string& xml) {
         result.metadata.properties.push_back(std::move(prop));
     }
 
-    // Parse first <Image> element attributes (sampleFormat, colorSpace, etc.).
+    // Parse <Image> elements — store first element's attributes and total count.
     auto imageElements = FindElements(xml, "Image");
+    result.metadata.imageCount = static_cast<uint32_t>(imageElements.size());
     if (!imageElements.empty()) {
         result.metadata.imageAttributes = std::move(imageElements[0]);
     }

@@ -35,6 +35,7 @@ struct XISFRawMetadata {
     std::vector<FITSKeyword>  fitsKeywords;       ///< FITS keywords
     std::vector<XISFProperty> properties;         ///< XISF typed properties
     std::unordered_map<std::string, std::string> imageAttributes; ///< Image element attrs (sampleFormat, colorSpace, etc.)
+    uint32_t imageCount = 0;  ///< Number of <Image> elements in the XISF
 
     /// Build O(1) lookup indices. Called automatically after parsing.
     void buildIndices();
