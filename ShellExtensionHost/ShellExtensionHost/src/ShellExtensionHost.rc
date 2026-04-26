@@ -89,8 +89,8 @@ BEGIN
 
     CONTROL         "", IDC_LINK_VERSION, WC_LINK,
                     WS_CHILD | WS_VISIBLE | WS_TABSTOP, 10, 366, 480, 12
-    AUTOCHECKBOX    "Restart Explorer",
-                    IDC_CHK_RESTART_EXPLORER,   10, 392, 80, 10
+    AUTOCHECKBOX    "Restart Explorer If Needed",
+                    IDC_CHK_RESTART_EXPLORER,   10, 392, 115, 10
     PUSHBUTTON      "Advanced",
                     IDC_BTN_ADVANCED,       290, 392, 60, 14
     PUSHBUTTON      "Apply",
