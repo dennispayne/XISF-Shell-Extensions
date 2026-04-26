@@ -51,6 +51,7 @@ std::atomic<bool> g_opInProgress{false};
 static constexpr UINT WM_XISF_PROGRESS = WM_APP + 1;
 static constexpr UINT WM_XISF_DONE     = WM_APP + 2;
 static constexpr UINT WM_XISF_TRACE_EXPORT_DONE = WM_APP + 3;
+static constexpr UINT WM_XISF_AUTO_INSTALL_DONE = WM_APP + 4;
 
 COLORREF g_iconOkColor = RGB(18, 130, 44);
 COLORREF g_iconWarnColor = RGB(196, 130, 0);
@@ -399,6 +400,23 @@ bool StartsWith(const std::wstring& s, const std::wstring& prefix)
     return s.size() >= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
 }
 
+// Headless mode: install all missing/mismatched catalogs silently.
+// Returns 0 if all catalogs are verified, 1 if any install failed.
+int RunSilentCatalogInstall()
+{
+    int failures = 0;
+    for (const auto* src : catalogspec::kAllCatalogs) {
+        auto p = installer::Probe(*src);
+        if (p.state == installer::PresenceState::PresentVerified)
+            continue;
+        auto rep = installer::InstallFromPinnedUrl(
+            *src, [](std::uint64_t, std::uint64_t, void*) -> bool { return true; }, nullptr);
+        if (rep.result != installer::Result::Ok)
+            failures++;
+    }
+    return failures > 0 ? 1 : 0;
+}
+
 bool TryHandleCommandMode(LPWSTR rawCmdLine, int& exitCode)
 {
     int argc = 0;
@@ -412,14 +430,21 @@ bool TryHandleCommandMode(LPWSTR rawCmdLine, int& exitCode)
     bool adv = false;
     bool prop = false;
     bool prev = false;
+    bool silentInstall = false;
     for (int i = 1; i < argc; ++i) {
         std::wstring a = argv[i];
         if (a == L"--register-direct") mode = true;
         else if (a == L"--advanced-direct") adv = true;
         else if (a == L"--property") prop = true;
         else if (a == L"--preview") prev = true;
+        else if (a == L"--silent-install") silentInstall = true;
     }
     LocalFree(argv);
+
+    if (silentInstall) {
+        exitCode = RunSilentCatalogInstall();
+        return true;
+    }
 
     if (adv) {
         exitCode = 100; // sentinel consumed by wWinMain to open Advanced directly
@@ -1051,6 +1076,46 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         RefreshHandlerStatuses();
         UpdateCatalogActionButtons();
         AddTooltips();
+
+        // Auto-install missing catalogs in background
+        {
+            bool anyMissing = false;
+            for (const auto* src : catalogspec::kAllCatalogs) {
+                auto p = installer::Probe(*src);
+                if (p.state != installer::PresenceState::PresentVerified) {
+                    anyMissing = true;
+                    break;
+                }
+            }
+            if (anyMissing && !g_opInProgress.load()) {
+                g_opInProgress = true;
+                SetBusy(true);
+                SetProgressText(L"Auto-installing missing catalogs\u2026");
+                std::thread([hDlg]() {
+                    int installed = 0;
+                    int failed = 0;
+                    for (const auto* src : catalogspec::kAllCatalogs) {
+                        auto p = installer::Probe(*src);
+                        if (p.state == installer::PresenceState::PresentVerified)
+                            continue;
+                        auto rep = installer::InstallFromPinnedUrl(
+                            *src,
+                            [](std::uint64_t bytes, std::uint64_t max, void* u) -> bool {
+                                PostMessageW(static_cast<HWND>(u), WM_XISF_PROGRESS,
+                                    static_cast<WPARAM>(bytes), static_cast<LPARAM>(max));
+                                return !g_cancelRequested.load(std::memory_order_relaxed);
+                            },
+                            static_cast<void*>(hDlg));
+                        if (rep.result == installer::Result::Ok) installed++;
+                        else failed++;
+                    }
+                    // Pack installed|failed into wParam/lParam
+                    PostMessageW(hDlg, WM_XISF_AUTO_INSTALL_DONE,
+                        static_cast<WPARAM>(installed), static_cast<LPARAM>(failed));
+                }).detach();
+            }
+        }
+
         return TRUE;
     }
 
@@ -1240,6 +1305,26 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         OnDone(static_cast<int>(wParam),
                reinterpret_cast<installer::Report*>(lParam));
         return TRUE;
+
+    case WM_XISF_AUTO_INSTALL_DONE: {
+        int installed = static_cast<int>(wParam);
+        int failed = static_cast<int>(lParam);
+        SetBusy(false);
+        g_opInProgress = false;
+        RefreshAllPresence();
+        UpdateCatalogActionButtons();
+        if (failed > 0) {
+            wchar_t buf[128];
+            swprintf_s(buf, L"Auto-install: %d installed, %d failed.", installed, failed);
+            SetProgressText(buf);
+        } else if (installed > 0) {
+            wchar_t buf[128];
+            swprintf_s(buf, L"Auto-installed %d catalog%s.", installed, installed == 1 ? L"" : L"s");
+            SetProgressText(buf);
+        }
+        SendDlgItemMessageW(g_hDlg, IDC_PROGRESS, PBM_SETPOS, 0, 0);
+        return TRUE;
+    }
 
     case WM_CLOSE:
         PostMessageW(hDlg, WM_COMMAND, IDCANCEL, 0);

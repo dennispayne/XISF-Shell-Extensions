@@ -146,8 +146,26 @@ Add-AppxPackage .\artifacts\XISF.ShellExtension_0.1.0.0_x64.msix
 Stop-Process -Name explorer -Force
 ```
 
-Then launch **XISF Shell Extension** from Start to toggle handlers and
-install catalogs.
+## Catalog auto-deployment
+
+DSO catalogs are automatically installed in two ways:
+
+1. **On settings app launch** — when the settings dialog opens, any missing or
+   outdated catalogs are downloaded and verified in the background. No user
+   interaction is needed; progress appears in the Status section.
+
+2. **Silent command-line mode** — for scripted or unattended deployments:
+
+   ```powershell
+   XISFShellExtensionHost.exe --silent-install
+   ```
+
+   This downloads and verifies all missing catalogs with no UI, then exits
+   with code 0 on success or 1 if any install failed. Catalogs that are
+   already present and verified are skipped.
+
+Launch **XISF Shell Extension** from Start to toggle handlers and
+manage catalogs.
 
 ## Release process
 
