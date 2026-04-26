@@ -93,7 +93,10 @@
     <ClCompile Include="InitializePerf.cpp" />
     <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\XISFParser.cpp" />
     <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\DSOAliasDB.cpp" />
+    <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\ComputedProperties.cpp" />
+    <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\PixelStatistics.cpp" />
     <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\PropertyStore.cpp" />
+    <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\HandlerSettings.cpp" />
     <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\DSOCatalog.cpp" />
     <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\ConstellationDB.cpp" />
     <ClCompile Include="ConcurrencyStress.cpp" />

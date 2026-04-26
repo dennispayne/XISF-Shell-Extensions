@@ -10,8 +10,7 @@
 #include <memory>
 #include <mutex>
 #include "XISFParser.h"
-#include "DSOCatalog.h"
-#include "ConstellationDB.h"
+#include "HandlerSettings.h"
 
 DEFINE_PROPERTYKEY(PKEY_XISF_ExposureTime, 0x7C54FA8B,0x9D63,0x4C10,0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E, 2);
 DEFINE_PROPERTYKEY(PKEY_XISF_CameraModel, 0x7C54FA8B,0x9D63,0x4C10,0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E, 3);
@@ -116,7 +115,6 @@ public:
     IFACEMETHODIMP Commit() override;
     IFACEMETHODIMP IsPropertyWritable(REFPROPERTYKEY key) override;
     static void SetDSODatabasePath(const std::wstring& path);
-    static bool IsPixelStatKey(REFPROPERTYKEY key);
 private:
     long m_cRef;
     bool m_initialized;
@@ -124,17 +122,11 @@ private:
     xisf::XISFRawMetadata m_metadata;
     mutable std::mutex m_propertyLock;
     static std::wstring s_dsoDbPath;
-    static std::shared_ptr<xisf::DSOCatalog> s_dsoCatalog;
-    static std::vector<std::string> s_catalogPriority;
-    static double s_matchToleranceDeg;
-    static bool s_projectionEnabled;
-    static bool s_projectionChecked;
-    IStream* m_pStream = nullptr;  // Retained for lazy pixel stats
+    IStream* m_pStream = nullptr;
     enum class PixelStatsState { NotStarted, Computed, Unavailable };
     PixelStatsState m_pixelStatsState = PixelStatsState::NotStarted;
 
-    void PopulateProperties();
-    void ComputePixelStats();
+    void PopulateProperties(xisf::FeatureTier tier, bool projectionEnabled);
     void AddStringProp(const PROPERTYKEY& key, const std::string& value);
     void AddDoubleProp(const PROPERTYKEY& key, double value);
     void AddUInt32Prop(const PROPERTYKEY& key, uint32_t value);
@@ -144,8 +136,5 @@ private:
     bool TryParseDouble(const std::string& raw, double* out) const;
     std::string TrimValue(const std::string& raw) const;
     static std::wstring Utf8ToWide(const std::string& raw);
-    static std::string ComputeRAHour(double raDegrees);
-    static std::string ComputeDecBand(double decDegrees);
     static bool ParseISO8601(const std::string& iso, FILETIME* ft);
-    static bool ReadProjectionEnabled();
 };

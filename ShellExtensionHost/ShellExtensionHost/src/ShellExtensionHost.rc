@@ -15,7 +15,7 @@
 #define XISF_VERSION_STR XISF_STR(XISF_VERSION_TEXT)
 #endif
 
-IDD_SETTINGS DIALOGEX 0, 0, 500, 332
+IDD_SETTINGS DIALOGEX 0, 0, 500, 414
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX
 CAPTION "XISF Shell Extensions Utility"
 FONT 9, "Segoe UI", 400, 0, 0x1
@@ -34,50 +34,68 @@ BEGIN
     LTEXT           "",                 IDC_STATIC_PREVIEW_STATUS, 162, 65, 10, 10
     LTEXT           "",                 IDC_STATIC_PREVIEW_VER,    175, 65, 305, 10
 
-    GROUPBOX        "DSO Catalogs", IDC_STATIC_CATALOGS, 10, 108, 480, 170
+    GROUPBOX        "Property Handler Settings",    -1,                 10, 108, 480, 60
+    LTEXT           "Feature Tier:",    IDC_STATIC_TIER_LABEL,     20, 125, 50, 10
+    COMBOBOX                            IDC_COMBO_FEATURE_TIER,    72, 123, 80, 60,
+                    CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON      "Show tiers...",
+                    IDC_BTN_SHOW_TIERS, 160, 123, 60, 14
+    AUTOCHECKBOX    "Mirror to System.Photo properties",
+                    IDC_CHK_PROJECTION, 20, 145, 155, 10
+    PUSHBUTTON      "Show mapping...",
+                    IDC_BTN_SHOW_MAPPING, 178, 143, 70, 14
+
+    GROUPBOX        "DSO Catalogs", IDC_STATIC_CATALOGS, 10, 174, 480, 130
     CONTROL         "", IDC_LINK_OPENNGC_COMMIT, WC_LINK,
-                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 20, 120, 270, 12
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 20, 186, 270, 12
     PUSHBUTTON      "Copy Hashes",
-                    IDC_BTN_COPY_EXPECTED_HASHES, 294, 118, 90, 14
+                    IDC_BTN_COPY_EXPECTED_HASHES, 294, 184, 90, 14
     CONTROL         "", IDC_LINK_HASH_HELP, WC_LINK,
-                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 388, 120, 92, 12
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 388, 186, 92, 12
 
-    LTEXT           "Catalog",          -1, 20, 136, 55, 10
-    LTEXT           "GitHub",           -1, 82, 136, 130, 10
-    LTEXT           "Local",            -1, 218, 136, 130, 10
-    LTEXT           "",                 -1, 352, 136, 10, 10
+    LTEXT           "Catalog",          -1, 20, 202, 55, 10
+    LTEXT           "GitHub",           -1, 82, 202, 130, 10
+    LTEXT           "Local",            -1, 218, 202, 130, 10
+    LTEXT           "",                 -1, 352, 202, 10, 10
 
-    LTEXT           "NGC.csv",          IDC_STATIC_NGC_LABEL, 20, 150, 60, 10
-    LTEXT           "-",                IDC_STATIC_NGC_GITHUB, 82, 150, 130, 10
-    LTEXT           "-",                IDC_STATIC_NGC_LOCAL, 218, 150, 130, 10
-    LTEXT           "?",                IDC_STATIC_NGC_MATCH, 352, 150, 10, 10
+    LTEXT           "NGC.csv",          IDC_STATIC_NGC_LABEL, 20, 216, 60, 10
+    LTEXT           "-",                IDC_STATIC_NGC_GITHUB, 82, 216, 130, 10
+    LTEXT           "-",                IDC_STATIC_NGC_LOCAL, 218, 216, 130, 10
+    LTEXT           "?",                IDC_STATIC_NGC_MATCH, 352, 216, 10, 10
     PUSHBUTTON      "Install",
-                    IDC_BTN_FETCH_NGC, 370, 148, 52, 14
+                    IDC_BTN_FETCH_NGC, 370, 214, 52, 14
     PUSHBUTTON      "Remove",
-                    IDC_BTN_REMOVE_NGC, 428, 148, 52, 14
+                    IDC_BTN_REMOVE_NGC, 428, 214, 52, 14
 
-    LTEXT           "addendum.csv",     IDC_STATIC_ADD_LABEL, 20, 168, 60, 10
-    LTEXT           "-",                IDC_STATIC_ADD_GITHUB, 82, 168, 130, 10
-    LTEXT           "-",                IDC_STATIC_ADD_LOCAL, 218, 168, 130, 10
-    LTEXT           "?",                IDC_STATIC_ADD_MATCH, 352, 168, 10, 10
+    LTEXT           "addendum.csv",     IDC_STATIC_ADD_LABEL, 20, 234, 60, 10
+    LTEXT           "-",                IDC_STATIC_ADD_GITHUB, 82, 234, 130, 10
+    LTEXT           "-",                IDC_STATIC_ADD_LOCAL, 218, 234, 130, 10
+    LTEXT           "?",                IDC_STATIC_ADD_MATCH, 352, 234, 10, 10
     PUSHBUTTON      "Install",
-                    IDC_BTN_FETCH_ADD, 370, 166, 52, 14
+                    IDC_BTN_FETCH_ADD, 370, 232, 52, 14
     PUSHBUTTON      "Remove",
-                    IDC_BTN_REMOVE_ADD, 428, 166, 52, 14
-
-    CONTROL         "", IDC_PROGRESS, PROGRESS_CLASSA,
-                    WS_CHILD | WS_VISIBLE,   20, 190, 460, 10
-    LTEXT           "",                 IDC_STATIC_PROGRESS_TEXT, 20, 204, 460, 14
+                    IDC_BTN_REMOVE_ADD, 428, 232, 52, 14
 
     PUSHBUTTON      "Import from File...",
-                    IDC_BTN_IMPORT_FILE,  20, 222, 100, 14
+                    IDC_BTN_IMPORT_FILE,  20, 256, 100, 14
     PUSHBUTTON      "Open Catalog Folder",
-                    IDC_BTN_OPEN_CATALOG_DIR, 127, 222, 130, 14
+                    IDC_BTN_OPEN_CATALOG_DIR, 127, 256, 130, 14
 
+    GROUPBOX        "Status", -1, 10, 308, 480, 52
+    CONTROL         "", IDC_PROGRESS, PROGRESS_CLASSA,
+                    WS_CHILD | WS_VISIBLE,   20, 320, 460, 10
+    LTEXT           "",                 IDC_STATIC_PROGRESS_TEXT, 20, 334, 340, 14
+    RTEXT           "",                 IDC_STATIC_PENDING_TEXT, 370, 334, 110, 14
+
+    CONTROL         "", IDC_LINK_VERSION, WC_LINK,
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 10, 366, 480, 12
+    AUTOCHECKBOX    "Restart Explorer If Needed",
+                    IDC_CHK_RESTART_EXPLORER,   10, 392, 115, 10
     PUSHBUTTON      "Advanced",
-                    IDC_BTN_ADVANCED,       360, 308, 60, 14
-    DEFPUSHBUTTON   "Close",            IDOK,               430, 308,  60, 14
-    LTEXT           "",                 IDC_STATIC_VERSION,  10, 310, 340, 10
+                    IDC_BTN_ADVANCED,       290, 392, 60, 14
+    PUSHBUTTON      "Apply",
+                    IDC_BTN_APPLY,          356, 392, 60, 14
+    DEFPUSHBUTTON   "Close",            IDOK,               422, 392,  60, 14
 END
 
 IDD_ADVANCED DIALOGEX 0, 0, 360, 246
@@ -121,6 +139,103 @@ BEGIN
 
     DEFPUSHBUTTON   "Close",           IDOK,                 290, 224, 60, 14
 END
+
+IDD_MAPPING DIALOGEX 0, 0, 280, 120
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "System.Photo Property Mapping"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    LTEXT           "When projection is enabled, these XISF properties are\nmirrored to the corresponding System.Photo properties:",
+                    -1, 10, 8, 260, 20
+    LTEXT           "XISF Property",        -1,  10, 34, 110, 10
+    LTEXT           "System.Photo",         -1, 140, 34, 130, 10
+    LTEXT           "Exposure Time",        -1,  10, 48, 110, 10
+    LTEXT           "Photo.ExposureTime",   -1, 140, 48, 130, 10
+    LTEXT           "Camera Model",         -1,  10, 60, 110, 10
+    LTEXT           "Photo.CameraModel",    -1, 140, 60, 130, 10
+    LTEXT           "Focal Length",         -1,  10, 72, 110, 10
+    LTEXT           "Photo.FocalLength",    -1, 140, 72, 130, 10
+    LTEXT           "F-Number",             -1,  10, 84, 110, 10
+    LTEXT           "Photo.FNumber",        -1, 140, 84, 130, 10
+    DEFPUSHBUTTON   "Close",               IDOK, 210, 100, 60, 14
+END
+
+#pragma code_page(65001)
+IDD_TIERS DIALOGEX 0, 0, 300, 220
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Feature Tier Details"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    LTEXT           "Each tier includes all features from lower tiers.",
+                    -1, 10, 8, 280, 10
+
+    LTEXT           "Feature",             -1,  10, 26, 130, 10
+    LTEXT           "Basic",               -1, 150, 26, 40, 10
+    LTEXT           "Standard",            -1, 195, 26, 40, 10
+    LTEXT           "Full",                -1, 250, 26, 40, 10
+    CONTROL         "", -1, "Static", SS_ETCHEDHORZ, 10, 38, 280, 1
+
+    LTEXT           "FITS keywords",       -1,  10, 44, 130, 10
+    CTEXT           "✓",                   -1, 148, 44, 20, 10
+    CTEXT           "✓",                   -1, 198, 44, 20, 10
+    CTEXT           "✓",                   -1, 248, 44, 20, 10
+
+    LTEXT           "XISF properties",     -1,  10, 56, 130, 10
+    CTEXT           "✓",                   -1, 148, 56, 20, 10
+    CTEXT           "✓",                   -1, 198, 56, 20, 10
+    CTEXT           "✓",                   -1, 248, 56, 20, 10
+
+    LTEXT           "Image attributes",    -1,  10, 68, 130, 10
+    CTEXT           "✓",                   -1, 148, 68, 20, 10
+    CTEXT           "✓",                   -1, 198, 68, 20, 10
+    CTEXT           "✓",                   -1, 248, 68, 20, 10
+
+    LTEXT           "System.Photo projection", -1, 10, 80, 130, 10
+    CTEXT           "✓",                   -1, 148, 80, 20, 10
+    CTEXT           "✓",                   -1, 198, 80, 20, 10
+    CTEXT           "✓",                   -1, 248, 80, 20, 10
+
+    LTEXT           "Constellation",       -1,  10, 92, 130, 10
+    CTEXT           "",                    -1, 148, 92, 20, 10
+    CTEXT           "✓",                   -1, 198, 92, 20, 10
+    CTEXT           "✓",                   -1, 248, 92, 20, 10
+
+    LTEXT           "RA Hour / Dec Band",  -1,  10, 104, 130, 10
+    CTEXT           "",                    -1, 148, 104, 20, 10
+    CTEXT           "✓",                   -1, 198, 104, 20, 10
+    CTEXT           "✓",                   -1, 248, 104, 20, 10
+
+    LTEXT           "Data State",          -1,  10, 116, 130, 10
+    CTEXT           "",                    -1, 148, 116, 20, 10
+    CTEXT           "✓",                   -1, 198, 116, 20, 10
+    CTEXT           "✓",                   -1, 248, 116, 20, 10
+
+    LTEXT           "DSO cone search",     -1,  10, 128, 130, 10
+    CTEXT           "",                    -1, 148, 128, 20, 10
+    CTEXT           "",                    -1, 198, 128, 20, 10
+    CTEXT           "✓",                   -1, 248, 128, 20, 10
+
+    LTEXT           "Matched Objects",     -1,  10, 140, 130, 10
+    CTEXT           "",                    -1, 148, 140, 20, 10
+    CTEXT           "",                    -1, 198, 140, 20, 10
+    CTEXT           "✓",                   -1, 248, 140, 20, 10
+
+    LTEXT           "Keywords aggregation", -1, 10, 152, 130, 10
+    CTEXT           "",                    -1, 148, 152, 20, 10
+    CTEXT           "",                    -1, 198, 152, 20, 10
+    CTEXT           "✓",                   -1, 248, 152, 20, 10
+
+    LTEXT           "Pixel statistics",    -1,  10, 164, 130, 10
+    CTEXT           "",                    -1, 148, 164, 20, 10
+    CTEXT           "",                    -1, 198, 164, 20, 10
+    CTEXT           "✓",                   -1, 248, 164, 20, 10
+
+    CONTROL         "", -1, "Static", SS_ETCHEDHORZ, 10, 180, 280, 1
+    LTEXT           "Default tier is Full for backward compatibility.",
+                    -1, 10, 186, 280, 10
+    DEFPUSHBUTTON   "Close",              IDOK, 230, 200, 60, 14
+END
+#pragma code_page(1252)
 
 #ifdef RC_INVOKED
 VS_VERSION_INFO VERSIONINFO

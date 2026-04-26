@@ -27,6 +27,7 @@
 #include "ClassFactory.h"
 #include "DSOCatalog.h"
 #include "ConstellationDB.h"
+#include "PixelStatistics.h"
 
 // Compile these units into the test module for class-factory runtime-toggle coverage.
 #include "..\XISFPropertyHandler\src\HandlerSettings.cpp"
@@ -1355,7 +1356,7 @@ public:
             PROPERTYKEY pk = {};
             ps->GetAt(i, &pk);
             // Skip pixel stat placeholders — they are VT_EMPTY until lazily computed
-            if (CXISFPropertyHandler::IsPixelStatKey(pk)) continue;
+            if (xisf::IsPixelStatKey(pk)) continue;
             PROPVARIANT pv; PropVariantInit(&pv);
             ps->GetValue(pk, &pv);
             Assert::AreNotEqual(USHORT(VT_EMPTY), pv.vt,
