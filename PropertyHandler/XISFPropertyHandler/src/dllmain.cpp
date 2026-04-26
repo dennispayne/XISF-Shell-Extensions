@@ -131,12 +131,13 @@ STDAPI DllRegisterServer(void) {
         L"XISF.Pressure;XISF.SkyTemp;XISF.WindSpeed;"
         L"XISF.GuideRA;XISF.GuideDec;"
         L"XISF.ObjectRA;XISF.ObjectDec;"
-        L"XISF.DataState");
+        L"XISF.DataState;XISF.ColorSpace;XISF.SampleFormat;"
+        L"XISF.ImageWidth;XISF.ImageHeight;XISF.ChannelCount;XISF.ImageCount");
     if (FAILED(hr)) return SELFREG_E_CLASS;
     hr = SetRegSZValue(HKEY_CLASSES_ROOT, kProgID, L"PreviewDetails",
         L"prop:XISF.ObjectName;XISF.ExposureTime;XISF.FilterName;XISF.CameraModel;"
         L"XISF.Gain;XISF.SensorTemperature;XISF.Telescope;XISF.FocalLength;XISF.FNumber;"
-        L"XISF.Constellation;XISF.MatchedObjects;XISF.DataState");
+        L"XISF.Constellation;XISF.MatchedObjects;XISF.DataState;XISF.ColorSpace;XISF.SampleFormat");
     if (FAILED(hr)) return SELFREG_E_CLASS;
     hr = SetRegSZValue(HKEY_CLASSES_ROOT, kProgID, L"InfoTip",
         L"prop:System.ItemTypeText;System.Size;XISF.ObjectName;XISF.ExposureTime;XISF.FilterName;XISF.CameraModel;XISF.Constellation;XISF.MatchedObjects");
