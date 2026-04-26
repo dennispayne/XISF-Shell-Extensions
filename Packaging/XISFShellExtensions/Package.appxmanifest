@@ -70,8 +70,8 @@
               <uap:FileType>.xisf</uap:FileType>
             </uap:SupportedFileTypes>
             <desktop2:DesktopPropertyHandler Clsid="7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E" />
-            <desktop2:DesktopPreviewHandler Clsid="9C76E8AD-4E85-5F30-B00D-3C7D1AB5F6E0" />
-            <desktop2:ThumbnailHandler Clsid="AD87F6CE-5B03-6E41-C11E-4DB2AC06F5F1" />
+            <desktop2:DesktopPreviewHandler Clsid="AD87F6CE-5B03-6E41-C11E-4DB2AC06F5F1" />
+            <desktop2:ThumbnailHandler Clsid="9C76E8AD-4E85-5F30-B00D-3C7D1AB5F6E0" />
           </uap:FileTypeAssociation>
         </uap:Extension>
       </Extensions>
