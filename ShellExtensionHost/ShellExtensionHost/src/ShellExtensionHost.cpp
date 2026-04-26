@@ -126,6 +126,74 @@ void AddTooltips();
 void OnRegisterHandlers();
 INT_PTR CALLBACK AdvancedDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam);
 
+// --- Deferred-settings model ---
+// Changes are tracked here and only written to registry on Apply.
+struct PendingSettings {
+    bool origPropertyEnabled = true;
+    bool origPreviewEnabled = true;
+    hostsettings::FeatureTier origTier = hostsettings::FeatureTier::Full;
+    bool origProjection = true;
+
+    bool curPropertyEnabled = true;
+    bool curPreviewEnabled = true;
+    hostsettings::FeatureTier curTier = hostsettings::FeatureTier::Full;
+    bool curProjection = true;
+
+    void Snapshot() {
+        origPropertyEnabled = curPropertyEnabled = hostsettings::IsPropertyEnabled();
+        origPreviewEnabled  = curPreviewEnabled  = hostsettings::IsPreviewEnabled();
+        origTier            = curTier            = hostsettings::GetFeatureTier();
+        origProjection      = curProjection      = hostsettings::IsProjectionEnabled();
+    }
+
+    int DirtyCount() const {
+        int n = 0;
+        if (curPropertyEnabled != origPropertyEnabled) n++;
+        if (curPreviewEnabled  != origPreviewEnabled)  n++;
+        if (curTier            != origTier)            n++;
+        if (curProjection      != origProjection)      n++;
+        return n;
+    }
+
+    bool NeedsElevation() const { return false; }
+
+    void Apply() {
+        if (curPropertyEnabled != origPropertyEnabled) {
+            hostsettings::SetPropertyEnabled(curPropertyEnabled);
+            origPropertyEnabled = curPropertyEnabled;
+        }
+        if (curPreviewEnabled != origPreviewEnabled) {
+            hostsettings::SetPreviewEnabled(curPreviewEnabled);
+            origPreviewEnabled = curPreviewEnabled;
+        }
+        if (curTier != origTier) {
+            hostsettings::SetFeatureTier(curTier);
+            origTier = curTier;
+        }
+        if (curProjection != origProjection) {
+            hostsettings::SetProjectionEnabled(curProjection);
+            origProjection = curProjection;
+        }
+    }
+};
+
+PendingSettings g_pending;
+
+void UpdatePendingDisplay()
+{
+    int n = g_pending.DirtyCount();
+    if (n > 0) {
+        wchar_t buf[64];
+        swprintf_s(buf, L"%d change%s pending", n, n == 1 ? L"" : L"s");
+        SetDlgItemTextW(g_hDlg, IDC_STATIC_PENDING_TEXT, buf);
+    } else {
+        SetDlgItemTextW(g_hDlg, IDC_STATIC_PENDING_TEXT, L"");
+    }
+    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_APPLY), n > 0 ? TRUE : FALSE);
+    SendDlgItemMessageW(g_hDlg, IDC_BTN_APPLY, BCM_SETSHIELD, 0,
+                        g_pending.NeedsElevation() ? TRUE : FALSE);
+}
+
 void UpdateToggleButton(int btnId, bool enabled)
 {
     SetDlgItemTextW(g_hDlg, btnId, enabled ? L"Disable" : L"Enable");
@@ -490,9 +558,9 @@ void SetHandlerStatus(int iconId, int verId, const wchar_t* clsid, bool handlerE
 void RefreshHandlerStatuses()
 {
     SetHandlerStatus(IDC_STATIC_PROPERTY_STATUS, IDC_STATIC_PROPERTY_VER,
-        L"{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}", hostsettings::IsPropertyEnabled());
+        L"{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}", g_pending.curPropertyEnabled);
     SetHandlerStatus(IDC_STATIC_PREVIEW_STATUS, IDC_STATIC_PREVIEW_VER,
-        L"{9C76E8AD-4E85-5F30-B00D-3C7D1AB5F6E0}", hostsettings::IsPreviewEnabled());
+        L"{9C76E8AD-4E85-5F30-B00D-3C7D1AB5F6E0}", g_pending.curPreviewEnabled);
 }
 
 bool IsCatalogInstalled(const catalogspec::CatalogSource& src)
@@ -942,6 +1010,8 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_INITDIALOG: {
         g_hDlg = hDlg;
 
+        g_pending.Snapshot();
+
         std::wstring linkText = BuildCommitLinkText();
         SetDlgItemTextW(hDlg, IDC_LINK_OPENNGC_COMMIT, linkText.c_str());
         SendDlgItemMessageW(hDlg, IDC_BTN_ADVANCED, BCM_SETSHIELD, 0, TRUE);
@@ -949,8 +1019,8 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         SendDlgItemMessageW(hDlg, IDC_BTN_FLUSH_THUMBCACHE, BCM_SETSHIELD, 0, TRUE);
         SendDlgItemMessageW(hDlg, IDC_BTN_REGISTER_HANDLERS, BCM_SETSHIELD, 0, TRUE);
 
-        UpdateToggleButton(IDC_BTN_TOGGLE_PROPERTY, hostsettings::IsPropertyEnabled());
-        UpdateToggleButton(IDC_BTN_TOGGLE_PREVIEW, hostsettings::IsPreviewEnabled());
+        UpdateToggleButton(IDC_BTN_TOGGLE_PROPERTY, g_pending.curPropertyEnabled);
+        UpdateToggleButton(IDC_BTN_TOGGLE_PREVIEW, g_pending.curPreviewEnabled);
 
         // Feature tier combo box
         {
@@ -958,17 +1028,21 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Basic");
             SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Standard");
             SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Full");
-            auto tier = hostsettings::GetFeatureTier();
-            SendMessageW(hCombo, CB_SETCURSEL, static_cast<WPARAM>(tier), 0);
+            SendMessageW(hCombo, CB_SETCURSEL, static_cast<WPARAM>(g_pending.curTier), 0);
         }
 
         // Projection checkbox
         CheckDlgButton(hDlg, IDC_CHK_PROJECTION,
-                        hostsettings::IsProjectionEnabled() ? BST_CHECKED : BST_UNCHECKED);
+                        g_pending.curProjection ? BST_CHECKED : BST_UNCHECKED);
 
+        // Version link
         std::wstring ver = L"Version " XISF_VERSION_WSTR
-                           L"  \u2014  github.com/dennispayne/XISF-Shell-Extensions";
-        SetDlgItemTextW(hDlg, IDC_STATIC_VERSION, ver.c_str());
+                           L"  \u2014  <a href=\"https://github.com/dennispayne/XISF-Shell-Extensions\">"
+                           L"github.com/dennispayne/XISF-Shell-Extensions</a>";
+        SetDlgItemTextW(hDlg, IDC_LINK_VERSION, ver.c_str());
+
+        // Apply button starts disabled (no pending changes)
+        EnableWindow(GetDlgItem(hDlg, IDC_BTN_APPLY), FALSE);
 
         RefreshAllPresence();
         RefreshHandlerStatuses();
@@ -987,6 +1061,12 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         if (hdr && hdr->idFrom == IDC_LINK_HASH_HELP && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
             ShellExecuteW(hDlg, L"open", L"https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-git-commit-signature-verification", nullptr, nullptr, SW_SHOWNORMAL);
             SetProgressText(L"Open GitHub docs: independently verify file content and commit provenance.");
+            return TRUE;
+        }
+        if (hdr && hdr->idFrom == IDC_LINK_VERSION && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
+            ShellExecuteW(hDlg, L"open",
+                L"https://github.com/dennispayne/XISF-Shell-Extensions",
+                nullptr, nullptr, SW_SHOWNORMAL);
             return TRUE;
         }
         break;
@@ -1016,43 +1096,44 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         WORD code = HIWORD(wParam);
         switch (id) {
         case IDC_BTN_TOGGLE_PROPERTY: {
-            bool newState = !hostsettings::IsPropertyEnabled();
-            hostsettings::SetPropertyEnabled(newState);
-            UpdateToggleButton(IDC_BTN_TOGGLE_PROPERTY, newState);
+            g_pending.curPropertyEnabled = !g_pending.curPropertyEnabled;
+            UpdateToggleButton(IDC_BTN_TOGGLE_PROPERTY, g_pending.curPropertyEnabled);
             RefreshHandlerStatuses();
-            SetProgressText(newState
-                ? L"Property Handler enabled. Restart Explorer to apply."
-                : L"Property Handler disabled. Restart Explorer to apply.");
+            SetProgressText(g_pending.curPropertyEnabled
+                ? L"Property Handler will be enabled after Apply."
+                : L"Property Handler will be disabled after Apply.");
+            UpdatePendingDisplay();
             return TRUE;
         }
         case IDC_BTN_TOGGLE_PREVIEW: {
-            bool newState = !hostsettings::IsPreviewEnabled();
-            hostsettings::SetPreviewEnabled(newState);
-            UpdateToggleButton(IDC_BTN_TOGGLE_PREVIEW, newState);
+            g_pending.curPreviewEnabled = !g_pending.curPreviewEnabled;
+            UpdateToggleButton(IDC_BTN_TOGGLE_PREVIEW, g_pending.curPreviewEnabled);
             RefreshHandlerStatuses();
-            SetProgressText(newState
-                ? L"Preview Handler enabled. Restart Explorer to apply."
-                : L"Preview Handler disabled. Restart Explorer to apply.");
+            SetProgressText(g_pending.curPreviewEnabled
+                ? L"Preview Handler will be enabled after Apply."
+                : L"Preview Handler will be disabled after Apply.");
+            UpdatePendingDisplay();
             return TRUE;
         }
         case IDC_COMBO_FEATURE_TIER: {
             if (code == CBN_SELCHANGE) {
                 int sel = (int)SendDlgItemMessageW(hDlg, IDC_COMBO_FEATURE_TIER, CB_GETCURSEL, 0, 0);
                 if (sel >= 0 && sel <= 2) {
-                    hostsettings::SetFeatureTier(static_cast<hostsettings::FeatureTier>(sel));
+                    g_pending.curTier = static_cast<hostsettings::FeatureTier>(sel);
                     static const wchar_t* tierNames[] = { L"Basic", L"Standard", L"Full" };
-                    wchar_t buf[128]; swprintf_s(buf, L"Feature tier set to %s. Restart Explorer to apply.", tierNames[sel]);
+                    wchar_t buf[128]; swprintf_s(buf, L"Feature tier will be %s after Apply.", tierNames[sel]);
                     SetProgressText(buf);
+                    UpdatePendingDisplay();
                 }
             }
             return TRUE;
         }
         case IDC_CHK_PROJECTION: {
-            bool checked = (IsDlgButtonChecked(hDlg, IDC_CHK_PROJECTION) == BST_CHECKED);
-            hostsettings::SetProjectionEnabled(checked);
-            SetProgressText(checked
-                ? L"System.Photo projection enabled. Restart Explorer to apply."
-                : L"System.Photo projection disabled. Restart Explorer to apply.");
+            g_pending.curProjection = (IsDlgButtonChecked(hDlg, IDC_CHK_PROJECTION) == BST_CHECKED);
+            SetProgressText(g_pending.curProjection
+                ? L"System.Photo projection will be enabled after Apply."
+                : L"System.Photo projection will be disabled after Apply.");
+            UpdatePendingDisplay();
             return TRUE;
         }
         case IDC_BTN_SHOW_MAPPING: {
@@ -1098,6 +1179,15 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             CloseHandle(sei.hProcess);
             return TRUE;
         }
+        case IDC_BTN_APPLY: {
+            int n = g_pending.DirtyCount();
+            g_pending.Apply();
+            UpdatePendingDisplay();
+            wchar_t buf[128];
+            swprintf_s(buf, L"%d setting%s applied. Restart Explorer to take effect.", n, n == 1 ? L"" : L"s");
+            SetProgressText(buf);
+            return TRUE;
+        }
         case IDOK:
         case IDCANCEL:
             if (g_opInProgress.load()) {
@@ -1107,6 +1197,14 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
                     return TRUE;
                 g_cancelRequested = true;
                 Sleep(100);
+            }
+            if (g_pending.DirtyCount() > 0) {
+                int r = MessageBoxW(hDlg,
+                    L"You have unsaved changes. Apply them before closing?",
+                    L"XISF Shell Extensions",
+                    MB_YESNOCANCEL | MB_ICONQUESTION);
+                if (r == IDCANCEL) return TRUE;
+                if (r == IDYES) g_pending.Apply();
             }
             EndDialog(hDlg, 0);
             return TRUE;

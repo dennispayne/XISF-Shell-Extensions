@@ -70,6 +70,9 @@
 #define IDD_MAPPING                  103
 #define IDC_BTN_SHOW_TIERS           1084
 #define IDD_TIERS                    104
+#define IDC_BTN_APPLY                1085
+#define IDC_STATIC_PENDING_TEXT      1086
+#define IDC_LINK_VERSION             1087
 
 #define IDC_BTN_TOGGLE_FILTER        1050
 #define IDC_STATIC_FILTER_STATUS     1051
