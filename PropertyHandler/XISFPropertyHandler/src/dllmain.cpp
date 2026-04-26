@@ -116,26 +116,47 @@ STDAPI DllRegisterServer(void) {
 
     // FullDetails / PreviewDetails / InfoTip strings — shared across all ProgIDs
     // and SystemFileAssociations to ensure consistency regardless of resolution.
+    // Section order matches standard Windows image formats (JPEG/TIFF/PNG):
+    //   Description → Origin → Image → Camera → PhotoAdvanced → GPS → FileSystem
+    // Properties alphabetized within each section.
     static const wchar_t kFullDetails[] =
-        L"prop:System.PropGroup.FileSystem;System.ItemNameDisplay;System.ItemTypeText;"
-        L"System.ItemFolderPathDisplay;System.Size;System.DateCreated;System.DateModified;"
-        L"System.FileAttributes;"
-        L"System.PropGroup.Image;XISF.ExposureTime;XISF.CameraModel;XISF.FocalLength;XISF.FNumber;"
-        L"XISF.ObjectName;XISF.FilterName;XISF.ImageType;XISF.Gain;XISF.Offset;"
-        L"XISF.SensorTemperature;XISF.Telescope;XISF.Binning;XISF.DateObserved;XISF.Software;"
-        L"XISF.RA;XISF.Dec;XISF.RAHour;XISF.DecBand;XISF.Constellation;XISF.MatchedObjects;"
-        L"XISF.Airmass;XISF.PierSide;XISF.Rotation;"
-        L"XISF.SetTemp;XISF.PixelSize;XISF.ReadoutMode;XISF.BayerPattern;"
-        L"XISF.SiteLatitude;XISF.SiteLongitude;XISF.SiteElevation;XISF.Altitude;XISF.Azimuth;"
+        // — Description (target & celestial context) —
+        L"prop:System.PropGroup.Description;"
+        L"XISF.Constellation;XISF.Dec;XISF.DecBand;"
+        L"XISF.MatchedObjects;XISF.ObjectDec;XISF.ObjectName;XISF.ObjectRA;"
+        L"XISF.RA;XISF.RAHour;"
+        // — Origin (dates, software) —
+        L"System.PropGroup.Origin;"
+        L"XISF.DateLocal;XISF.DateObserved;XISF.Software;"
+        // — Image (image data & observation) —
+        L"System.PropGroup.Image;"
+        L"XISF.Airmass;XISF.Altitude;XISF.Azimuth;"
+        L"XISF.ChannelCount;XISF.ColorSpace;XISF.DataState;"
+        L"XISF.ExposureTime;XISF.FilterName;"
+        L"XISF.ImageCount;XISF.ImageHeight;XISF.ImageType;XISF.ImageWidth;"
+        L"XISF.PierSide;XISF.Rotation;XISF.SampleFormat;"
+        // — Camera (equipment & sensor) —
+        L"System.PropGroup.Camera;"
+        L"XISF.BayerPattern;XISF.Binning;XISF.CameraModel;"
+        L"XISF.FilterWheel;XISF.FNumber;XISF.FocalLength;"
         L"XISF.FocuserName;XISF.FocuserPosition;XISF.FocuserTemp;"
-        L"XISF.RotatorName;XISF.RotatorAngle;XISF.FilterWheel;"
-        L"XISF.DewPoint;XISF.Humidity;XISF.AmbientTemp;XISF.DateLocal;"
-        L"XISF.StarFWHM;XISF.SkyQuality;XISF.SkyBrightness;XISF.CloudCover;"
+        L"XISF.Gain;XISF.Offset;XISF.PixelSize;XISF.ReadoutMode;"
+        L"XISF.RotatorAngle;XISF.RotatorName;"
+        L"XISF.SensorTemperature;XISF.SetTemp;XISF.Telescope;"
+        // — PhotoAdvanced (guiding & quality) —
+        L"System.PropGroup.PhotoAdvanced;"
+        L"XISF.GuideDec;XISF.GuideRA;"
+        L"XISF.Median;XISF.Mean;XISF.ClippingLow;XISF.ClippingHigh;"
+        L"XISF.StarFWHM;XISF.SkyBrightness;XISF.SkyQuality;"
+        // — GPS (site location & weather) —
+        L"System.PropGroup.GPS;"
+        L"XISF.SiteElevation;XISF.SiteLatitude;XISF.SiteLongitude;"
+        L"XISF.AmbientTemp;XISF.CloudCover;XISF.DewPoint;XISF.Humidity;"
         L"XISF.Pressure;XISF.SkyTemp;XISF.WindSpeed;"
-        L"XISF.GuideRA;XISF.GuideDec;"
-        L"XISF.ObjectRA;XISF.ObjectDec;"
-        L"XISF.DataState;XISF.ColorSpace;XISF.SampleFormat;"
-        L"XISF.ImageWidth;XISF.ImageHeight;XISF.ChannelCount;XISF.ImageCount";
+        // — File System —
+        L"System.PropGroup.FileSystem;"
+        L"System.ItemNameDisplay;System.ItemType;System.ItemFolderPathDisplay;"
+        L"System.DateCreated;System.DateModified;System.Size;System.FileAttributes";
     static const wchar_t kPreviewDetails[] =
         L"prop:XISF.ObjectName;XISF.ExposureTime;XISF.FilterName;XISF.CameraModel;"
         L"XISF.Gain;XISF.SensorTemperature;XISF.Telescope;XISF.FocalLength;XISF.FNumber;"
