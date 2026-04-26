@@ -87,6 +87,8 @@ BEGIN
     LTEXT           "",                 IDC_STATIC_PROGRESS_TEXT, 20, 334, 340, 14
     RTEXT           "",                 IDC_STATIC_PENDING_TEXT, 370, 334, 110, 14
 
+    CONTROL         "", IDC_LINK_VERSION, WC_LINK,
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 10, 380, 155, 12
     AUTOCHECKBOX    "Restart Explorer",
                     IDC_CHK_RESTART_EXPLORER,   170, 380, 80, 10
     PUSHBUTTON      "Advanced",
@@ -94,8 +96,6 @@ BEGIN
     PUSHBUTTON      "Apply",
                     IDC_BTN_APPLY,          356, 378, 60, 14
     DEFPUSHBUTTON   "Close",            IDOK,               422, 378,  60, 14
-    CONTROL         "", IDC_LINK_VERSION, WC_LINK,
-                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 10, 380, 270, 12
 END
 
 IDD_ADVANCED DIALOGEX 0, 0, 360, 246
