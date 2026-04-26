@@ -87,6 +87,8 @@ BEGIN
     LTEXT           "",                 IDC_STATIC_PROGRESS_TEXT, 20, 334, 340, 14
     RTEXT           "",                 IDC_STATIC_PENDING_TEXT, 370, 334, 110, 14
 
+    AUTOCHECKBOX    "Restart Explorer",
+                    IDC_CHK_RESTART_EXPLORER,   170, 380, 80, 10
     PUSHBUTTON      "Advanced",
                     IDC_BTN_ADVANCED,       290, 378, 60, 14
     PUSHBUTTON      "Apply",

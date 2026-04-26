@@ -155,7 +155,9 @@ struct PendingSettings {
         return n;
     }
 
-    bool NeedsElevation() const { return false; }
+    bool NeedsElevation() const {
+        return g_hDlg && (IsDlgButtonChecked(g_hDlg, IDC_CHK_RESTART_EXPLORER) == BST_CHECKED);
+    }
 
     void Apply() {
         if (curPropertyEnabled != origPropertyEnabled) {
@@ -182,6 +184,7 @@ PendingSettings g_pending;
 void UpdatePendingDisplay()
 {
     int n = g_pending.DirtyCount();
+    bool restart = g_hDlg && (IsDlgButtonChecked(g_hDlg, IDC_CHK_RESTART_EXPLORER) == BST_CHECKED);
     if (n > 0) {
         wchar_t buf[64];
         swprintf_s(buf, L"%d change%s pending", n, n == 1 ? L"" : L"s");
@@ -189,9 +192,9 @@ void UpdatePendingDisplay()
     } else {
         SetDlgItemTextW(g_hDlg, IDC_STATIC_PENDING_TEXT, L"");
     }
-    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_APPLY), n > 0 ? TRUE : FALSE);
+    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_APPLY), (n > 0 || restart) ? TRUE : FALSE);
     SendDlgItemMessageW(g_hDlg, IDC_BTN_APPLY, BCM_SETSHIELD, 0,
-                        g_pending.NeedsElevation() ? TRUE : FALSE);
+                        restart ? TRUE : FALSE);
 }
 
 void UpdateToggleButton(int btnId, bool enabled)
@@ -1136,6 +1139,10 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             UpdatePendingDisplay();
             return TRUE;
         }
+        case IDC_CHK_RESTART_EXPLORER: {
+            UpdatePendingDisplay();
+            return TRUE;
+        }
         case IDC_BTN_SHOW_MAPPING: {
             DialogBoxParamW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDD_MAPPING), hDlg,
                 [](HWND hDlg, UINT msg, WPARAM wParam, LPARAM) -> INT_PTR {
@@ -1182,10 +1189,22 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         case IDC_BTN_APPLY: {
             int n = g_pending.DirtyCount();
             g_pending.Apply();
+            bool restart = (IsDlgButtonChecked(hDlg, IDC_CHK_RESTART_EXPLORER) == BST_CHECKED);
+            if (restart) {
+                CheckDlgButton(hDlg, IDC_CHK_RESTART_EXPLORER, BST_UNCHECKED);
+            }
             UpdatePendingDisplay();
             wchar_t buf[128];
-            swprintf_s(buf, L"%d setting%s applied. Restart Explorer to take effect.", n, n == 1 ? L"" : L"s");
+            swprintf_s(buf, L"%d setting%s applied.%s", n, n == 1 ? L"" : L"s",
+                       restart ? L" Restarting Explorer\u2026" : L" Restart Explorer to take effect.");
             SetProgressText(buf);
+            if (restart) {
+                static constexpr wchar_t kRestartArgs[] =
+                    L"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "
+                    L"\"Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue; "
+                    L"Start-Sleep -Milliseconds 500; Start-Process explorer.exe\"";
+                ShellExecuteW(hDlg, L"runas", L"powershell.exe", kRestartArgs, nullptr, SW_HIDE);
+            }
             return TRUE;
         }
         case IDOK:
