@@ -113,7 +113,10 @@ STDAPI DllRegisterServer(void) {
     if (FAILED(hr)) return SELFREG_E_CLASS;
     hr = SetRegSZValue(HKEY_CLASSES_ROOT, kProgID, nullptr, L"XISF Image File");
     if (FAILED(hr)) return SELFREG_E_CLASS;
-    hr = SetRegSZValue(HKEY_CLASSES_ROOT, kProgID, L"FullDetails",
+
+    // FullDetails / PreviewDetails / InfoTip strings — shared across all ProgIDs
+    // and SystemFileAssociations to ensure consistency regardless of resolution.
+    static const wchar_t kFullDetails[] =
         L"prop:System.PropGroup.FileSystem;System.ItemNameDisplay;System.ItemTypeText;"
         L"System.ItemFolderPathDisplay;System.Size;System.DateCreated;System.DateModified;"
         L"System.FileAttributes;"
@@ -132,16 +135,47 @@ STDAPI DllRegisterServer(void) {
         L"XISF.GuideRA;XISF.GuideDec;"
         L"XISF.ObjectRA;XISF.ObjectDec;"
         L"XISF.DataState;XISF.ColorSpace;XISF.SampleFormat;"
-        L"XISF.ImageWidth;XISF.ImageHeight;XISF.ChannelCount;XISF.ImageCount");
-    if (FAILED(hr)) return SELFREG_E_CLASS;
-    hr = SetRegSZValue(HKEY_CLASSES_ROOT, kProgID, L"PreviewDetails",
+        L"XISF.ImageWidth;XISF.ImageHeight;XISF.ChannelCount;XISF.ImageCount";
+    static const wchar_t kPreviewDetails[] =
         L"prop:XISF.ObjectName;XISF.ExposureTime;XISF.FilterName;XISF.CameraModel;"
         L"XISF.Gain;XISF.SensorTemperature;XISF.Telescope;XISF.FocalLength;XISF.FNumber;"
-        L"XISF.Constellation;XISF.MatchedObjects;XISF.DataState;XISF.ColorSpace;XISF.SampleFormat");
+        L"XISF.Constellation;XISF.MatchedObjects;XISF.DataState;XISF.ColorSpace;XISF.SampleFormat";
+    static const wchar_t kInfoTipStr[] =
+        L"prop:System.ItemTypeText;System.Size;XISF.ObjectName;XISF.ExposureTime;XISF.FilterName;"
+        L"XISF.CameraModel;XISF.Constellation;XISF.MatchedObjects";
+
+    hr = SetRegSZValue(HKEY_CLASSES_ROOT, kProgID, L"FullDetails", kFullDetails);
     if (FAILED(hr)) return SELFREG_E_CLASS;
-    hr = SetRegSZValue(HKEY_CLASSES_ROOT, kProgID, L"InfoTip",
-        L"prop:System.ItemTypeText;System.Size;XISF.ObjectName;XISF.ExposureTime;XISF.FilterName;XISF.CameraModel;XISF.Constellation;XISF.MatchedObjects");
+    hr = SetRegSZValue(HKEY_CLASSES_ROOT, kProgID, L"PreviewDetails", kPreviewDetails);
     if (FAILED(hr)) return SELFREG_E_CLASS;
+    hr = SetRegSZValue(HKEY_CLASSES_ROOT, kProgID, L"InfoTip", kInfoTipStr);
+    if (FAILED(hr)) return SELFREG_E_CLASS;
+
+    // SystemFileAssociations — reliable path that works regardless of which ProgID
+    // Explorer resolves (e.g. XISFFile vs Pleiades Astrophoto.PixInsight.xisf)
+    static const wchar_t kSFA[] = L"SystemFileAssociations\\.xisf";
+    hr = SetRegSZValue(HKEY_CLASSES_ROOT, kSFA, L"FullDetails", kFullDetails);
+    if (FAILED(hr)) return SELFREG_E_CLASS;
+    hr = SetRegSZValue(HKEY_CLASSES_ROOT, kSFA, L"PreviewDetails", kPreviewDetails);
+    if (FAILED(hr)) return SELFREG_E_CLASS;
+    hr = SetRegSZValue(HKEY_CLASSES_ROOT, kSFA, L"InfoTip", kInfoTipStr);
+    if (FAILED(hr)) return SELFREG_E_CLASS;
+
+    // Also update PixInsight's ProgID if it exists
+    {
+        HKEY hTest = nullptr;
+        if (RegOpenKeyExW(HKEY_CLASSES_ROOT, L"Pleiades Astrophoto.PixInsight.xisf",
+                          0, KEY_READ, &hTest) == ERROR_SUCCESS) {
+            RegCloseKey(hTest);
+            SetRegSZValue(HKEY_CLASSES_ROOT, L"Pleiades Astrophoto.PixInsight.xisf",
+                          L"FullDetails", kFullDetails);
+            SetRegSZValue(HKEY_CLASSES_ROOT, L"Pleiades Astrophoto.PixInsight.xisf",
+                          L"PreviewDetails", kPreviewDetails);
+            SetRegSZValue(HKEY_CLASSES_ROOT, L"Pleiades Astrophoto.PixInsight.xisf",
+                          L"InfoTip", kInfoTipStr);
+        }
+    }
+
     // Register property description schema (propdesc next to DLL)
     {
         wchar_t szPropdesc[MAX_PATH] = {};
