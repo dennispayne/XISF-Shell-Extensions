@@ -68,6 +68,8 @@
 #define IDC_CHK_PROJECTION           1082
 #define IDC_BTN_SHOW_MAPPING         1083
 #define IDD_MAPPING                  103
+#define IDC_BTN_SHOW_TIERS           1084
+#define IDD_TIERS                    104
 
 #define IDC_BTN_TOGGLE_FILTER        1050
 #define IDC_STATIC_FILTER_STATUS     1051

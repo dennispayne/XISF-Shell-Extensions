@@ -955,9 +955,9 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         // Feature tier combo box
         {
             HWND hCombo = GetDlgItem(hDlg, IDC_COMBO_FEATURE_TIER);
-            SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Basic — Metadata only");
-            SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Standard — + Constellation, RA/Dec bands");
-            SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Full — + DSO search, pixel stats (default)");
+            SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Basic");
+            SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Standard");
+            SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Full");
             auto tier = hostsettings::GetFeatureTier();
             SendMessageW(hCombo, CB_SETCURSEL, static_cast<WPARAM>(tier), 0);
         }
@@ -1057,6 +1057,15 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         }
         case IDC_BTN_SHOW_MAPPING: {
             DialogBoxParamW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDD_MAPPING), hDlg,
+                [](HWND hDlg, UINT msg, WPARAM wParam, LPARAM) -> INT_PTR {
+                    if (msg == WM_COMMAND && LOWORD(wParam) == IDOK) { EndDialog(hDlg, IDOK); return TRUE; }
+                    if (msg == WM_CLOSE) { EndDialog(hDlg, IDCANCEL); return TRUE; }
+                    return FALSE;
+                }, 0);
+            return TRUE;
+        }
+        case IDC_BTN_SHOW_TIERS: {
+            DialogBoxParamW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDD_TIERS), hDlg,
                 [](HWND hDlg, UINT msg, WPARAM wParam, LPARAM) -> INT_PTR {
                     if (msg == WM_COMMAND && LOWORD(wParam) == IDOK) { EndDialog(hDlg, IDOK); return TRUE; }
                     if (msg == WM_CLOSE) { EndDialog(hDlg, IDCANCEL); return TRUE; }
