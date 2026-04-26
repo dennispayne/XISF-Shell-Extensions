@@ -952,6 +952,20 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         UpdateToggleButton(IDC_BTN_TOGGLE_PROPERTY, hostsettings::IsPropertyEnabled());
         UpdateToggleButton(IDC_BTN_TOGGLE_PREVIEW, hostsettings::IsPreviewEnabled());
 
+        // Feature tier combo box
+        {
+            HWND hCombo = GetDlgItem(hDlg, IDC_COMBO_FEATURE_TIER);
+            SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Basic — Metadata only");
+            SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Standard — + Constellation, RA/Dec bands");
+            SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Full — + DSO search, pixel stats (default)");
+            auto tier = hostsettings::GetFeatureTier();
+            SendMessageW(hCombo, CB_SETCURSEL, static_cast<WPARAM>(tier), 0);
+        }
+
+        // Projection checkbox
+        CheckDlgButton(hDlg, IDC_CHK_PROJECTION,
+                        hostsettings::IsProjectionEnabled() ? BST_CHECKED : BST_UNCHECKED);
+
         std::wstring ver = L"Version " XISF_VERSION_WSTR
                            L"  \u2014  github.com/dennispayne/XISF-Shell-Extensions";
         SetDlgItemTextW(hDlg, IDC_STATIC_VERSION, ver.c_str());
@@ -1019,6 +1033,35 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             SetProgressText(newState
                 ? L"Preview Handler enabled. Restart Explorer to apply."
                 : L"Preview Handler disabled. Restart Explorer to apply.");
+            return TRUE;
+        }
+        case IDC_COMBO_FEATURE_TIER: {
+            if (code == CBN_SELCHANGE) {
+                int sel = (int)SendDlgItemMessageW(hDlg, IDC_COMBO_FEATURE_TIER, CB_GETCURSEL, 0, 0);
+                if (sel >= 0 && sel <= 2) {
+                    hostsettings::SetFeatureTier(static_cast<hostsettings::FeatureTier>(sel));
+                    static const wchar_t* tierNames[] = { L"Basic", L"Standard", L"Full" };
+                    wchar_t buf[128]; swprintf_s(buf, L"Feature tier set to %s. Restart Explorer to apply.", tierNames[sel]);
+                    SetProgressText(buf);
+                }
+            }
+            return TRUE;
+        }
+        case IDC_CHK_PROJECTION: {
+            bool checked = (IsDlgButtonChecked(hDlg, IDC_CHK_PROJECTION) == BST_CHECKED);
+            hostsettings::SetProjectionEnabled(checked);
+            SetProgressText(checked
+                ? L"System.Photo projection enabled. Restart Explorer to apply."
+                : L"System.Photo projection disabled. Restart Explorer to apply.");
+            return TRUE;
+        }
+        case IDC_BTN_SHOW_MAPPING: {
+            DialogBoxParamW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDD_MAPPING), hDlg,
+                [](HWND hDlg, UINT msg, WPARAM wParam, LPARAM) -> INT_PTR {
+                    if (msg == WM_COMMAND && LOWORD(wParam) == IDOK) { EndDialog(hDlg, IDOK); return TRUE; }
+                    if (msg == WM_CLOSE) { EndDialog(hDlg, IDCANCEL); return TRUE; }
+                    return FALSE;
+                }, 0);
             return TRUE;
         }
         case IDC_BTN_REGISTER_HANDLERS:    OnRegisterHandlers();      return TRUE;

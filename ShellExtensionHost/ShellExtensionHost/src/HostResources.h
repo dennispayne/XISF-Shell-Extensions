@@ -61,3 +61,22 @@
 #define IDC_CHK_TRACE_PREV_WARN      1076
 #define IDC_CHK_TRACE_PREV_INFO      1077
 #define IDC_CHK_TRACE_PREV_VERBOSE   1078
+
+// Feature tier & projection
+#define IDC_COMBO_FEATURE_TIER       1080
+#define IDC_STATIC_TIER_LABEL        1081
+#define IDC_CHK_PROJECTION           1082
+#define IDC_BTN_SHOW_MAPPING         1083
+#define IDD_MAPPING                  103
+
+#define IDC_BTN_TOGGLE_FILTER        1050
+#define IDC_STATIC_FILTER_STATUS     1051
+#define IDC_STATIC_FILTER_VER        1052
+
+#define IDC_STATIC_SHP_LABEL         1028
+#define IDC_STATIC_SHP_GITHUB        1029
+
+#define IDC_BTN_FETCH_SHP            1053
+#define IDC_BTN_REMOVE_SHP           1054
+#define IDC_STATIC_SHP_LOCAL         1055
+#define IDC_STATIC_SHP_MATCH         1056

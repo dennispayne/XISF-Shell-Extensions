@@ -86,6 +86,8 @@
     <ClCompile Include="XISFPropertyHandlerTests.cpp" />
     <ClCompile Include="..\XISFPropertyHandler\src\XISFParser.cpp" />
     <ClCompile Include="..\XISFPropertyHandler\src\DSOAliasDB.cpp" />
+    <ClCompile Include="..\XISFPropertyHandler\src\ComputedProperties.cpp" />
+    <ClCompile Include="..\XISFPropertyHandler\src\PixelStatistics.cpp" />
     <ClCompile Include="..\XISFPropertyHandler\src\PropertyStore.cpp" />
     <ClCompile Include="..\XISFPropertyHandler\src\DSOCatalog.cpp" />
     <ClCompile Include="..\XISFPropertyHandler\src\ConstellationDB.cpp" />
