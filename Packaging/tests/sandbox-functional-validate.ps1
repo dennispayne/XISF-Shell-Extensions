@@ -134,17 +134,19 @@ function Get-ShellProperties {
                     }
                 }
 
-                # Query known Astro.* properties by canonical name
-                $astroProps = @(
-                    'Astro.Object', 'Astro.ExposureTime', 'Astro.CameraModel',
-                    'Astro.Filter', 'Astro.Gain', 'Astro.Offset', 'Astro.SensorTemp',
-                    'Astro.RA', 'Astro.Dec', 'Astro.Telescope', 'Astro.FocalLength',
-                    'Astro.SiteLat', 'Astro.SiteLong', 'Astro.DateObs', 'Astro.Airmass',
-                    'Astro.Binning', 'Astro.Constellation', 'Astro.DataState',
+                # Query known XISF.* and System.* properties by canonical name
+                $xisfProps = @(
+                    'XISF.ObjectName', 'XISF.ExposureTime', 'XISF.CameraModel',
+                    'XISF.FilterName', 'XISF.Gain', 'XISF.Offset', 'XISF.SensorTemperature',
+                    'XISF.RA', 'XISF.Dec', 'XISF.Telescope', 'XISF.FocalLength',
+                    'XISF.SiteLatitude', 'XISF.SiteLongitude', 'XISF.DateObserved',
+                    'XISF.Airmass', 'XISF.Binning', 'XISF.Constellation', 'XISF.DataState',
+                    'XISF.ImageWidth', 'XISF.ImageHeight', 'XISF.SampleFormat',
+                    'XISF.SetTemp', 'XISF.ObjectRA', 'XISF.ObjectDec',
                     'System.Photo.CameraModel', 'System.Photo.ExposureTime',
-                    'System.Keywords', 'System.Title'
+                    'System.Photo.FocalLength', 'System.Keywords', 'System.Title'
                 )
-                foreach ($propName in $astroProps) {
+                foreach ($propName in $xisfProps) {
                     try {
                         $val = $item.ExtendedProperty($propName)
                         if ($null -ne $val -and "$val" -ne '') {
@@ -588,14 +590,14 @@ try {
 
     # ---------------------------------------------------------------
     # 4b. Validate property VALUES via canonical property names
-    # Uses the Astro.* canonical names registered in our propdesc schema.
+    # Uses the XISF.* canonical names registered in our propdesc schema.
     # This avoids false positives from regex substring matching.
     # ---------------------------------------------------------------
     $canonicalChecks = @{
-        'OBJECT'   = @{ Names = @('Astro.Object', 'XISF.ObjectName');     Expected = 'IC 1396' }
-        'EXPTIME'  = @{ Names = @('Astro.ExposureTime', 'XISF.ExposureTime'); Expected = '300' }
-        'INSTRUME' = @{ Names = @('Astro.CameraModel', 'XISF.Instrument'); Expected = 'ZWO ASI2600MM Pro' }
-        'FILTER'   = @{ Names = @('Astro.Filter', 'XISF.FilterName');     Expected = 'Ha' }
+        'OBJECT'   = @{ Names = @('XISF.ObjectName');     Expected = 'IC 1396' }
+        'EXPTIME'  = @{ Names = @('XISF.ExposureTime');   Expected = '300' }
+        'INSTRUME' = @{ Names = @('XISF.CameraModel');    Expected = 'ZWO ASI2600MM Pro' }
+        'FILTER'   = @{ Names = @('XISF.FilterName');     Expected = 'Ha' }
     }
 
     $discoveredProps = @{}
