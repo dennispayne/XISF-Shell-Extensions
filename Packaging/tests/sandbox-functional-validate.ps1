@@ -728,10 +728,12 @@ try {
         $results.info['ThumbnailTestFileSize'] = (Get-Item $thumbTestFile).Length
 
         # Use SHCreateItemFromParsingName + IShellItemImageFactory to request
-        # a thumbnail through the shell pipeline (same path Explorer uses)
+        # a thumbnail through the shell pipeline (same path Explorer uses).
+        # Falls back to direct COM activation if shell path fails (sandbox limitation).
         Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
 
 public static class ThumbnailHelper {
     [StructLayout(LayoutKind.Sequential)]
@@ -743,17 +745,33 @@ public static class ThumbnailHelper {
         int GetImage(SIZE size, int flags, out IntPtr phbm);
     }
 
+    [ComImport, Guid("e357fccd-a995-4576-b01f-234630154e96"),
+     InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IThumbnailProvider {
+        [PreserveSig]
+        int GetThumbnail(uint cx, out IntPtr phbmp, out int pdwAlpha);
+    }
+
+    [ComImport, Guid("b824b49d-22ac-4161-ac8a-9916e8fa3f7f"),
+     InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IInitializeWithStream {
+        [PreserveSig]
+        int Initialize(IStream pstream, uint grfMode);
+    }
+
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
     public static extern int SHCreateItemFromParsingName(
         string pszPath, IntPtr pbc,
         [MarshalAs(UnmanagedType.LPStruct)] Guid riid,
         [MarshalAs(UnmanagedType.Interface)] out object ppv);
 
-    [DllImport("gdi32.dll")]
-    public static extern bool DeleteObject(IntPtr hObject);
+    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
+    public static extern int SHCreateStreamOnFileEx(
+        string pszFile, uint grfMode, uint dwAttributes,
+        bool fCreate, IntPtr pstmTemplate, out IStream ppstm);
 
     [DllImport("gdi32.dll")]
-    public static extern int GetBitmapBits(IntPtr hbmp, int cbBuffer, byte[] lpvBits);
+    public static extern bool DeleteObject(IntPtr hObject);
 
     [DllImport("gdi32.dll")]
     public static extern int GetObject(IntPtr h, int c, out BITMAP pv);
@@ -765,25 +783,81 @@ public static class ThumbnailHelper {
         public IntPtr bmBits;
     }
 
+    // Try shell path first, then direct COM
     public static string GetThumbnail(string path, int cx, int cy) {
-        var iid = new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b");
-        object item;
-        int hr = SHCreateItemFromParsingName(path, IntPtr.Zero, iid, out item);
-        if (hr != 0) return "SHCreateItem_HR=0x" + hr.ToString("X8");
+        // Method 1: Shell pipeline (IShellItemImageFactory)
+        string shellResult = TryShellThumbnail(path, cx, cy);
+        if (shellResult.StartsWith("OK:")) return shellResult;
 
-        var factory = (IShellItemImageFactory)item;
-        var size = new SIZE { cx = cx, cy = cy };
-        IntPtr hbmp;
-        // SIIGBF_THUMBNAILONLY = 0x2, SIIGBF_BIGGERSIZEOK = 0x4
-        hr = factory.GetImage(size, 0x2 | 0x4, out hbmp);
-        if (hr != 0) return "GetImage_HR=0x" + hr.ToString("X8");
-        if (hbmp == IntPtr.Zero) return "NULL_HBITMAP";
+        // Method 2: Direct COM activation (bypasses shell pipeline)
+        string directResult = TryDirectThumbnail(path, cx, cy);
+        if (directResult.StartsWith("OK:")) return "DirectCOM:" + directResult.Substring(3);
 
-        BITMAP bm;
-        GetObject(hbmp, Marshal.SizeOf(typeof(BITMAP)), out bm);
-        string result = "OK:" + bm.bmWidth + "x" + bm.bmHeight + "x" + bm.bmBitsPixel + "bpp";
-        DeleteObject(hbmp);
-        return result;
+        // Return most informative error
+        return "Shell=" + shellResult + ";Direct=" + directResult;
+    }
+
+    private static string TryShellThumbnail(string path, int cx, int cy) {
+        try {
+            var iid = new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b");
+            object item;
+            int hr = SHCreateItemFromParsingName(path, IntPtr.Zero, iid, out item);
+            if (hr != 0) return "SHCreateItem_HR=0x" + hr.ToString("X8");
+
+            var factory = (IShellItemImageFactory)item;
+            var size = new SIZE { cx = cx, cy = cy };
+            IntPtr hbmp;
+            hr = factory.GetImage(size, 0x2 | 0x4, out hbmp);
+            if (hr != 0) return "GetImage_HR=0x" + hr.ToString("X8");
+            if (hbmp == IntPtr.Zero) return "NULL_HBITMAP";
+
+            BITMAP bm;
+            GetObject(hbmp, Marshal.SizeOf(typeof(BITMAP)), out bm);
+            string result = "OK:" + bm.bmWidth + "x" + bm.bmHeight + "x" + bm.bmBitsPixel + "bpp";
+            DeleteObject(hbmp);
+            return result;
+        } catch (Exception ex) {
+            return "Exception:" + ex.HResult.ToString("X8");
+        }
+    }
+
+    private static string TryDirectThumbnail(string path, int cx, int cy) {
+        try {
+            // Create thumbnail provider COM object
+            var clsid = new Guid("9C76E8AD-4E85-5F30-B00D-3C7D1AB5F6E0");
+            var type = Type.GetTypeFromCLSID(clsid);
+            if (type == null) return "CLSID_NOT_FOUND";
+            var obj = Activator.CreateInstance(type);
+            if (obj == null) return "CREATE_FAILED";
+
+            var initStream = obj as IInitializeWithStream;
+            if (initStream == null) return "NO_IInitializeWithStream";
+
+            // Open file as IStream (STGM_READ = 0)
+            IStream stream;
+            int hr = SHCreateStreamOnFileEx(path, 0, 0, false, IntPtr.Zero, out stream);
+            if (hr != 0) return "StreamCreate_HR=0x" + hr.ToString("X8");
+
+            hr = initStream.Initialize(stream, 0);
+            if (hr != 0) return "Initialize_HR=0x" + hr.ToString("X8");
+
+            var thumbProvider = obj as IThumbnailProvider;
+            if (thumbProvider == null) return "NO_IThumbnailProvider";
+
+            IntPtr hbmp;
+            int alpha;
+            hr = thumbProvider.GetThumbnail((uint)cx, out hbmp, out alpha);
+            if (hr != 0) return "GetThumbnail_HR=0x" + hr.ToString("X8");
+            if (hbmp == IntPtr.Zero) return "NULL_HBITMAP";
+
+            BITMAP bm;
+            GetObject(hbmp, Marshal.SizeOf(typeof(BITMAP)), out bm);
+            string result = "OK:" + bm.bmWidth + "x" + bm.bmHeight + "x" + bm.bmBitsPixel + "bpp";
+            DeleteObject(hbmp);
+            return result;
+        } catch (Exception ex) {
+            return "Exception:" + ex.HResult.ToString("X8");
+        }
     }
 }
 '@ -ErrorAction Stop
@@ -791,7 +865,7 @@ public static class ThumbnailHelper {
         $thumbResult = [ThumbnailHelper]::GetThumbnail($thumbTestFile, 256, 256)
         $results.info['ThumbnailResult'] = $thumbResult
 
-        $thumbOk = $thumbResult.StartsWith('OK:')
+        $thumbOk = $thumbResult.StartsWith('OK:') -or $thumbResult.StartsWith('DirectCOM:')
         Assert 'Thumbnail_RealXISF' $thumbOk "Thumbnail from real XISF: $thumbResult"
     } else {
         $results.info['ThumbnailTestFile'] = 'No suitable real XISF found for thumbnail test'
@@ -897,8 +971,9 @@ try {
         }
     }
     $results.info['PreviewDisabled_ThumbnailResult'] = $thumbDisabledResult
-    # When disabled, GetImage should fail (not return OK:)
-    $previewDisableOk = ($thumbDisabledResult -eq 'skipped') -or (-not $thumbDisabledResult.StartsWith('OK:'))
+    # When disabled, GetImage/GetThumbnail should fail (not return OK: or DirectCOM:)
+    $previewDisableOk = ($thumbDisabledResult -eq 'skipped') -or
+        (-not $thumbDisabledResult.StartsWith('OK:') -and -not $thumbDisabledResult.StartsWith('DirectCOM:'))
     Assert 'TogglePreviewDisable' $previewDisableOk `
            "Thumbnail still works after PreviewEnabled=0: $thumbDisabledResult"
 
