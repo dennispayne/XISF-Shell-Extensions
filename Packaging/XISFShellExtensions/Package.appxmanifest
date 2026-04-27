@@ -21,7 +21,8 @@
     xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
     xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
     xmlns:desktop2="http://schemas.microsoft.com/appx/manifest/desktop/windows10/2"
-    IgnorableNamespaces="uap rescap com desktop desktop2">
+    xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
+    IgnorableNamespaces="uap rescap com desktop desktop2 desktop6">
 
   <Identity
       Name="DennisPayne.XISF.ShellExtension"
@@ -33,6 +34,7 @@
     <DisplayName>XISF Shell Extension</DisplayName>
     <PublisherDisplayName>Dennis Payne</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
+    <desktop6:RegistryWriteVirtualization>disabled</desktop6:RegistryWriteVirtualization>
   </Properties>
 
   <Dependencies>
@@ -92,5 +94,6 @@
 
   <Capabilities>
     <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="unvirtualizedResources" />
   </Capabilities>
 </Package>

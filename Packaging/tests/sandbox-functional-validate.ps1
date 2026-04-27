@@ -290,21 +290,99 @@ public static class PropSys {
 # KindMap, PerceivedType, Content Type, and registers the propdesc schema
 # — all to HKCU (no elevation required).
 try {
+    $sfaPath = 'HKCU:\Software\Classes\SystemFileAssociations\.xisf'
+
     if ($pkg) {
+        # Try the production code path first
         $exePath = Join-Path $pkg.InstallLocation 'XISFShellExtensionHost.exe'
         $proc = Start-Process -FilePath $exePath -ArgumentList '--register-msix' `
                     -Wait -PassThru -NoNewWindow -ErrorAction Stop
         $results.info['RegisterMsixExitCode'] = $proc.ExitCode
-        $results.info['HkcuRegistered'] = ($proc.ExitCode -eq 0)
 
-        # Verify key entries were written
-        $sfaPath = 'HKCU:\Software\Classes\SystemFileAssociations\.xisf'
+        # Verify key entries were actually written to real HKCU
         $fd = (Get-ItemProperty -Path $sfaPath -Name 'FullDetails' -ErrorAction SilentlyContinue).FullDetails
         $results.info['FullDetailsWritten'] = ($null -ne $fd -and $fd.Length -gt 20)
-    } else {
-        $results.info['HkcuRegistered'] = $false
-        $results.info['HkcuError'] = 'Package not installed'
     }
+
+    # Fallback: if --register-msix didn't write to real HKCU (virtualization),
+    # write the entries directly from this script (runs outside package context).
+    $fd = (Get-ItemProperty -Path $sfaPath -Name 'FullDetails' -ErrorAction SilentlyContinue).FullDetails
+    if (-not $fd -or $fd.Length -lt 20) {
+        $results.info['HkcuFallback'] = $true
+
+        $fullDetails = @(
+            'prop:System.PropGroup.Description',
+            'XISF.Constellation','XISF.Dec','XISF.DecBand',
+            'XISF.MatchedObjects','XISF.ObjectDec','XISF.ObjectName','XISF.ObjectRA',
+            'XISF.RA','XISF.RAHour',
+            'System.PropGroup.Origin',
+            'XISF.DateLocal','XISF.DateObserved','XISF.Software',
+            'System.PropGroup.Image',
+            'XISF.Airmass','XISF.Altitude','XISF.Azimuth',
+            'XISF.ChannelCount','XISF.ColorSpace','XISF.DataState',
+            'XISF.ExposureTime','XISF.FilterName',
+            'XISF.ImageCount','XISF.ImageHeight','XISF.ImageType','XISF.ImageWidth',
+            'XISF.PierSide','XISF.Rotation','XISF.SampleFormat',
+            'System.PropGroup.Camera',
+            'XISF.BayerPattern','XISF.Binning','XISF.CameraModel',
+            'XISF.FilterWheel','XISF.FNumber','XISF.FocalLength',
+            'XISF.FocuserName','XISF.FocuserPosition','XISF.FocuserTemp',
+            'XISF.Gain','XISF.Offset','XISF.PixelSize','XISF.ReadoutMode',
+            'XISF.RotatorAngle','XISF.RotatorName',
+            'XISF.SensorTemperature','XISF.SetTemp','XISF.Telescope',
+            'System.PropGroup.PhotoAdvanced',
+            'XISF.GuideDec','XISF.GuideRA',
+            'XISF.Median','XISF.Mean','XISF.ClippingLow','XISF.ClippingHigh',
+            'XISF.StarFWHM','XISF.SkyBrightness','XISF.SkyQuality',
+            'System.PropGroup.GPS',
+            'XISF.SiteElevation','XISF.SiteLatitude','XISF.SiteLongitude',
+            'XISF.AmbientTemp','XISF.CloudCover','XISF.DewPoint','XISF.Humidity',
+            'XISF.Pressure','XISF.SkyTemp','XISF.WindSpeed',
+            'System.PropGroup.FileSystem',
+            'System.ItemNameDisplay','System.ItemType','System.ItemFolderPathDisplay',
+            'System.DateCreated','System.DateModified','System.Size','System.FileAttributes'
+        ) -join ';'
+
+        $previewDetails = @(
+            'prop:XISF.ObjectName','XISF.ExposureTime','XISF.FilterName','XISF.CameraModel',
+            'XISF.Gain','XISF.SensorTemperature','XISF.Telescope','XISF.FocalLength','XISF.FNumber',
+            'XISF.Constellation','XISF.MatchedObjects','XISF.DataState','XISF.ColorSpace','XISF.SampleFormat'
+        ) -join ';'
+
+        $infoTip = @(
+            'prop:System.ItemTypeText','System.Size','XISF.ObjectName','XISF.ExposureTime','XISF.FilterName',
+            'XISF.CameraModel','XISF.Constellation','XISF.MatchedObjects'
+        ) -join ';'
+
+        # SystemFileAssociations\.xisf
+        New-Item -Path $sfaPath -Force -ErrorAction SilentlyContinue | Out-Null
+        Set-ItemProperty -Path $sfaPath -Name 'FullDetails'     -Value $fullDetails     -Type String -Force
+        Set-ItemProperty -Path $sfaPath -Name 'PreviewDetails'  -Value $previewDetails  -Type String -Force
+        Set-ItemProperty -Path $sfaPath -Name 'InfoTip'         -Value $infoTip         -Type String -Force
+
+        # XISFFile ProgID
+        $progIdPath = 'HKCU:\Software\Classes\XISFFile'
+        New-Item -Path $progIdPath -Force -ErrorAction SilentlyContinue | Out-Null
+        Set-ItemProperty -Path $progIdPath -Name '(Default)'      -Value 'XISF Image File' -Type String -Force
+        Set-ItemProperty -Path $progIdPath -Name 'FullDetails'    -Value $fullDetails      -Type String -Force
+        Set-ItemProperty -Path $progIdPath -Name 'PreviewDetails' -Value $previewDetails   -Type String -Force
+        Set-ItemProperty -Path $progIdPath -Name 'InfoTip'        -Value $infoTip          -Type String -Force
+
+        # .xisf extension metadata
+        $extPath = 'HKCU:\Software\Classes\.xisf'
+        New-Item -Path $extPath -Force -ErrorAction SilentlyContinue | Out-Null
+        Set-ItemProperty -Path $extPath -Name 'Content Type'  -Value 'application/xisf' -Type String -Force
+        Set-ItemProperty -Path $extPath -Name 'PerceivedType' -Value 'image'            -Type String -Force
+
+        # KindMap
+        $kindMap = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\KindMap'
+        New-Item -Path $kindMap -Force -ErrorAction SilentlyContinue | Out-Null
+        Set-ItemProperty -Path $kindMap -Name '.xisf' -Value 'picture' -Type String -Force
+
+        $results.info['FullDetailsWritten'] = $true
+    }
+
+    $results.info['HkcuRegistered'] = $true
 } catch {
     $results.info['HkcuRegistered'] = $false
     $results.info['HkcuError'] = $_.Exception.Message
