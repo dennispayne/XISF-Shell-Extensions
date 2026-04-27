@@ -318,18 +318,20 @@ try {
             }
         }
 
-        # Also copy VCLibs runtime DLLs so the handler DLLs can load
+        # Copy VCLibs runtime DLLs to System32 so the handler DLLs can load.
+        # The DLL loader searches System32 but NOT the InProcServer32 directory.
         $vcLibsPkg = Get-AppxPackage -Name 'Microsoft.VCLibs.140.00.UWPDesktop' -ErrorAction SilentlyContinue |
             Where-Object { $_.Architecture -eq 'X64' } | Select-Object -First 1
         if ($vcLibsPkg) {
             foreach ($vcDll in @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll',
                                  'msvcp140_1.dll', 'msvcp140_2.dll', 'concrt140.dll',
-                                 'vccorlib140.dll', 'ucrtbase.dll')) {
+                                 'vccorlib140.dll')) {
                 $vcSrc = Join-Path $vcLibsPkg.InstallLocation $vcDll
                 if (Test-Path $vcSrc) {
-                    Copy-Item $vcSrc (Join-Path $classicalRegDir $vcDll) -Force -ErrorAction SilentlyContinue
+                    Copy-Item $vcSrc "$env:SystemRoot\System32\$vcDll" -Force -ErrorAction SilentlyContinue
                 }
             }
+            $results.info['VCRuntime_CopiedToSystem32'] = $true
         }
 
         # Register both handler DLLs classically (requires admin — sandbox has it)
