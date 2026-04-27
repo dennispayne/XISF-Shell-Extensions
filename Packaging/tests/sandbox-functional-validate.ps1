@@ -522,6 +522,14 @@ try {
 # Signal completion
 New-Item -Path 'C:\Results\done.marker' -ItemType File -Force | Out-Null
 
-# Shutdown the sandbox
-Start-Sleep -Seconds 2
-shutdown /s /t 0
+# Shutdown the sandbox unless keep-alive marker is present
+if (Test-Path 'C:\Installer\keep-alive.marker') {
+    Write-Host "`n=== Sandbox kept alive for inspection ===" -ForegroundColor Cyan
+    Write-Host "Results: C:\Results\functional-results.json" -ForegroundColor Cyan
+    Write-Host "Test data: C:\TestData\" -ForegroundColor Cyan
+    Write-Host "Package: $((Get-AppxPackage -Name 'DennisPayne.XISF.ShellExtension' -ErrorAction SilentlyContinue).InstallLocation)" -ForegroundColor Cyan
+    Write-Host "Close this window or the sandbox to end.`n" -ForegroundColor Cyan
+} else {
+    Start-Sleep -Seconds 2
+    shutdown /s /t 0
+}

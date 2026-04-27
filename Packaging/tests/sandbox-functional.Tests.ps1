@@ -14,7 +14,14 @@
       - Release|x64 solution build
       - Pester v5+
 
+    Set $env:XISF_KEEP_SANDBOX = 1 before running to leave the sandbox
+    open for manual inspection after tests complete.
+
 .EXAMPLE
+    Invoke-Pester .\Packaging\tests\sandbox-functional.Tests.ps1 -Output Detailed
+
+.EXAMPLE
+    $env:XISF_KEEP_SANDBOX = 1
     Invoke-Pester .\Packaging\tests\sandbox-functional.Tests.ps1 -Output Detailed
 #>
 
@@ -24,6 +31,7 @@ BeforeAll {
     $script:ReleaseDir  = Join-Path $RepoRoot 'x64\Release'
     $script:TestsDir    = $PSScriptRoot
     $script:SandboxTimeoutSec = 300   # Functional tests need more time (Explorer restarts)
+    $script:KeepSandbox = $env:XISF_KEEP_SANDBOX -eq '1'
 
     # Check prerequisites
     $script:SandboxAvailable = $null -ne (Get-Command 'WindowsSandbox.exe' -ErrorAction SilentlyContinue)
@@ -84,6 +92,11 @@ Describe 'MSIX functional validation in sandbox' -Tag 'Sandbox', 'Functional' {
         # Copy validation script to package dir (mapped as C:\Installer in sandbox)
         Copy-Item (Join-Path $TestsDir 'sandbox-functional-validate.ps1') $PkgDir -Force
 
+        # When keeping sandbox alive, write a marker file the validate script checks
+        if ($KeepSandbox) {
+            New-Item -Path (Join-Path $PkgDir 'keep-alive.marker') -ItemType File -Force | Out-Null
+        }
+
         # Generate .wsb
         $script:WsbPath = Join-Path $WorkDir 'functional-test.wsb'
         @"
@@ -130,11 +143,17 @@ Describe 'MSIX functional validation in sandbox' -Tag 'Sandbox', 'Functional' {
     }
 
     AfterAll {
-        if ($SandboxProcess -and -not $SandboxProcess.HasExited) {
-            $SandboxProcess | Stop-Process -Force -ErrorAction SilentlyContinue
-        }
-        if ($WorkDir -and (Test-Path $WorkDir)) {
-            Remove-Item $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
+        if (-not $KeepSandbox) {
+            if ($SandboxProcess -and -not $SandboxProcess.HasExited) {
+                $SandboxProcess | Stop-Process -Force -ErrorAction SilentlyContinue
+            }
+            if ($WorkDir -and (Test-Path $WorkDir)) {
+                Remove-Item $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        } else {
+            Write-Host "`nXISF_KEEP_SANDBOX=1: Sandbox left running for inspection." -ForegroundColor Cyan
+            Write-Host "Work dir: $WorkDir" -ForegroundColor Cyan
+            Write-Host "Close the sandbox window manually when done.`n" -ForegroundColor Cyan
         }
     }
 

@@ -15,6 +15,9 @@
       - Pester v5+
       - Run from repo root
 
+    Set $env:XISF_KEEP_SANDBOX = 1 before running to leave the sandbox
+    open for manual inspection after tests complete.
+
 .EXAMPLE
     Invoke-Pester .\Packaging\tests\sandbox-install.Tests.ps1 -Output Detailed
 #>
@@ -25,6 +28,7 @@ BeforeAll {
     $script:ReleaseDir  = Join-Path $RepoRoot 'x64\Release'
     $script:TestsDir    = $PSScriptRoot
     $script:SandboxTimeoutSec = 180
+    $script:KeepSandbox = $env:XISF_KEEP_SANDBOX -eq '1'
 
     # Check prerequisites
     $script:SandboxAvailable = $false
@@ -87,6 +91,11 @@ Describe 'MSIX sandbox install validation' -Tag 'Sandbox', 'Integration' {
             }
         } | Sort-Object FullName -Descending | Select-Object -First 1
         & $signtool.FullName sign /fd SHA256 /f $CertPath /p 'XisfTest1!' $MsixPath
+
+        # Write keep-alive marker if requested
+        if ($KeepSandbox) {
+            New-Item -Path (Join-Path $PkgDir 'keep-alive.marker') -ItemType File -Force | Out-Null
+        }
 
         # Write the sandbox validation script
         $script:ValidationScript = Join-Path $PkgDir 'validate.ps1'
@@ -182,10 +191,14 @@ $final = 'C:\Results\results.json'
 Set-Content -Path $tmp -Value $json -Encoding UTF8
 Move-Item -Path $tmp -Destination $final -Force
 
-# Signal done and shutdown
+# Signal done and conditionally shutdown
 New-Item -Path 'C:\Results\done.marker' -ItemType File -Force | Out-Null
-Start-Sleep 2
-shutdown /s /t 0
+if (Test-Path 'C:\Package\keep-alive.marker') {
+    Write-Host "Sandbox kept alive for inspection. Close manually." -ForegroundColor Cyan
+} else {
+    Start-Sleep 2
+    shutdown /s /t 0
+}
 '@ | Set-Content -Path $ValidationScript -Encoding UTF8
 
         # Generate .wsb file
@@ -229,13 +242,17 @@ shutdown /s /t 0
     }
 
     AfterAll {
-        # Clean up sandbox process
-        if ($SandboxProcess -and -not $SandboxProcess.HasExited) {
-            $SandboxProcess | Stop-Process -Force -ErrorAction SilentlyContinue
-        }
-        # Clean up work directory
-        if ($WorkDir -and (Test-Path $WorkDir)) {
-            Remove-Item $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
+        if (-not $KeepSandbox) {
+            if ($SandboxProcess -and -not $SandboxProcess.HasExited) {
+                $SandboxProcess | Stop-Process -Force -ErrorAction SilentlyContinue
+            }
+            if ($WorkDir -and (Test-Path $WorkDir)) {
+                Remove-Item $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        } else {
+            Write-Host "`nXISF_KEEP_SANDBOX=1: Sandbox left running for inspection." -ForegroundColor Cyan
+            Write-Host "Work dir: $WorkDir" -ForegroundColor Cyan
+            Write-Host "Close the sandbox window manually when done.`n" -ForegroundColor Cyan
         }
     }
 
