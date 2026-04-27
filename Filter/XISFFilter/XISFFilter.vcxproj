@@ -98,6 +98,9 @@
     <ClInclude Include="src\XISFParser.h" />
   </ItemGroup>
   <ItemGroup>
+    <ResourceCompile Include="src\XISFFilter.rc" />
+  </ItemGroup>
+  <ItemGroup>
     <None Include="src\XISFFilter.def" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

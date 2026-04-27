@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <commctrl.h>
 #include <filesystem>
+#include <unordered_map>
 #include <vector>
 #include <tlhelp32.h>
 
@@ -64,8 +65,12 @@ COLORREF g_iconBadColor = RGB(180, 32, 32);
 
 COLORREF g_propertyIconColor = RGB(180, 32, 32);
 COLORREF g_previewIconColor = RGB(180, 32, 32);
+COLORREF g_filterIconColor = RGB(180, 32, 32);
 COLORREF g_ngcIconColor = RGB(180, 32, 32);
 COLORREF g_addIconColor = RGB(180, 32, 32);
+
+// Tooltip text storage — keeps strings alive for the tooltip control
+std::unordered_map<int, std::wstring> g_tooltipStrings;
 
 HWND g_tipHashes = nullptr;
 std::wstring g_tipNgcGitHub;
@@ -129,36 +134,60 @@ void UpdateTraceActionButtons(HWND hDlg)
 void SetProgressText(const std::wstring& s);
 void RefreshAllPresence();
 void AddTooltips();
+void SetTooltip(int id, const wchar_t* text);
 void OnRegisterHandlers();
+bool TryReadRegisteredDllPath(const wchar_t* clsid, std::wstring& out);
 INT_PTR CALLBACK AdvancedDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam);
+
+// Handler CLSIDs
+static constexpr const wchar_t* kPropertyClsid = L"{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}";
+static constexpr const wchar_t* kPreviewClsid  = L"{9C76E8AD-4E85-5F30-B00D-3C7D1AB5F6E0}";
+static constexpr const wchar_t* kFilterClsid   = L"{B4E7F2A1-3D8C-4F5E-9A1B-6C2D8E4F7A3B}";
 
 // --- Deferred-settings model ---
 // Changes are tracked here and only written to registry on Apply.
 struct PendingSettings {
     bool origPropertyEnabled = true;
     bool origPreviewEnabled = true;
+    bool origFilterEnabled = true;
     hostsettings::FeatureTier origTier = hostsettings::FeatureTier::Full;
     bool origProjection = true;
 
     bool curPropertyEnabled = true;
     bool curPreviewEnabled = true;
+    bool curFilterEnabled = true;
     hostsettings::FeatureTier curTier = hostsettings::FeatureTier::Full;
     bool curProjection = true;
+
+    // Pending registration requests (for unregistered handlers)
+    bool registerProperty = false;
+    bool registerPreview = false;
+    bool registerFilter = false;
 
     void Snapshot() {
         origPropertyEnabled = curPropertyEnabled = hostsettings::IsPropertyEnabled();
         origPreviewEnabled  = curPreviewEnabled  = hostsettings::IsPreviewEnabled();
+        origFilterEnabled   = curFilterEnabled   = hostsettings::IsFilterEnabled();
         origTier            = curTier            = hostsettings::GetFeatureTier();
         origProjection      = curProjection      = hostsettings::IsProjectionEnabled();
+        registerProperty = registerPreview = registerFilter = false;
     }
 
     int DirtyCount() const {
         int n = 0;
         if (curPropertyEnabled != origPropertyEnabled) n++;
         if (curPreviewEnabled  != origPreviewEnabled)  n++;
+        if (curFilterEnabled   != origFilterEnabled)   n++;
         if (curTier            != origTier)            n++;
         if (curProjection      != origProjection)      n++;
+        if (registerProperty) n++;
+        if (registerPreview)  n++;
+        if (registerFilter)   n++;
         return n;
+    }
+
+    bool HasPendingRegistration() const {
+        return registerProperty || registerPreview || registerFilter;
     }
 
     bool NeedsElevation() const {
@@ -173,6 +202,10 @@ struct PendingSettings {
         if (curPreviewEnabled != origPreviewEnabled) {
             hostsettings::SetPreviewEnabled(curPreviewEnabled);
             origPreviewEnabled = curPreviewEnabled;
+        }
+        if (curFilterEnabled != origFilterEnabled) {
+            hostsettings::SetFilterEnabled(curFilterEnabled);
+            origFilterEnabled = curFilterEnabled;
         }
         if (curTier != origTier) {
             hostsettings::SetFeatureTier(curTier);
@@ -206,6 +239,26 @@ void UpdatePendingDisplay()
 void UpdateToggleButton(int btnId, bool enabled)
 {
     SetDlgItemTextW(g_hDlg, btnId, enabled ? L"Disable" : L"Enable");
+}
+
+// Check if a handler CLSID is registered and its DLL exists
+bool IsHandlerRegistered(const wchar_t* clsid)
+{
+    std::wstring dll;
+    return TryReadRegisteredDllPath(clsid, dll) &&
+           GetFileAttributesW(dll.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+// Update toggle button text based on registration + enabled state + pending registration
+void UpdateToggleButtonState(int btnId, const wchar_t* clsid, bool enabled, bool pendingRegister)
+{
+    if (pendingRegister) {
+        SetDlgItemTextW(g_hDlg, btnId, L"Cancel");
+    } else if (IsHandlerRegistered(clsid)) {
+        SetDlgItemTextW(g_hDlg, btnId, enabled ? L"Disable" : L"Enable");
+    } else {
+        SetDlgItemTextW(g_hDlg, btnId, L"Register");
+    }
 }
 
 void SetHashCellTooltip(int controlId, std::wstring& storage, const std::wstring& text)
@@ -261,7 +314,7 @@ std::wstring FindSolutionRoot()
     return L"";
 }
 
-std::wstring BuildHandlerDllPath(bool propertyHandler)
+std::wstring BuildHandlerDllPath(hostpaths::HandlerType handler)
 {
     auto root = FindSolutionRoot();
     if (root.empty()) return L"";
@@ -270,7 +323,7 @@ std::wstring BuildHandlerDllPath(bool propertyHandler)
 #else
     constexpr const wchar_t* cfg = L"Release";
 #endif
-    return hostpaths::ResolveHandlerDllPath(root, propertyHandler, cfg);
+    return hostpaths::ResolveHandlerDllPath(root, handler, cfg);
 }
 
 bool RunProcessHiddenAndWait(const std::wstring& exe, const std::wstring& args, DWORD* exitCode)
@@ -356,9 +409,9 @@ void RestartExplorerDirect()
     ShellExecuteW(nullptr, L"open", L"explorer.exe", nullptr, nullptr, SW_SHOWNORMAL);
 }
 
-bool RegisterOneHandlerDirect(bool propertyHandler, std::wstring& err)
+bool RegisterOneHandlerDirect(hostpaths::HandlerType handler, std::wstring& err)
 {
-    auto dll = BuildHandlerDllPath(propertyHandler);
+    auto dll = BuildHandlerDllPath(handler);
     if (dll.empty() || GetFileAttributesW(dll.c_str()) == INVALID_FILE_ATTRIBUTES) {
         err = L"Handler DLL not found.";
         return false;
@@ -370,11 +423,17 @@ bool RegisterOneHandlerDirect(bool propertyHandler, std::wstring& err)
         return false;
     }
 
-    if (propertyHandler) {
+    switch (handler) {
+    case hostpaths::HandlerType::Property:
         DeleteClsidTreeBothRoots(L"{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}");
-    } else {
+        break;
+    case hostpaths::HandlerType::Preview:
         DeleteClsidTreeBothRoots(L"{9C76E8AD-4E85-5F30-B00D-3C7D1AB5F6E0}");
         DeleteClsidTreeBothRoots(L"{AD87F6CE-5B03-6E41-C11E-4DB2AC06F5F1}");
+        break;
+    case hostpaths::HandlerType::Filter:
+        DeleteClsidTreeBothRoots(L"{B4E7F2A1-3D8C-4F5E-9A1B-6C2D8E4F7A3B}");
+        break;
     }
 
     RestartExplorerDirect();
@@ -388,14 +447,17 @@ bool RegisterOneHandlerDirect(bool propertyHandler, std::wstring& err)
     return true;
 }
 
-int RunElevatedRegistrationMode(bool doProperty, bool doPreview)
+int RunElevatedRegistrationMode(bool doProperty, bool doPreview, bool doFilter)
 {
     std::wstring err;
     if (doProperty) {
-        if (!RegisterOneHandlerDirect(true, err)) return 2;
+        if (!RegisterOneHandlerDirect(hostpaths::HandlerType::Property, err)) return 2;
     }
     if (doPreview) {
-        if (!RegisterOneHandlerDirect(false, err)) return 3;
+        if (!RegisterOneHandlerDirect(hostpaths::HandlerType::Preview, err)) return 3;
+    }
+    if (doFilter) {
+        if (!RegisterOneHandlerDirect(hostpaths::HandlerType::Filter, err)) return 4;
     }
     return 0;
 }
@@ -602,6 +664,7 @@ bool TryHandleCommandMode(LPWSTR rawCmdLine, int& exitCode)
     bool adv = false;
     bool prop = false;
     bool prev = false;
+    bool filt = false;
     bool silentInstall = false;
     bool registerMsix = false;
     for (int i = 1; i < argc; ++i) {
@@ -610,6 +673,7 @@ bool TryHandleCommandMode(LPWSTR rawCmdLine, int& exitCode)
         else if (a == L"--advanced-direct") adv = true;
         else if (a == L"--property") prop = true;
         else if (a == L"--preview") prev = true;
+        else if (a == L"--filter") filt = true;
         else if (a == L"--silent-install") silentInstall = true;
         else if (a == L"--register-msix") registerMsix = true;
     }
@@ -631,7 +695,7 @@ bool TryHandleCommandMode(LPWSTR rawCmdLine, int& exitCode)
     }
 
     if (!mode) return false;
-    exitCode = RunElevatedRegistrationMode(prop, prev);
+    exitCode = RunElevatedRegistrationMode(prop, prev, filt);
     return true;
 }
 
@@ -678,6 +742,7 @@ void SetStatusLabelColorById(int id, COLORREF color)
 {
     if (id == IDC_STATIC_PROPERTY_STATUS) g_propertyIconColor = color;
     else if (id == IDC_STATIC_PREVIEW_STATUS) g_previewIconColor = color;
+    else if (id == IDC_STATIC_FILTER_STATUS) g_filterIconColor = color;
     else if (id == IDC_STATIC_NGC_MATCH) g_ngcIconColor = color;
     else if (id == IDC_STATIC_ADD_MATCH) g_addIconColor = color;
 }
@@ -741,33 +806,48 @@ bool TryReadRegisteredDllPath(const wchar_t* clsid, std::wstring& out)
     return true;
 }
 
-void SetHandlerStatus(int iconId, int verId, const wchar_t* clsid, bool handlerEnabled)
+void SetHandlerStatus(int iconId, int verId, int btnId,
+                      const wchar_t* clsid, bool handlerEnabled, bool pendingRegister)
 {
     std::wstring dll;
-    if (TryReadRegisteredDllPath(clsid, dll) &&
-        GetFileAttributesW(dll.c_str()) != INVALID_FILE_ATTRIBUTES) {
+    bool registered = TryReadRegisteredDllPath(clsid, dll) &&
+                      GetFileAttributesW(dll.c_str()) != INVALID_FILE_ATTRIBUTES;
+
+    if (pendingRegister) {
+        SetStatusIconTextAndColor(iconId, L"\u2026", g_iconWarnColor);
+        SetDlgItemTextW(g_hDlg, verId, L"Will register on Apply");
+    } else if (registered) {
         auto v = GetFileVersionString(dll);
         if (handlerEnabled) {
-            SetStatusIconTextAndColor(iconId, L"✓", g_iconOkColor);
+            SetStatusIconTextAndColor(iconId, L"\u2713", g_iconOkColor);
             std::wstring text = v.empty() ? L"Registered" : (L"v" + v);
             SetDlgItemTextW(g_hDlg, verId, text.c_str());
         } else {
-            SetStatusIconTextAndColor(iconId, L"⚠", g_iconWarnColor);
+            SetStatusIconTextAndColor(iconId, L"\u26A0", g_iconWarnColor);
             std::wstring text = v.empty() ? L"Registered, disabled" : (L"v" + v + L" \u2014 disabled");
             SetDlgItemTextW(g_hDlg, verId, text.c_str());
         }
+        SetTooltip(verId, dll.c_str());
     } else {
-        SetStatusIconTextAndColor(iconId, L"✗", g_iconBadColor);
+        SetStatusIconTextAndColor(iconId, L"\u2717", g_iconBadColor);
         SetDlgItemTextW(g_hDlg, verId, L"Not registered");
     }
+
+    UpdateToggleButtonState(btnId, clsid, handlerEnabled, pendingRegister);
 }
 
 void RefreshHandlerStatuses()
 {
-    SetHandlerStatus(IDC_STATIC_PROPERTY_STATUS, IDC_STATIC_PROPERTY_VER,
-        L"{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}", g_pending.curPropertyEnabled);
-    SetHandlerStatus(IDC_STATIC_PREVIEW_STATUS, IDC_STATIC_PREVIEW_VER,
-        L"{9C76E8AD-4E85-5F30-B00D-3C7D1AB5F6E0}", g_pending.curPreviewEnabled);
+    SetHandlerStatus(IDC_STATIC_PROPERTY_STATUS, IDC_STATIC_PROPERTY_VER, IDC_BTN_TOGGLE_PROPERTY,
+        kPropertyClsid, g_pending.curPropertyEnabled, g_pending.registerProperty);
+    SetHandlerStatus(IDC_STATIC_PREVIEW_STATUS, IDC_STATIC_PREVIEW_VER, IDC_BTN_TOGGLE_PREVIEW,
+        kPreviewClsid, g_pending.curPreviewEnabled, g_pending.registerPreview);
+    SetHandlerStatus(IDC_STATIC_FILTER_STATUS, IDC_STATIC_FILTER_VER, IDC_BTN_TOGGLE_FILTER,
+        kFilterClsid, g_pending.curFilterEnabled, g_pending.registerFilter);
+
+    // Show UAC shield on Apply when registration is pending
+    SendDlgItemMessageW(g_hDlg, IDC_BTN_APPLY, BCM_SETSHIELD, 0,
+        g_pending.HasPendingRegistration() ? TRUE : FALSE);
 }
 
 bool IsCatalogInstalled(const catalogspec::CatalogSource& src)
@@ -1109,33 +1189,44 @@ void OnCopyExpectedHashes()
     SetProgressText(L"Expected hashes copied to clipboard. Verify independently on github.com.");
 }
 
+void SetTooltip(int id, const wchar_t* text)
+{
+    HWND hCtrl = GetDlgItem(g_hDlg, id);
+    if (!hCtrl) return;
+
+    // Store the string so it outlives this call
+    g_tooltipStrings[id] = text;
+
+    HWND hTip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr,
+        WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
+        CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+        g_hDlg, nullptr, GetModuleHandleW(nullptr), nullptr);
+    if (!hTip) return;
+
+    TOOLINFOW ti{};
+    ti.cbSize = sizeof(ti);
+    ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+    ti.hwnd = g_hDlg;
+    ti.uId = reinterpret_cast<UINT_PTR>(hCtrl);
+    ti.lpszText = const_cast<LPWSTR>(g_tooltipStrings[id].c_str());
+    SendMessageW(hTip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&ti));
+    SendMessageW(hTip, TTM_SETMAXTIPWIDTH, 0, 600);
+}
+
 void AddTooltips()
 {
     auto makeTip = [](int id, const wchar_t* text) {
-        HWND hCtrl = GetDlgItem(g_hDlg, id);
-        if (!hCtrl) return;
-        HWND hTip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr,
-            WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
-            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-            g_hDlg, nullptr, GetModuleHandleW(nullptr), nullptr);
-        if (!hTip) return;
-
-        TOOLINFOW ti{};
-        ti.cbSize = sizeof(ti);
-        ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
-        ti.hwnd = g_hDlg;
-        ti.uId = reinterpret_cast<UINT_PTR>(hCtrl);
-        ti.lpszText = const_cast<LPWSTR>(text);
-        SendMessageW(hTip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&ti));
+        SetTooltip(id, text);
     };
 
     makeTip(IDC_BTN_TOGGLE_PROPERTY, L"Toggle the Property Handler (details pane, file info)");
     makeTip(IDC_BTN_TOGGLE_PREVIEW, L"Toggle the Preview/Thumbnail Handler (preview pane, thumbnails)");
+    makeTip(IDC_BTN_TOGGLE_FILTER, L"Toggle the Search Filter (Windows Search content indexing)");
 }
 
 void OnRegisterHandlers()
 {
-    std::wstring params = L"--register-direct --property --preview";
+    std::wstring params = L"--register-direct --property --preview --filter";
 
     SHELLEXECUTEINFOW sei{};
     sei.cbSize = sizeof(sei);
@@ -1226,8 +1317,12 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         SendDlgItemMessageW(hDlg, IDC_BTN_FLUSH_THUMBCACHE, BCM_SETSHIELD, 0, TRUE);
         SendDlgItemMessageW(hDlg, IDC_BTN_REGISTER_HANDLERS, BCM_SETSHIELD, 0, TRUE);
 
-        UpdateToggleButton(IDC_BTN_TOGGLE_PROPERTY, g_pending.curPropertyEnabled);
-        UpdateToggleButton(IDC_BTN_TOGGLE_PREVIEW, g_pending.curPreviewEnabled);
+        UpdateToggleButtonState(IDC_BTN_TOGGLE_PROPERTY, kPropertyClsid,
+            g_pending.curPropertyEnabled, g_pending.registerProperty);
+        UpdateToggleButtonState(IDC_BTN_TOGGLE_PREVIEW, kPreviewClsid,
+            g_pending.curPreviewEnabled, g_pending.registerPreview);
+        UpdateToggleButtonState(IDC_BTN_TOGGLE_FILTER, kFilterClsid,
+            g_pending.curFilterEnabled, g_pending.registerFilter);
 
         // Feature tier combo box
         {
@@ -1323,10 +1418,12 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         HWND hCtl = reinterpret_cast<HWND>(lParam);
         int id = GetDlgCtrlID(hCtl);
         if (id == IDC_STATIC_PROPERTY_STATUS || id == IDC_STATIC_PREVIEW_STATUS ||
+            id == IDC_STATIC_FILTER_STATUS ||
             id == IDC_STATIC_NGC_MATCH || id == IDC_STATIC_ADD_MATCH) {
             COLORREF color = g_iconBadColor;
             if (id == IDC_STATIC_PROPERTY_STATUS) color = g_propertyIconColor;
             else if (id == IDC_STATIC_PREVIEW_STATUS) color = g_previewIconColor;
+            else if (id == IDC_STATIC_FILTER_STATUS) color = g_filterIconColor;
             else if (id == IDC_STATIC_NGC_MATCH) color = g_ngcIconColor;
             else if (id == IDC_STATIC_ADD_MATCH) color = g_addIconColor;
             SetTextColor(hdc, color);
@@ -1342,22 +1439,53 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         WORD code = HIWORD(wParam);
         switch (id) {
         case IDC_BTN_TOGGLE_PROPERTY: {
-            g_pending.curPropertyEnabled = !g_pending.curPropertyEnabled;
-            UpdateToggleButton(IDC_BTN_TOGGLE_PROPERTY, g_pending.curPropertyEnabled);
+            if (g_pending.registerProperty) {
+                g_pending.registerProperty = false;
+                SetProgressText(L"Property Handler registration cancelled.");
+            } else if (IsHandlerRegistered(kPropertyClsid)) {
+                g_pending.curPropertyEnabled = !g_pending.curPropertyEnabled;
+                SetProgressText(g_pending.curPropertyEnabled
+                    ? L"Property Handler will be enabled after Apply."
+                    : L"Property Handler will be disabled after Apply.");
+            } else {
+                g_pending.registerProperty = true;
+                SetProgressText(L"Property Handler will be registered on Apply (requires elevation).");
+            }
             RefreshHandlerStatuses();
-            SetProgressText(g_pending.curPropertyEnabled
-                ? L"Property Handler will be enabled after Apply."
-                : L"Property Handler will be disabled after Apply.");
             UpdatePendingDisplay();
             return TRUE;
         }
         case IDC_BTN_TOGGLE_PREVIEW: {
-            g_pending.curPreviewEnabled = !g_pending.curPreviewEnabled;
-            UpdateToggleButton(IDC_BTN_TOGGLE_PREVIEW, g_pending.curPreviewEnabled);
+            if (g_pending.registerPreview) {
+                g_pending.registerPreview = false;
+                SetProgressText(L"Preview Handler registration cancelled.");
+            } else if (IsHandlerRegistered(kPreviewClsid)) {
+                g_pending.curPreviewEnabled = !g_pending.curPreviewEnabled;
+                SetProgressText(g_pending.curPreviewEnabled
+                    ? L"Preview Handler will be enabled after Apply."
+                    : L"Preview Handler will be disabled after Apply.");
+            } else {
+                g_pending.registerPreview = true;
+                SetProgressText(L"Preview Handler will be registered on Apply (requires elevation).");
+            }
             RefreshHandlerStatuses();
-            SetProgressText(g_pending.curPreviewEnabled
-                ? L"Preview Handler will be enabled after Apply."
-                : L"Preview Handler will be disabled after Apply.");
+            UpdatePendingDisplay();
+            return TRUE;
+        }
+        case IDC_BTN_TOGGLE_FILTER: {
+            if (g_pending.registerFilter) {
+                g_pending.registerFilter = false;
+                SetProgressText(L"Search Filter registration cancelled.");
+            } else if (IsHandlerRegistered(kFilterClsid)) {
+                g_pending.curFilterEnabled = !g_pending.curFilterEnabled;
+                SetProgressText(g_pending.curFilterEnabled
+                    ? L"Search Filter will be enabled after Apply."
+                    : L"Search Filter will be disabled after Apply.");
+            } else {
+                g_pending.registerFilter = true;
+                SetProgressText(L"Search Filter will be registered on Apply (requires elevation).");
+            }
+            RefreshHandlerStatuses();
             UpdatePendingDisplay();
             return TRUE;
         }
@@ -1431,11 +1559,57 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         }
         case IDC_BTN_APPLY: {
             int n = g_pending.DirtyCount();
+
+            // Handle pending registrations (requires elevation)
+            if (g_pending.HasPendingRegistration()) {
+                std::wstring params = L"--register-direct";
+                if (g_pending.registerProperty) params += L" --property";
+                if (g_pending.registerPreview)  params += L" --preview";
+                if (g_pending.registerFilter)   params += L" --filter";
+
+                SHELLEXECUTEINFOW sei{};
+                sei.cbSize = sizeof(sei);
+                sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+                sei.hwnd = hDlg;
+                sei.lpVerb = L"runas";
+                auto exe = GetExePath();
+                sei.lpFile = exe.c_str();
+                sei.lpParameters = params.c_str();
+                sei.nShow = SW_HIDE;
+
+                if (!ShellExecuteExW(&sei)) {
+                    SetProgressText(GetLastError() == ERROR_CANCELLED
+                        ? L"Registration cancelled by user."
+                        : L"Failed to start registration.");
+                    return TRUE;
+                }
+
+                WaitForSingleObject(sei.hProcess, INFINITE);
+                DWORD ec = 1;
+                GetExitCodeProcess(sei.hProcess, &ec);
+                CloseHandle(sei.hProcess);
+
+                if (ec == 0) {
+                    g_pending.registerProperty = false;
+                    g_pending.registerPreview = false;
+                    g_pending.registerFilter = false;
+                } else {
+                    SetProgressText(L"Handler registration failed.");
+                    RefreshHandlerStatuses();
+                    UpdatePendingDisplay();
+                    return TRUE;
+                }
+            }
+
+            // Apply enable/disable and other settings
             g_pending.Apply();
+
             bool restart = (IsDlgButtonChecked(hDlg, IDC_CHK_RESTART_EXPLORER) == BST_CHECKED);
             if (restart) {
                 CheckDlgButton(hDlg, IDC_CHK_RESTART_EXPLORER, BST_UNCHECKED);
             }
+
+            RefreshHandlerStatuses();
             UpdatePendingDisplay();
             wchar_t buf[128];
             swprintf_s(buf, L"%d setting%s applied.%s", n, n == 1 ? L"" : L"s",

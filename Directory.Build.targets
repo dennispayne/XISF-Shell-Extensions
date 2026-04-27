@@ -1,0 +1,9 @@
+<Project>
+  <!-- Standardize output so solution-level and project-level builds
+       produce binaries in the same location: $(SolutionDir)x64\Release\ etc.
+       IntDir gets a per-project subfolder to avoid MSB8028 warnings. -->
+  <PropertyGroup>
+    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)$(Platform)\$(Configuration)\obj\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+</Project>

@@ -15,14 +15,14 @@
 #define XISF_VERSION_STR XISF_STR(XISF_VERSION_TEXT)
 #endif
 
-IDD_SETTINGS DIALOGEX 0, 0, 500, 414
+IDD_SETTINGS DIALOGEX 0, 0, 500, 432
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX
 CAPTION "XISF Shell Extensions Utility"
 FONT 9, "Segoe UI", 400, 0, 0x1
 BEGIN
     LTEXT           "Enable or disable the Windows Shell handlers for .xisf files. Changes apply next time File Explorer loads the handler (Restart File Explorer from Task Manager to apply immediately).",
                     IDC_STATIC_INTRO,   10,  8, 480, 20
-    GROUPBOX        "Handlers",                     -1,                 10, 32, 480, 70
+    GROUPBOX        "Handlers",                     -1,                 10, 32, 480, 88
     LTEXT           "Property Handler",              -1,                 20, 47, 78, 10
     PUSHBUTTON      "…",
                     IDC_BTN_TOGGLE_PROPERTY, 102, 44, 55, 14
@@ -33,69 +33,74 @@ BEGIN
                     IDC_BTN_TOGGLE_PREVIEW,  102, 62, 55, 14
     LTEXT           "",                 IDC_STATIC_PREVIEW_STATUS, 162, 65, 10, 10
     LTEXT           "",                 IDC_STATIC_PREVIEW_VER,    175, 65, 305, 10
+    LTEXT           "Search Filter",                 -1,                 20, 83, 78, 10
+    PUSHBUTTON      "…",
+                    IDC_BTN_TOGGLE_FILTER,   102, 80, 55, 14
+    LTEXT           "",                 IDC_STATIC_FILTER_STATUS,  162, 83, 10, 10
+    LTEXT           "",                 IDC_STATIC_FILTER_VER,     175, 83, 305, 10
 
-    GROUPBOX        "Property Handler Settings",    -1,                 10, 108, 480, 60
-    LTEXT           "Feature Tier:",    IDC_STATIC_TIER_LABEL,     20, 125, 50, 10
-    COMBOBOX                            IDC_COMBO_FEATURE_TIER,    72, 123, 80, 60,
+    GROUPBOX        "Property Handler Settings",    -1,                 10, 126, 480, 60
+    LTEXT           "Feature Tier:",    IDC_STATIC_TIER_LABEL,     20, 143, 50, 10
+    COMBOBOX                            IDC_COMBO_FEATURE_TIER,    72, 141, 80, 60,
                     CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     PUSHBUTTON      "Show tiers...",
-                    IDC_BTN_SHOW_TIERS, 160, 123, 60, 14
+                    IDC_BTN_SHOW_TIERS, 160, 141, 70, 14
     AUTOCHECKBOX    "Mirror to System.Photo properties",
-                    IDC_CHK_PROJECTION, 20, 145, 155, 10
+                    IDC_CHK_PROJECTION, 20, 163, 155, 10
     PUSHBUTTON      "Show mapping...",
-                    IDC_BTN_SHOW_MAPPING, 178, 143, 70, 14
+                    IDC_BTN_SHOW_MAPPING, 160, 161, 70, 14
 
-    GROUPBOX        "DSO Catalogs", IDC_STATIC_CATALOGS, 10, 174, 480, 130
+    GROUPBOX        "DSO Catalogs", IDC_STATIC_CATALOGS, 10, 192, 480, 130
     CONTROL         "", IDC_LINK_OPENNGC_COMMIT, WC_LINK,
-                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 20, 186, 270, 12
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 20, 204, 270, 12
     PUSHBUTTON      "Copy Hashes",
-                    IDC_BTN_COPY_EXPECTED_HASHES, 294, 184, 90, 14
+                    IDC_BTN_COPY_EXPECTED_HASHES, 294, 202, 90, 14
     CONTROL         "", IDC_LINK_HASH_HELP, WC_LINK,
-                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 388, 186, 92, 12
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 388, 204, 92, 12
 
-    LTEXT           "Catalog",          -1, 20, 202, 55, 10
-    LTEXT           "GitHub",           -1, 82, 202, 130, 10
-    LTEXT           "Local",            -1, 218, 202, 130, 10
-    LTEXT           "",                 -1, 352, 202, 10, 10
+    LTEXT           "Catalog",          -1, 20, 220, 55, 10
+    LTEXT           "GitHub",           -1, 82, 220, 130, 10
+    LTEXT           "Local",            -1, 218, 220, 130, 10
+    LTEXT           "",                 -1, 352, 220, 10, 10
 
-    LTEXT           "NGC.csv",          IDC_STATIC_NGC_LABEL, 20, 216, 60, 10
-    LTEXT           "-",                IDC_STATIC_NGC_GITHUB, 82, 216, 130, 10
-    LTEXT           "-",                IDC_STATIC_NGC_LOCAL, 218, 216, 130, 10
-    LTEXT           "?",                IDC_STATIC_NGC_MATCH, 352, 216, 10, 10
+    LTEXT           "NGC.csv",          IDC_STATIC_NGC_LABEL, 20, 234, 60, 10
+    LTEXT           "-",                IDC_STATIC_NGC_GITHUB, 82, 234, 130, 10
+    LTEXT           "-",                IDC_STATIC_NGC_LOCAL, 218, 234, 130, 10
+    LTEXT           "?",                IDC_STATIC_NGC_MATCH, 352, 234, 10, 10
     PUSHBUTTON      "Install",
-                    IDC_BTN_FETCH_NGC, 370, 214, 52, 14
+                    IDC_BTN_FETCH_NGC, 370, 232, 52, 14
     PUSHBUTTON      "Remove",
-                    IDC_BTN_REMOVE_NGC, 428, 214, 52, 14
+                    IDC_BTN_REMOVE_NGC, 428, 232, 52, 14
 
-    LTEXT           "addendum.csv",     IDC_STATIC_ADD_LABEL, 20, 234, 60, 10
-    LTEXT           "-",                IDC_STATIC_ADD_GITHUB, 82, 234, 130, 10
-    LTEXT           "-",                IDC_STATIC_ADD_LOCAL, 218, 234, 130, 10
-    LTEXT           "?",                IDC_STATIC_ADD_MATCH, 352, 234, 10, 10
+    LTEXT           "addendum.csv",     IDC_STATIC_ADD_LABEL, 20, 252, 60, 10
+    LTEXT           "-",                IDC_STATIC_ADD_GITHUB, 82, 252, 130, 10
+    LTEXT           "-",                IDC_STATIC_ADD_LOCAL, 218, 252, 130, 10
+    LTEXT           "?",                IDC_STATIC_ADD_MATCH, 352, 252, 10, 10
     PUSHBUTTON      "Install",
-                    IDC_BTN_FETCH_ADD, 370, 232, 52, 14
+                    IDC_BTN_FETCH_ADD, 370, 250, 52, 14
     PUSHBUTTON      "Remove",
-                    IDC_BTN_REMOVE_ADD, 428, 232, 52, 14
+                    IDC_BTN_REMOVE_ADD, 428, 250, 52, 14
 
     PUSHBUTTON      "Import from File...",
-                    IDC_BTN_IMPORT_FILE,  20, 256, 100, 14
+                    IDC_BTN_IMPORT_FILE,  20, 274, 100, 14
     PUSHBUTTON      "Open Catalog Folder",
-                    IDC_BTN_OPEN_CATALOG_DIR, 127, 256, 130, 14
+                    IDC_BTN_OPEN_CATALOG_DIR, 127, 274, 130, 14
 
-    GROUPBOX        "Status", -1, 10, 308, 480, 52
+    GROUPBOX        "Status", -1, 10, 326, 480, 52
     CONTROL         "", IDC_PROGRESS, PROGRESS_CLASSA,
-                    WS_CHILD | WS_VISIBLE,   20, 320, 460, 10
-    LTEXT           "",                 IDC_STATIC_PROGRESS_TEXT, 20, 334, 340, 14
-    RTEXT           "",                 IDC_STATIC_PENDING_TEXT, 370, 334, 110, 14
+                    WS_CHILD | WS_VISIBLE,   20, 338, 460, 10
+    LTEXT           "",                 IDC_STATIC_PROGRESS_TEXT, 20, 352, 340, 14
+    RTEXT           "",                 IDC_STATIC_PENDING_TEXT, 370, 352, 110, 14
 
     CONTROL         "", IDC_LINK_VERSION, WC_LINK,
-                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 10, 366, 480, 12
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 10, 384, 480, 12
     AUTOCHECKBOX    "Restart Explorer If Needed",
-                    IDC_CHK_RESTART_EXPLORER,   10, 392, 115, 10
+                    IDC_CHK_RESTART_EXPLORER,   10, 410, 115, 10
     PUSHBUTTON      "Advanced",
-                    IDC_BTN_ADVANCED,       290, 392, 60, 14
+                    IDC_BTN_ADVANCED,       290, 410, 60, 14
     PUSHBUTTON      "Apply",
-                    IDC_BTN_APPLY,          356, 392, 60, 14
-    DEFPUSHBUTTON   "Close",            IDOK,               422, 392,  60, 14
+                    IDC_BTN_APPLY,          356, 410, 60, 14
+    DEFPUSHBUTTON   "Close",            IDOK,               422, 410,  60, 14
 END
 
 IDD_ADVANCED DIALOGEX 0, 0, 360, 246
@@ -161,7 +166,7 @@ BEGIN
 END
 
 #pragma code_page(65001)
-IDD_TIERS DIALOGEX 0, 0, 300, 220
+IDD_TIERS DIALOGEX 0, 0, 300, 234
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Feature Tier Details"
 FONT 9, "Segoe UI", 400, 0, 0x1
@@ -231,9 +236,11 @@ BEGIN
     CTEXT           "✓",                   -1, 248, 164, 20, 10
 
     CONTROL         "", -1, "Static", SS_ETCHEDHORZ, 10, 180, 280, 1
-    LTEXT           "Default tier is Full for backward compatibility.",
+    LTEXT           "Windows Search indexing is controlled separately via the Search Filter toggle.",
                     -1, 10, 186, 280, 10
-    DEFPUSHBUTTON   "Close",              IDOK, 230, 200, 60, 14
+    LTEXT           "Default tier is Full for backward compatibility.",
+                    -1, 10, 198, 280, 10
+    DEFPUSHBUTTON   "Close",              IDOK, 230, 212, 60, 14
 END
 #pragma code_page(1252)
 
