@@ -304,6 +304,31 @@ $realDataMapping  </MappedFolders>
         $Results.pass | Should -Contain 'ShellProp_FILTER' -Because 'Handler should return Ha for FILTER keyword'
     }
 
+    # --- Direct IPropertyStore Validation ---
+
+    It 'IPropertyStore activates via SHGetPropertyStoreFromParsingName (GPS_HANDLERPROPERTIESONLY)' {
+        if (-not $Results) { Set-ItResult -Skipped -Because 'No results' }
+        $Results.pass | Should -Contain 'DirectPropStore_Activates' `
+            -Because 'GPS_HANDLERPROPERTIESONLY should return S_OK to prove handler is registered and working'
+    }
+
+    It 'IPropertyStore returns non-empty values for XISF properties' {
+        if (-not $Results) { Set-ItResult -Skipped -Because 'No results' }
+        $Results.pass | Should -Contain 'DirectPropStore_HasValues' `
+            -Because 'Handler should return actual values, not just property names with empty values'
+    }
+
+    # --- Thumbnail Handler ---
+
+    It 'Thumbnail handler returns bitmap for real XISF file' {
+        if (-not $Results) { Set-ItResult -Skipped -Because 'No results' }
+        if ($Results.info['ThumbnailTestFile'] -match 'No suitable') {
+            Set-ItResult -Skipped -Because 'No real XISF data available for thumbnail test'
+        }
+        $Results.pass | Should -Contain 'Thumbnail_RealXISF' `
+            -Because 'Thumbnail handler should return a valid bitmap for real XISF files with pixel data'
+    }
+
     # --- Real XISF Data ---
 
     It 'Real XISF file from D:\Astro is readable [informational]' {
@@ -341,6 +366,12 @@ $realDataMapping  </MappedFolders>
         $Results.pass | Should -Contain 'ToggleEnable' -Because 'Re-enabling the handler should restore IC 1396'
     }
 
+    It 'PreviewEnabled=0 disables thumbnail handler' {
+        if (-not $Results) { Set-ItResult -Skipped -Because 'No results' }
+        $Results.pass | Should -Contain 'TogglePreviewDisable' `
+            -Because 'Setting PreviewEnabled=0 should prevent thumbnail generation'
+    }
+
     # --- Feature Tiers ---
 
     It 'Basic tier (0) still exposes core FITS metadata' {
@@ -374,6 +405,25 @@ $realDataMapping  </MappedFolders>
         $diag = $Results.info | ConvertTo-Json -Depth 5
         Write-Host "`n=== Sandbox Diagnostics ===" -ForegroundColor Yellow
         Write-Host $diag -ForegroundColor Gray
+
+        # Show ETW key events if available
+        if ($Results.info['ETWKeyEvents']) {
+            Write-Host "`n=== ETW Key Events ===" -ForegroundColor Cyan
+            Write-Host $Results.info['ETWKeyEvents'] -ForegroundColor Gray
+        }
+
+        # Show handler-only property store details
+        if ($Results.info['HandlerOnlyPropStore_HR']) {
+            Write-Host "`nHandler-Only PropertyStore HR: $($Results.info['HandlerOnlyPropStore_HR'])" -ForegroundColor Cyan
+            Write-Host "Handler-Only Property Count: $($Results.info['HandlerOnlyPropertyCount'])" -ForegroundColor Cyan
+            Write-Host "Handler-Only Non-Empty Count: $($Results.info['HandlerOnlyNonEmptyCount'])" -ForegroundColor Cyan
+        }
+
+        # Show thumbnail result
+        if ($Results.info['ThumbnailResult']) {
+            Write-Host "Thumbnail Result: $($Results.info['ThumbnailResult'])" -ForegroundColor Cyan
+        }
+
         Write-Host "=== End Diagnostics ===`n" -ForegroundColor Yellow
         $true | Should -BeTrue
     }

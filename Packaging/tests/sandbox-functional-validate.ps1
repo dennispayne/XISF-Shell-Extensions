@@ -223,15 +223,18 @@ public static class PropertyStoreHelper {
     [DllImport("ole32.dll")]
     public static extern int PropVariantClear(ref PropVariant pvar);
 
-    public static System.Collections.Generic.Dictionary<string, string> ReadAll(string path) {
+    // flags: GPS_DEFAULT=0, GPS_HANDLERPROPERTIESONLY=0x1, GPS_READWRITE=0x2
+    public static System.Collections.Generic.Dictionary<string, string> ReadAll(string path, int flags) {
         var dict = new System.Collections.Generic.Dictionary<string, string>();
         var iid  = new Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99");
         IPropertyStore store;
-        int hr = SHGetPropertyStoreFromParsingName(path, IntPtr.Zero, 0, iid, out store);
+        int hr = SHGetPropertyStoreFromParsingName(path, IntPtr.Zero, flags, iid, out store);
+        dict["__GPS_Flags"] = "0x" + flags.ToString("X");
         if (hr != 0) {
             dict["__SHGetPropStore_HR"] = "0x" + hr.ToString("X8");
             return dict;
         }
+        dict["__SHGetPropStore_HR"] = "0x00000000";
 
         uint count;
         store.GetCount(out count);
@@ -253,7 +256,7 @@ public static class PropertyStoreHelper {
 }
 '@ -ErrorAction Stop
 
-        $directProps = [PropertyStoreHelper]::ReadAll($FilePath)
+        $directProps = [PropertyStoreHelper]::ReadAll($FilePath, 0)  # GPS_DEFAULT
         foreach ($kv in $directProps.GetEnumerator()) {
             if (-not $props.ContainsKey($kv.Key)) {
                 $props[$kv.Key] = $kv.Value
@@ -261,10 +264,29 @@ public static class PropertyStoreHelper {
         }
         $results.info['DirectPropertyStoreCount'] = $directProps.Count
         $results.info['DirectPropertyStoreKeys'] = ($directProps.Keys | Sort-Object) -join '; '
-        # Capture the HRESULT if SHGetPropertyStoreFromParsingName failed
+        # Capture the HRESULT
         if ($directProps.ContainsKey('__SHGetPropStore_HR')) {
             $results.info['SHGetPropStore_HR'] = $directProps['__SHGetPropStore_HR']
         }
+
+        # Also try GPS_HANDLERPROPERTIESONLY (0x1) — forces handler activation,
+        # bypasses cache. This is what Explorer uses for columns and Details tab.
+        $handlerProps = [PropertyStoreHelper]::ReadAll($FilePath, 1)  # GPS_HANDLERPROPERTIESONLY
+        $results.info['HandlerOnlyPropStore_HR'] = $handlerProps['__SHGetPropStore_HR']
+        $handlerPropCount = if ($handlerProps.ContainsKey('__PropertyCount')) { [int]$handlerProps['__PropertyCount'] } else { 0 }
+        $results.info['HandlerOnlyPropertyCount'] = $handlerPropCount
+
+        # Capture all handler-only property names and values for diagnostics
+        $handlerSample = @{}
+        foreach ($kv in $handlerProps.GetEnumerator()) {
+            if ($kv.Key -notlike '__*') {
+                $handlerSample[$kv.Key] = $kv.Value
+                if (-not $props.ContainsKey($kv.Key)) {
+                    $props[$kv.Key] = $kv.Value
+                }
+            }
+        }
+        $results.info['HandlerOnlyProperties'] = $handlerSample
     } catch {
         $results.info['DirectPropertyStoreError'] = $_.Exception.Message
     }
@@ -472,6 +494,31 @@ try {
 Restart-Explorer
 
 # ===================================================================
+# 1c. Start ETW trace capture for both handler providers
+# ===================================================================
+$traceSession = 'XISFHandlerTrace'
+$etlPath      = 'C:\Results\handler-trace.etl'
+try {
+    # Stop any leftover session from a previous run
+    & logman stop $traceSession -ets 2>$null | Out-Null
+
+    # Create trace session capturing both providers
+    & logman create trace $traceSession -ets -o $etlPath -f bincirc -max 64 `
+        -p "{6F6B0C9D-6B76-5A24-BC3D-708314E96F2B}" 0xFFFFFFFF 5 `
+        2>$null | Out-Null
+
+    # Add the preview/thumbnail provider to the same session
+    & logman update trace $traceSession -ets `
+        -p "{4FD34FD0-08B3-5D9A-8D77-B9D6705D6B75}" 0xFFFFFFFF 5 `
+        2>$null | Out-Null
+
+    $results.info['ETWTraceStarted'] = $true
+} catch {
+    $results.info['ETWTraceStarted'] = $false
+    $results.info['ETWTraceError']   = $_.Exception.Message
+}
+
+# ===================================================================
 # 2. VC Runtime Check
 # ===================================================================
 try {
@@ -530,31 +577,46 @@ try {
     $shellProps = Get-ShellProperties -FilePath $localXisfPath
     $results.info['ShellPropertyCount'] = $shellProps.Count
 
-    # Store all discovered property values for diagnostics
-    $discoveredProps = @{}
+    # ---------------------------------------------------------------
+    # 4a. Validate IPropertyStore activation (GPS_HANDLERPROPERTIESONLY)
+    # This is the code path Explorer uses for columns and Details tab.
+    # If this HRESULT is not S_OK, nothing downstream can work.
+    # ---------------------------------------------------------------
+    $handlerHR = $results.info['HandlerOnlyPropStore_HR']
+    Assert 'DirectPropStore_Activates' ($handlerHR -eq '0x00000000') `
+           "SHGetPropertyStoreFromParsingName(GPS_HANDLERPROPERTIESONLY) returned $handlerHR"
 
-    # Look for our known metadata values anywhere in the shell properties
-    $knownPatterns = @{
-        'OBJECT'   = 'IC 1396'
-        'EXPTIME'  = '300'
-        'INSTRUME' = 'ZWO ASI2600MM Pro'
-        'FILTER'   = 'Ha'
-        'TELESCOP' = 'Takahashi FSQ-106N'
+    # ---------------------------------------------------------------
+    # 4b. Validate property VALUES via canonical property names
+    # Uses the Astro.* canonical names registered in our propdesc schema.
+    # This avoids false positives from regex substring matching.
+    # ---------------------------------------------------------------
+    $canonicalChecks = @{
+        'OBJECT'   = @{ Names = @('Astro.Object', 'XISF.ObjectName');     Expected = 'IC 1396' }
+        'EXPTIME'  = @{ Names = @('Astro.ExposureTime', 'XISF.ExposureTime'); Expected = '300' }
+        'INSTRUME' = @{ Names = @('Astro.CameraModel', 'XISF.Instrument'); Expected = 'ZWO ASI2600MM Pro' }
+        'FILTER'   = @{ Names = @('Astro.Filter', 'XISF.FilterName');     Expected = 'Ha' }
     }
 
-    foreach ($kv in $knownPatterns.GetEnumerator()) {
+    $discoveredProps = @{}
+
+    foreach ($kv in $canonicalChecks.GetEnumerator()) {
         $found = $false
-        foreach ($prop in $shellProps.GetEnumerator()) {
-            if ($prop.Value -match [regex]::Escape($kv.Value)) {
-                $discoveredProps[$kv.Key] = $prop.Value
+        foreach ($name in $kv.Value.Names) {
+            if ($shellProps.ContainsKey($name) -and $shellProps[$name] -eq $kv.Value.Expected) {
+                $discoveredProps[$kv.Key] = $shellProps[$name]
                 $found = $true
                 break
             }
         }
+        # Fallback: search by exact value match on any property key containing
+        # a relevant substring, but NOT matching common system property names
         if (-not $found) {
-            # Also try exact match
             foreach ($prop in $shellProps.GetEnumerator()) {
-                if ($prop.Value -eq $kv.Value) {
+                $keyLower = $prop.Key.ToLower()
+                if ($prop.Value -eq $kv.Value.Expected -and
+                    $keyLower -notmatch '^system\.(not|is|shared)' -and
+                    $keyLower -ne 'sharing status') {
                     $discoveredProps[$kv.Key] = $prop.Value
                     $found = $true
                     break
@@ -565,16 +627,36 @@ try {
 
     $results.info['PropertyValues'] = $discoveredProps
 
-    # Assert that we found at least the core properties
-    Assert 'ShellProp_OBJECT'   ($discoveredProps.ContainsKey('OBJECT'))   "IC 1396 not found in shell properties"
-    Assert 'ShellProp_EXPTIME'  ($discoveredProps.ContainsKey('EXPTIME'))  "300 not found in shell properties"
-    Assert 'ShellProp_INSTRUME' ($discoveredProps.ContainsKey('INSTRUME')) "ZWO ASI2600MM Pro not found in shell properties"
-    Assert 'ShellProp_FILTER'   ($discoveredProps.ContainsKey('FILTER'))   "Ha not found in shell properties"
+    Assert 'ShellProp_OBJECT'   ($discoveredProps.ContainsKey('OBJECT'))   "IC 1396 not found via canonical names"
+    Assert 'ShellProp_EXPTIME'  ($discoveredProps.ContainsKey('EXPTIME'))  "300 not found via canonical names"
+    Assert 'ShellProp_INSTRUME' ($discoveredProps.ContainsKey('INSTRUME')) "ZWO ASI2600MM Pro not found via canonical names"
+    Assert 'ShellProp_FILTER'   ($discoveredProps.ContainsKey('FILTER'))   "Ha not found via canonical names"
+
+    # ---------------------------------------------------------------
+    # 4c. Validate handler-only properties have non-empty values
+    # This proves the IPropertyStore::GetValue path works, which is
+    # what Explorer uses for columns and the Details tab.
+    # ---------------------------------------------------------------
+    $handlerPropCount = $results.info['HandlerOnlyPropertyCount']
+    $handlerSample    = $results.info['HandlerOnlyProperties']
+    $nonEmptyCount = 0
+    if ($handlerSample -is [hashtable]) {
+        foreach ($v in $handlerSample.Values) {
+            if ($null -ne $v -and "$v" -ne '' -and $v -notmatch '^\(vt=') {
+                $nonEmptyCount++
+            }
+        }
+    }
+    $results.info['HandlerOnlyNonEmptyCount'] = $nonEmptyCount
+    Assert 'DirectPropStore_HasValues' ($nonEmptyCount -gt 0) `
+           "IPropertyStore returned $handlerPropCount props but $nonEmptyCount had non-empty values"
 } catch {
     Assert 'ShellProp_OBJECT'   $false "Shell property scan threw: $($_.Exception.Message)"
     Assert 'ShellProp_EXPTIME'  $false "Shell property scan threw: $($_.Exception.Message)"
     Assert 'ShellProp_INSTRUME' $false "Shell property scan threw: $($_.Exception.Message)"
     Assert 'ShellProp_FILTER'   $false "Shell property scan threw: $($_.Exception.Message)"
+    Assert 'DirectPropStore_Activates' $false "Shell property scan threw: $($_.Exception.Message)"
+    Assert 'DirectPropStore_HasValues' $false "Shell property scan threw: $($_.Exception.Message)"
 }
 
 # ===================================================================
@@ -622,6 +704,102 @@ if (Test-Path 'C:\AstroData') {
     }
 } else {
     $results.info['RealDataAvailable'] = $false
+}
+
+# ===================================================================
+# 4d. Thumbnail Handler Test
+# ===================================================================
+# Use a real XISF file (has pixel data for thumbnail decode).
+# The synthetic test file has no attachment data, so thumbnails will fail.
+try {
+    $thumbTestFile = $null
+    if (Test-Path 'C:\AstroData') {
+        $realThumbFile = Get-ChildItem 'C:\AstroData' -Recurse -Filter '*.xisf' -ErrorAction SilentlyContinue |
+            Where-Object { $_.Length -gt 100KB } |
+            Select-Object -First 1
+        if ($realThumbFile) {
+            $thumbTestFile = Join-Path $localTestDir "thumb_$($realThumbFile.Name)"
+            Copy-Item $realThumbFile.FullName $thumbTestFile -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    if ($thumbTestFile -and (Test-Path $thumbTestFile)) {
+        $results.info['ThumbnailTestFile'] = $thumbTestFile
+        $results.info['ThumbnailTestFileSize'] = (Get-Item $thumbTestFile).Length
+
+        # Use SHCreateItemFromParsingName + IShellItemImageFactory to request
+        # a thumbnail through the shell pipeline (same path Explorer uses)
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class ThumbnailHelper {
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SIZE { public int cx; public int cy; }
+
+    [ComImport, Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b"),
+     InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IShellItemImageFactory {
+        int GetImage(SIZE size, int flags, out IntPtr phbm);
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
+    public static extern int SHCreateItemFromParsingName(
+        string pszPath, IntPtr pbc,
+        [MarshalAs(UnmanagedType.LPStruct)] Guid riid,
+        [MarshalAs(UnmanagedType.Interface)] out object ppv);
+
+    [DllImport("gdi32.dll")]
+    public static extern bool DeleteObject(IntPtr hObject);
+
+    [DllImport("gdi32.dll")]
+    public static extern int GetBitmapBits(IntPtr hbmp, int cbBuffer, byte[] lpvBits);
+
+    [DllImport("gdi32.dll")]
+    public static extern int GetObject(IntPtr h, int c, out BITMAP pv);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct BITMAP {
+        public int bmType, bmWidth, bmHeight, bmWidthBytes;
+        public short bmPlanes, bmBitsPixel;
+        public IntPtr bmBits;
+    }
+
+    public static string GetThumbnail(string path, int cx, int cy) {
+        var iid = new Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b");
+        object item;
+        int hr = SHCreateItemFromParsingName(path, IntPtr.Zero, iid, out item);
+        if (hr != 0) return "SHCreateItem_HR=0x" + hr.ToString("X8");
+
+        var factory = (IShellItemImageFactory)item;
+        var size = new SIZE { cx = cx, cy = cy };
+        IntPtr hbmp;
+        // SIIGBF_THUMBNAILONLY = 0x2, SIIGBF_BIGGERSIZEOK = 0x4
+        hr = factory.GetImage(size, 0x2 | 0x4, out hbmp);
+        if (hr != 0) return "GetImage_HR=0x" + hr.ToString("X8");
+        if (hbmp == IntPtr.Zero) return "NULL_HBITMAP";
+
+        BITMAP bm;
+        GetObject(hbmp, Marshal.SizeOf(typeof(BITMAP)), out bm);
+        string result = "OK:" + bm.bmWidth + "x" + bm.bmHeight + "x" + bm.bmBitsPixel + "bpp";
+        DeleteObject(hbmp);
+        return result;
+    }
+}
+'@ -ErrorAction Stop
+
+        $thumbResult = [ThumbnailHelper]::GetThumbnail($thumbTestFile, 256, 256)
+        $results.info['ThumbnailResult'] = $thumbResult
+
+        $thumbOk = $thumbResult.StartsWith('OK:')
+        Assert 'Thumbnail_RealXISF' $thumbOk "Thumbnail from real XISF: $thumbResult"
+    } else {
+        $results.info['ThumbnailTestFile'] = 'No suitable real XISF found for thumbnail test'
+        # Don't fail — skip gracefully when no real data is available
+        Assert 'Thumbnail_RealXISF' $true 'Skipped: no real XISF data available'
+    }
+} catch {
+    Assert 'Thumbnail_RealXISF' $false "Thumbnail test threw: $($_.Exception.Message)"
 }
 
 # ===================================================================
@@ -698,6 +876,40 @@ try {
 }
 
 # ===================================================================
+# 6b. Preview/Thumbnail Toggle Test (PreviewEnabled)
+# ===================================================================
+try {
+    if (-not (Test-Path $regBase)) {
+        New-Item -Path $regBase -Force | Out-Null
+    }
+
+    # Disable preview handler
+    Set-ItemProperty -Path $regBase -Name 'PreviewEnabled' -Value 0 -Type DWord -Force
+    Restart-Explorer
+
+    # Thumbnail via IShellItemImageFactory should fail when disabled
+    $thumbDisabledResult = 'skipped'
+    if ($thumbTestFile -and (Test-Path $thumbTestFile)) {
+        try {
+            $thumbDisabledResult = [ThumbnailHelper]::GetThumbnail($thumbTestFile, 256, 256)
+        } catch {
+            $thumbDisabledResult = "error:$($_.Exception.Message)"
+        }
+    }
+    $results.info['PreviewDisabled_ThumbnailResult'] = $thumbDisabledResult
+    # When disabled, GetImage should fail (not return OK:)
+    $previewDisableOk = ($thumbDisabledResult -eq 'skipped') -or (-not $thumbDisabledResult.StartsWith('OK:'))
+    Assert 'TogglePreviewDisable' $previewDisableOk `
+           "Thumbnail still works after PreviewEnabled=0: $thumbDisabledResult"
+
+    # Re-enable preview handler
+    Set-ItemProperty -Path $regBase -Name 'PreviewEnabled' -Value 1 -Type DWord -Force
+    Restart-Explorer
+} catch {
+    Assert 'TogglePreviewDisable' $false "Preview toggle test threw: $($_.Exception.Message)"
+}
+
+# ===================================================================
 # 7. Feature Tier Test
 # ===================================================================
 try {
@@ -741,6 +953,38 @@ try {
 } catch {
     Assert 'TierBasic' $false "Tier test threw: $($_.Exception.Message)"
     Assert 'TierFull'  $false "Tier test threw: $($_.Exception.Message)"
+}
+
+# ===================================================================
+# Stop ETW trace and export to CSV for analysis
+# ===================================================================
+try {
+    & logman stop $traceSession -ets 2>$null | Out-Null
+    if (Test-Path $etlPath) {
+        $results.info['ETWTraceFile'] = $etlPath
+        $results.info['ETWTraceSize'] = (Get-Item $etlPath).Length
+
+        # Export to CSV for easy parsing on the host side
+        $csvPath = 'C:\Results\handler-trace.csv'
+        & tracerpt $etlPath -o $csvPath -of CSV -y 2>$null | Out-Null
+        if (Test-Path $csvPath) {
+            $results.info['ETWTraceCSV'] = $csvPath
+            # Extract key events for quick diagnostics
+            $traceLines = Get-Content $csvPath -ErrorAction SilentlyContinue |
+                Select-Object -First 200
+            $keyEvents = @()
+            foreach ($line in $traceLines) {
+                if ($line -match 'PropertyStore|Thumbnail|Initialize|Failed|Error|CLASS_E_') {
+                    $keyEvents += $line
+                }
+            }
+            if ($keyEvents.Count -gt 0) {
+                $results.info['ETWKeyEvents'] = $keyEvents -join "`n"
+            }
+        }
+    }
+} catch {
+    $results.info['ETWStopError'] = $_.Exception.Message
 }
 
 # ===================================================================
