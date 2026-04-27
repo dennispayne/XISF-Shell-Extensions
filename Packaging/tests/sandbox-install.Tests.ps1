@@ -102,6 +102,13 @@ function Assert($name, $condition, $detail) {
 try {
     # Trust cert and install
     Import-Certificate -FilePath 'C:\Package\test.cer' -CertStoreLocation Cert:\LocalMachine\TrustedPeople | Out-Null
+
+    # Install VCLibs framework dependency if the appx is available
+    $vcLibsAppx = 'C:\Package\Microsoft.VCLibs.x64.14.00.Desktop.appx'
+    if (Test-Path $vcLibsAppx) {
+        Add-AppxPackage -Path $vcLibsAppx -ErrorAction Stop
+    }
+
     Add-AppxPackage -Path 'C:\Package\XISF.ShellExtension_0.99.0.0_x64.msix'
 
     # 1. Package registered

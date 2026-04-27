@@ -104,6 +104,12 @@ foreach ($bin in $binaries) {
     Copy-Item -Path (Join-Path $releaseDir $bin) -Destination $stage -Force
 }
 
+# Include the propdesc schema so it can be registered at install time
+$propdescSrc = Join-Path $repoRoot 'PropertyHandler\XISFPropertyHandler\propdesc\xisf.propdesc'
+if (Test-Path $propdescSrc) {
+    Copy-Item -Path $propdescSrc -Destination $stage -Force
+}
+
 $stageAssets = Join-Path $stage 'Assets'
 New-Item -ItemType Directory -Path $stageAssets -Force | Out-Null
 Copy-Item -Path (Join-Path $sharedAssets '*') -Destination $stageAssets -Force
@@ -136,6 +142,21 @@ if ($CertificatePath) {
     Write-Host "Signed: $outMsix" -ForegroundColor Green
 } else {
     Write-Warning "Produced UNSIGNED package: $outMsix"
+}
+
+# Download VCLibs framework appx for sideloading.
+# Store-distributed packages resolve this automatically; sideloading needs it staged.
+$vcLibsAppx = Join-Path $OutputDir 'Microsoft.VCLibs.x64.14.00.Desktop.appx'
+if (-not (Test-Path $vcLibsAppx)) {
+    $vcLibsUrl = 'https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx'
+    try {
+        Invoke-WebRequest -Uri $vcLibsUrl -OutFile $vcLibsAppx -UseBasicParsing -ErrorAction Stop
+        Write-Host "VCLibs downloaded: $vcLibsAppx" -ForegroundColor Cyan
+    } catch {
+        Write-Warning "Failed to download VCLibs appx: $_  — sideloading may fail without VC runtime."
+    }
+} else {
+    Write-Host "VCLibs already present: $vcLibsAppx" -ForegroundColor Cyan
 }
 
 Write-Host "OK: $outMsix" -ForegroundColor Green
