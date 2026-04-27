@@ -179,6 +179,11 @@ Describe 'MSIX functional validation in sandbox' -Tag 'Sandbox', 'Functional' {
         $Results.pass | Should -Contain 'PackageInstalled'
     }
 
+    It 'HKCU shell metadata registered (FullDetails/PreviewDetails/InfoTip/KindMap)' {
+        if (-not $Results) { Set-ItResult -Skipped -Because 'No results' }
+        $Results.info['HkcuRegistered'] | Should -BeTrue -Because 'MSIX needs HKCU registration for Explorer columns'
+    }
+
     # --- Runtime ---
 
     It 'VC runtime is available' {
