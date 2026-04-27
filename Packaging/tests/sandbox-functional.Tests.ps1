@@ -156,7 +156,7 @@ $realDataMapping  </MappedFolders>
         }
 
         if (Test-Path $ResultsFile) {
-            $script:Results = Get-Content $ResultsFile -Raw | ConvertFrom-Json
+            $script:Results = Get-Content $ResultsFile -Raw | ConvertFrom-Json -AsHashtable
         } else {
             $script:Results = $null
         }
