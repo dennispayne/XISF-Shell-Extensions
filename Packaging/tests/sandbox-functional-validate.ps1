@@ -323,11 +323,16 @@ try {
     $results.info['ClassicalRegDir'] = $classicalRegDir
 
     if ($pkg) {
-        # First try the production code path (--register-msix)
+        # First try the production code path (--register-msix) with timeout
         $exePath = Join-Path $pkg.InstallLocation 'XISFShellExtensionHost.exe'
         $proc = Start-Process -FilePath $exePath -ArgumentList '--register-msix' `
-                    -Wait -PassThru -NoNewWindow -ErrorAction Stop
-        $results.info['RegisterMsixExitCode'] = $proc.ExitCode
+                    -PassThru -NoNewWindow -ErrorAction Stop
+        if (-not $proc.WaitForExit(30000)) {
+            $proc.Kill()
+            $results.info['RegisterMsixExitCode'] = 'timeout'
+        } else {
+            $results.info['RegisterMsixExitCode'] = $proc.ExitCode
+        }
 
         # Copy handler DLLs and propdesc to accessible location
         New-Item -ItemType Directory -Path $classicalRegDir -Force | Out-Null
@@ -345,21 +350,9 @@ try {
 
         # Ensure VCRuntime is available system-wide for the handler DLLs.
         # The DLL loader searches System32 but NOT the InProcServer32 directory.
-        # Download and install the VC++ Redistributable (what real users have).
-        try {
-            $vcRedistUrl = 'https://aka.ms/vs/17/release/vc_redist.x64.exe'
-            $vcRedistPath = 'C:\Installer\vc_redist.x64.exe'
-            if (-not (Test-Path "$env:SystemRoot\System32\vcruntime140.dll")) {
-                Invoke-WebRequest -Uri $vcRedistUrl -OutFile $vcRedistPath -UseBasicParsing -ErrorAction Stop
-                Start-Process $vcRedistPath -ArgumentList '/install /quiet /norestart' `
-                    -Wait -NoNewWindow -ErrorAction Stop
-                $results.info['VCRedist_Installed'] = $true
-            } else {
-                $results.info['VCRedist_Installed'] = 'already present'
-            }
-        } catch {
-            $results.info['VCRedist_Error'] = $_.Exception.Message
-            # Fallback: copy from VCLibs framework package
+        # Copy from the already-installed VCLibs framework package to System32
+        # (avoids network dependency and hanging downloads in sandbox).
+        if (-not (Test-Path "$env:SystemRoot\System32\vcruntime140.dll")) {
             try {
                 $vcLibsPkg = Get-AppxPackage -Name 'Microsoft.VCLibs.140.00.UWPDesktop' -ErrorAction SilentlyContinue |
                     Where-Object { $_.Architecture -eq 'X64' } | Select-Object -First 1
@@ -367,18 +360,24 @@ try {
                     foreach ($vcDll in @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll')) {
                         $vcSrc = Join-Path $vcLibsPkg.InstallLocation $vcDll
                         if (Test-Path $vcSrc) {
-                            Copy-Item $vcSrc (Join-Path $classicalRegDir $vcDll) -Force
+                            Copy-Item $vcSrc "$env:SystemRoot\System32\$vcDll" -Force -ErrorAction SilentlyContinue
+                            Copy-Item $vcSrc (Join-Path $classicalRegDir $vcDll) -Force -ErrorAction SilentlyContinue
                         }
                     }
+                    # Also add handler dir to PATH as belt-and-suspenders
                     $curPath = [Environment]::GetEnvironmentVariable('PATH', 'Machine')
                     if ($curPath -notlike "*$classicalRegDir*") {
                         [Environment]::SetEnvironmentVariable('PATH', "$classicalRegDir;$curPath", 'Machine')
                     }
-                    $results.info['VCRuntime_PathFallback'] = $true
+                    $results.info['VCRuntime_Source'] = 'VCLibs framework'
+                } else {
+                    $results.info['VCRuntime_Source'] = 'VCLibs not found'
                 }
             } catch {
-                $results.info['VCRuntime_FallbackError'] = $_.Exception.Message
+                $results.info['VCRuntime_Error'] = $_.Exception.Message
             }
+        } else {
+            $results.info['VCRuntime_Source'] = 'already in System32'
         }
 
         # Register both handler DLLs classically (requires admin — sandbox has it)
@@ -387,12 +386,14 @@ try {
 
         if (Test-Path $propDll) {
             $regProc = Start-Process regsvr32 -ArgumentList "/s `"$propDll`"" `
-                -Wait -PassThru -NoNewWindow -ErrorAction Stop
+                -PassThru -NoNewWindow -ErrorAction Stop
+            if (-not $regProc.WaitForExit(30000)) { $regProc.Kill() }
             $results.info['RegSvr32PropertyHandler'] = $regProc.ExitCode
         }
         if (Test-Path $prevDll) {
             $regProc = Start-Process regsvr32 -ArgumentList "/s `"$prevDll`"" `
-                -Wait -PassThru -NoNewWindow -ErrorAction Stop
+                -PassThru -NoNewWindow -ErrorAction Stop
+            if (-not $regProc.WaitForExit(30000)) { $regProc.Kill() }
             $results.info['RegSvr32PreviewHandler'] = $regProc.ExitCode
         }
 
