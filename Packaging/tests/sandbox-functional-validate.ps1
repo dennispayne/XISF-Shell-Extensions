@@ -23,6 +23,31 @@
 $ErrorActionPreference = 'Continue'
 
 # ---------------------------------------------------------------------------
+# Emergency result writer — ensures results are always persisted
+# ---------------------------------------------------------------------------
+function Write-Results {
+    try {
+        $json  = $script:results | ConvertTo-Json -Depth 5
+        $tmp   = 'C:\Results\functional-results.tmp'
+        $final = 'C:\Results\functional-results.json'
+        Set-Content -Path $tmp -Value $json -Encoding UTF8
+        Move-Item -Path $tmp -Destination $final -Force
+    } catch {
+        $script:results | ConvertTo-Json -Depth 5 |
+            Set-Content -Path 'C:\Results\functional-results.json' -Encoding UTF8
+    }
+    New-Item -Path 'C:\Results\done.marker' -ItemType File -Force -ErrorAction SilentlyContinue | Out-Null
+}
+
+# Trap unhandled terminating errors — flush partial results before dying
+trap {
+    $script:results.info['UnhandledError'] = $_.Exception.Message
+    $script:results.info['UnhandledErrorAt'] = $_.InvocationInfo.ScriptLineNumber
+    Write-Results
+    continue
+}
+
+# ---------------------------------------------------------------------------
 # Result accumulator
 # ---------------------------------------------------------------------------
 $results = @{
@@ -320,27 +345,25 @@ try {
 
         # Ensure VCRuntime is available system-wide for the handler DLLs.
         # The DLL loader searches System32 but NOT the InProcServer32 directory.
-        $vcLibsPkg = Get-AppxPackage -Name 'Microsoft.VCLibs.140.00.UWPDesktop' -ErrorAction SilentlyContinue |
-            Where-Object { $_.Architecture -eq 'X64' } | Select-Object -First 1
-        $vcCopied = $false
-        if ($vcLibsPkg) {
-            # Method 1: Copy to System32
-            try {
-                foreach ($vcDll in @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll')) {
-                    $vcSrc = Join-Path $vcLibsPkg.InstallLocation $vcDll
-                    $vcDst = Join-Path "$env:SystemRoot\System32" $vcDll
-                    if ((Test-Path $vcSrc) -and -not (Test-Path $vcDst)) {
-                        Copy-Item $vcSrc $vcDst -Force
-                    }
-                }
-                $vcCopied = $true
-            } catch {
-                $results.info['VCRuntime_CopyError'] = $_.Exception.Message
+        # Download and install the VC++ Redistributable (what real users have).
+        try {
+            $vcRedistUrl = 'https://aka.ms/vs/17/release/vc_redist.x64.exe'
+            $vcRedistPath = 'C:\Installer\vc_redist.x64.exe'
+            if (-not (Test-Path "$env:SystemRoot\System32\vcruntime140.dll")) {
+                Invoke-WebRequest -Uri $vcRedistUrl -OutFile $vcRedistPath -UseBasicParsing -ErrorAction Stop
+                Start-Process $vcRedistPath -ArgumentList '/install /quiet /norestart' `
+                    -Wait -NoNewWindow -ErrorAction Stop
+                $results.info['VCRedist_Installed'] = $true
+            } else {
+                $results.info['VCRedist_Installed'] = 'already present'
             }
-
-            # Method 2: If System32 copy failed, add handler dir to system PATH
-            if (-not $vcCopied) {
-                try {
+        } catch {
+            $results.info['VCRedist_Error'] = $_.Exception.Message
+            # Fallback: copy from VCLibs framework package
+            try {
+                $vcLibsPkg = Get-AppxPackage -Name 'Microsoft.VCLibs.140.00.UWPDesktop' -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Architecture -eq 'X64' } | Select-Object -First 1
+                if ($vcLibsPkg) {
                     foreach ($vcDll in @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll')) {
                         $vcSrc = Join-Path $vcLibsPkg.InstallLocation $vcDll
                         if (Test-Path $vcSrc) {
@@ -351,12 +374,11 @@ try {
                     if ($curPath -notlike "*$classicalRegDir*") {
                         [Environment]::SetEnvironmentVariable('PATH', "$classicalRegDir;$curPath", 'Machine')
                     }
-                    $vcCopied = $true
-                } catch {
-                    $results.info['VCRuntime_PathError'] = $_.Exception.Message
+                    $results.info['VCRuntime_PathFallback'] = $true
                 }
+            } catch {
+                $results.info['VCRuntime_FallbackError'] = $_.Exception.Message
             }
-            $results.info['VCRuntime_CopiedToSystem32'] = $vcCopied
         }
 
         # Register both handler DLLs classically (requires admin — sandbox has it)
@@ -673,25 +695,14 @@ try {
 # ===================================================================
 # Write results atomically
 # ===================================================================
-try {
-    $json  = $results | ConvertTo-Json -Depth 5
-    $tmp   = 'C:\Results\functional-results.tmp'
-    $final = 'C:\Results\functional-results.json'
-    Set-Content -Path $tmp -Value $json -Encoding UTF8
-    Move-Item -Path $tmp -Destination $final -Force
-} catch {
-    # Last-resort: write directly
-    $results | ConvertTo-Json -Depth 5 | Set-Content -Path 'C:\Results\functional-results.json' -Encoding UTF8
-}
-
-# Signal completion
-New-Item -Path 'C:\Results\done.marker' -ItemType File -Force | Out-Null
+Write-Results
 
 # Shutdown the sandbox unless keep-alive marker is present
 if (Test-Path 'C:\Installer\keep-alive.marker') {
     Write-Host "`n=== Sandbox kept alive for inspection ===" -ForegroundColor Cyan
     Write-Host "Results: C:\Results\functional-results.json" -ForegroundColor Cyan
     Write-Host "Test data: C:\TestData\" -ForegroundColor Cyan
+    Write-Host "Handler DLLs: C:\XISFHandlers\" -ForegroundColor Cyan
     Write-Host "Package: $((Get-AppxPackage -Name 'DennisPayne.XISF.ShellExtension' -ErrorAction SilentlyContinue).InstallLocation)" -ForegroundColor Cyan
     Write-Host "Close this window or the sandbox to end.`n" -ForegroundColor Cyan
 } else {
