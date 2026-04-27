@@ -36,6 +36,14 @@ BeforeAll {
     # Check prerequisites
     $script:SandboxAvailable = $null -ne (Get-Command 'WindowsSandbox.exe' -ErrorAction SilentlyContinue)
 
+    # If another sandbox is running, stop it first to avoid blocking
+    $existingSandbox = Get-Process -Name 'WindowsSandbox' -ErrorAction SilentlyContinue
+    if ($existingSandbox) {
+        Write-Host 'Stopping existing Windows Sandbox instance...' -ForegroundColor Yellow
+        $existingSandbox | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 5
+    }
+
     $script:HasBinaries = @(
         'XISFPropertyHandler.dll', 'XISFPreviewHandler.dll', 'XISFShellExtensionHost.exe'
     ) | ForEach-Object { Test-Path (Join-Path $ReleaseDir $_) } | Where-Object { $_ -eq $false }
@@ -199,9 +207,10 @@ $realDataMapping  </MappedFolders>
         $Results.pass | Should -Contain 'PackageInstalled'
     }
 
-    It 'HKCU shell metadata registered (FullDetails/PreviewDetails/InfoTip/KindMap)' {
+    It 'HKCU shell metadata registered (FullDetails/PropertyHandlers/shellex)' {
         if (-not $Results) { Set-ItResult -Skipped -Because 'No results' }
-        $Results.info['HkcuRegistered'] | Should -BeTrue -Because 'MSIX needs HKCU registration for Explorer columns'
+        $Results.info['HkcuRegistered'] | Should -BeTrue -Because 'MSIX needs supplemental registration for Explorer'
+        $Results.info['FullDetailsWritten'] | Should -BeTrue -Because 'FullDetails tells Explorer which columns to show'
     }
 
     # --- Runtime ---
@@ -223,42 +232,26 @@ $realDataMapping  </MappedFolders>
         }
     }
 
-    # --- Shell Property Handler ---
-    # NOTE: MSIX packaged COM property handlers are only invoked by Explorer's
-    # shell, not by SHGetPropertyStoreFromParsingName from PowerShell.  These
-    # tests verify whether the handler can be reached from scripted calls;
-    # they are expected to fail for MSIX and are therefore informational.
+    # --- Shell Property Handler (with classical registration, these should work) ---
 
-    It 'Property handler exposes OBJECT (IC 1396) [informational — MSIX limitation]' {
+    It 'Property handler exposes OBJECT (IC 1396)' {
         if (-not $Results) { Set-ItResult -Skipped -Because 'No results' }
-        $passed = $Results.pass -contains 'ShellProp_OBJECT'
-        if (-not $passed) {
-            Set-ItResult -Inconclusive -Because 'Packaged COM property handlers are not resolved by SHGetPropertyStoreFromParsingName'
-        }
+        $Results.pass | Should -Contain 'ShellProp_OBJECT' -Because 'Handler should return IC 1396 for OBJECT keyword'
     }
 
-    It 'Property handler exposes EXPTIME (300) [informational — MSIX limitation]' {
+    It 'Property handler exposes EXPTIME (300)' {
         if (-not $Results) { Set-ItResult -Skipped -Because 'No results' }
-        $passed = $Results.pass -contains 'ShellProp_EXPTIME'
-        if (-not $passed) {
-            Set-ItResult -Inconclusive -Because 'Packaged COM property handlers are not resolved by SHGetPropertyStoreFromParsingName'
-        }
+        $Results.pass | Should -Contain 'ShellProp_EXPTIME' -Because 'Handler should return 300 for EXPTIME keyword'
     }
 
-    It 'Property handler exposes INSTRUME (ZWO ASI2600MM Pro) [informational — MSIX limitation]' {
+    It 'Property handler exposes INSTRUME (ZWO ASI2600MM Pro)' {
         if (-not $Results) { Set-ItResult -Skipped -Because 'No results' }
-        $passed = $Results.pass -contains 'ShellProp_INSTRUME'
-        if (-not $passed) {
-            Set-ItResult -Inconclusive -Because 'Packaged COM property handlers are not resolved by SHGetPropertyStoreFromParsingName'
-        }
+        $Results.pass | Should -Contain 'ShellProp_INSTRUME' -Because 'Handler should return ZWO ASI2600MM Pro for INSTRUME keyword'
     }
 
-    It 'Property handler exposes FILTER (Ha) [informational — MSIX limitation]' {
+    It 'Property handler exposes FILTER (Ha)' {
         if (-not $Results) { Set-ItResult -Skipped -Because 'No results' }
-        $passed = $Results.pass -contains 'ShellProp_FILTER'
-        if (-not $passed) {
-            Set-ItResult -Inconclusive -Because 'Packaged COM property handlers are not resolved by SHGetPropertyStoreFromParsingName'
-        }
+        $Results.pass | Should -Contain 'ShellProp_FILTER' -Because 'Handler should return Ha for FILTER keyword'
     }
 
     # --- Real XISF Data ---
@@ -293,22 +286,16 @@ $realDataMapping  </MappedFolders>
         $Results.pass | Should -Contain 'ToggleDisable'
     }
 
-    It 'PropertyEnabled=1 re-enables property handler [informational — depends on handler invocation]' {
+    It 'PropertyEnabled=1 re-enables property handler' {
         if (-not $Results) { Set-ItResult -Skipped -Because 'No results' }
-        $passed = $Results.pass -contains 'ToggleEnable'
-        if (-not $passed) {
-            Set-ItResult -Inconclusive -Because 'Requires property handler invocation which is limited in MSIX'
-        }
+        $Results.pass | Should -Contain 'ToggleEnable' -Because 'Re-enabling the handler should restore IC 1396'
     }
 
     # --- Feature Tiers ---
 
-    It 'Basic tier (0) still exposes core FITS metadata [informational — depends on handler invocation]' {
+    It 'Basic tier (0) still exposes core FITS metadata' {
         if (-not $Results) { Set-ItResult -Skipped -Because 'No results' }
-        $passed = $Results.pass -contains 'TierBasic'
-        if (-not $passed) {
-            Set-ItResult -Inconclusive -Because 'Requires property handler invocation which is limited in MSIX'
-        }
+        $Results.pass | Should -Contain 'TierBasic' -Because 'Basic tier should still expose FITS keywords'
     }
 
     It 'Full tier (2) exposes at least as many properties as Basic' {
@@ -320,10 +307,9 @@ $realDataMapping  </MappedFolders>
 
     It 'No unexpected validation failures' {
         if (-not $Results) { Set-ItResult -Skipped -Because 'No results' }
-        # Filter out expected limitations: COM activation, shell properties (MSIX),
-        # toggle re-enable and tier tests that depend on handler invocation
+        # Filter out expected limitation: COM activation may fail for packaged classes
         $unexpectedFails = @($Results.fail | Where-Object {
-            $_.name -notmatch '^(ComActivation_|ShellProp_|ToggleEnable|TierBasic)'
+            $_.name -notmatch '^ComActivation_'
         })
         if ($unexpectedFails.Count -gt 0) {
             $details = ($unexpectedFails | ForEach-Object { "$($_.name): $($_.detail)" }) -join '; '

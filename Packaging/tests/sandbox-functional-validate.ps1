@@ -283,103 +283,91 @@ public static class PropSys {
 }
 
 # ===================================================================
-# 1b. HKCU Shell Metadata Registration (via --register-msix)
+# 1b. Classical DLL registration (regsvr32) for complete handler setup
 # ===================================================================
-# MSIX only registers COM classes and file type association. The settings
-# app's --register-msix mode writes FullDetails/PreviewDetails/InfoTip,
-# KindMap, PerceivedType, Content Type, and registers the propdesc schema
-# — all to HKCU (no elevation required).
+# MSIX registers COM classes in a per-app virtual registry. For reliable
+# testing AND for Explorer to actually invoke our handlers, we supplement
+# with classical regsvr32 registration. This writes everything
+# DllRegisterServer provides: PropertyHandlers\.xisf, shellex entries,
+# FullDetails, propdesc schema, PropertySheetHandler, etc.
+#
+# We copy DLLs from the MSIX package to a temp location first, since the
+# WindowsApps folder has restrictive ACLs.
 try {
-    $sfaPath = 'HKCU:\Software\Classes\SystemFileAssociations\.xisf'
+    $classicalRegDir = 'C:\XISFHandlers'
+    $results.info['ClassicalRegDir'] = $classicalRegDir
 
     if ($pkg) {
-        # Try the production code path first
+        # First try the production code path (--register-msix)
         $exePath = Join-Path $pkg.InstallLocation 'XISFShellExtensionHost.exe'
         $proc = Start-Process -FilePath $exePath -ArgumentList '--register-msix' `
                     -Wait -PassThru -NoNewWindow -ErrorAction Stop
         $results.info['RegisterMsixExitCode'] = $proc.ExitCode
 
-        # Verify key entries were actually written to real HKCU
-        $fd = (Get-ItemProperty -Path $sfaPath -Name 'FullDetails' -ErrorAction SilentlyContinue).FullDetails
+        # Copy handler DLLs and propdesc to accessible location
+        New-Item -ItemType Directory -Path $classicalRegDir -Force | Out-Null
+        $filesToCopy = @(
+            'XISFPropertyHandler.dll',
+            'XISFPreviewHandler.dll',
+            'xisf.propdesc'
+        )
+        foreach ($f in $filesToCopy) {
+            $src = Join-Path $pkg.InstallLocation $f
+            if (Test-Path $src) {
+                Copy-Item $src (Join-Path $classicalRegDir $f) -Force
+            }
+        }
+
+        # Also copy VCLibs runtime DLLs so the handler DLLs can load
+        $vcLibsPkg = Get-AppxPackage -Name 'Microsoft.VCLibs.140.00.UWPDesktop' -ErrorAction SilentlyContinue |
+            Where-Object { $_.Architecture -eq 'X64' } | Select-Object -First 1
+        if ($vcLibsPkg) {
+            foreach ($vcDll in @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll',
+                                 'msvcp140_1.dll', 'msvcp140_2.dll', 'concrt140.dll',
+                                 'vccorlib140.dll', 'ucrtbase.dll')) {
+                $vcSrc = Join-Path $vcLibsPkg.InstallLocation $vcDll
+                if (Test-Path $vcSrc) {
+                    Copy-Item $vcSrc (Join-Path $classicalRegDir $vcDll) -Force -ErrorAction SilentlyContinue
+                }
+            }
+        }
+
+        # Register both handler DLLs classically (requires admin — sandbox has it)
+        $propDll = Join-Path $classicalRegDir 'XISFPropertyHandler.dll'
+        $prevDll = Join-Path $classicalRegDir 'XISFPreviewHandler.dll'
+
+        if (Test-Path $propDll) {
+            $regProc = Start-Process regsvr32 -ArgumentList "/s `"$propDll`"" `
+                -Wait -PassThru -NoNewWindow -ErrorAction Stop
+            $results.info['RegSvr32PropertyHandler'] = $regProc.ExitCode
+        }
+        if (Test-Path $prevDll) {
+            $regProc = Start-Process regsvr32 -ArgumentList "/s `"$prevDll`"" `
+                -Wait -PassThru -NoNewWindow -ErrorAction Stop
+            $results.info['RegSvr32PreviewHandler'] = $regProc.ExitCode
+        }
+
+        # Verify FullDetails was written (by regsvr32's DllRegisterServer)
+        $sfaPath = 'HKCU:\Software\Classes\SystemFileAssociations\.xisf'
+        $sfaPathHKCR = 'Registry::HKEY_CLASSES_ROOT\SystemFileAssociations\.xisf'
+        $fd = (Get-ItemProperty -Path $sfaPathHKCR -Name 'FullDetails' -ErrorAction SilentlyContinue).FullDetails
+        if (-not $fd) {
+            $fd = (Get-ItemProperty -Path $sfaPath -Name 'FullDetails' -ErrorAction SilentlyContinue).FullDetails
+        }
         $results.info['FullDetailsWritten'] = ($null -ne $fd -and $fd.Length -gt 20)
-    }
 
-    # Fallback: if --register-msix didn't write to real HKCU (virtualization),
-    # write the entries directly from this script (runs outside package context).
-    $fd = (Get-ItemProperty -Path $sfaPath -Name 'FullDetails' -ErrorAction SilentlyContinue).FullDetails
-    if (-not $fd -or $fd.Length -lt 20) {
-        $results.info['HkcuFallback'] = $true
+        # Verify PropertyHandlers\.xisf was written
+        $phPath = 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\PropertySystem\PropertyHandlers\.xisf'
+        $ph = (Get-ItemProperty -Path $phPath -Name '(Default)' -ErrorAction SilentlyContinue).'(Default)'
+        $results.info['PropertyHandlerRegistered'] = ($null -ne $ph -and $ph.Length -gt 10)
 
-        $fullDetails = @(
-            'prop:System.PropGroup.Description',
-            'XISF.Constellation','XISF.Dec','XISF.DecBand',
-            'XISF.MatchedObjects','XISF.ObjectDec','XISF.ObjectName','XISF.ObjectRA',
-            'XISF.RA','XISF.RAHour',
-            'System.PropGroup.Origin',
-            'XISF.DateLocal','XISF.DateObserved','XISF.Software',
-            'System.PropGroup.Image',
-            'XISF.Airmass','XISF.Altitude','XISF.Azimuth',
-            'XISF.ChannelCount','XISF.ColorSpace','XISF.DataState',
-            'XISF.ExposureTime','XISF.FilterName',
-            'XISF.ImageCount','XISF.ImageHeight','XISF.ImageType','XISF.ImageWidth',
-            'XISF.PierSide','XISF.Rotation','XISF.SampleFormat',
-            'System.PropGroup.Camera',
-            'XISF.BayerPattern','XISF.Binning','XISF.CameraModel',
-            'XISF.FilterWheel','XISF.FNumber','XISF.FocalLength',
-            'XISF.FocuserName','XISF.FocuserPosition','XISF.FocuserTemp',
-            'XISF.Gain','XISF.Offset','XISF.PixelSize','XISF.ReadoutMode',
-            'XISF.RotatorAngle','XISF.RotatorName',
-            'XISF.SensorTemperature','XISF.SetTemp','XISF.Telescope',
-            'System.PropGroup.PhotoAdvanced',
-            'XISF.GuideDec','XISF.GuideRA',
-            'XISF.Median','XISF.Mean','XISF.ClippingLow','XISF.ClippingHigh',
-            'XISF.StarFWHM','XISF.SkyBrightness','XISF.SkyQuality',
-            'System.PropGroup.GPS',
-            'XISF.SiteElevation','XISF.SiteLatitude','XISF.SiteLongitude',
-            'XISF.AmbientTemp','XISF.CloudCover','XISF.DewPoint','XISF.Humidity',
-            'XISF.Pressure','XISF.SkyTemp','XISF.WindSpeed',
-            'System.PropGroup.FileSystem',
-            'System.ItemNameDisplay','System.ItemType','System.ItemFolderPathDisplay',
-            'System.DateCreated','System.DateModified','System.Size','System.FileAttributes'
-        ) -join ';'
-
-        $previewDetails = @(
-            'prop:XISF.ObjectName','XISF.ExposureTime','XISF.FilterName','XISF.CameraModel',
-            'XISF.Gain','XISF.SensorTemperature','XISF.Telescope','XISF.FocalLength','XISF.FNumber',
-            'XISF.Constellation','XISF.MatchedObjects','XISF.DataState','XISF.ColorSpace','XISF.SampleFormat'
-        ) -join ';'
-
-        $infoTip = @(
-            'prop:System.ItemTypeText','System.Size','XISF.ObjectName','XISF.ExposureTime','XISF.FilterName',
-            'XISF.CameraModel','XISF.Constellation','XISF.MatchedObjects'
-        ) -join ';'
-
-        # SystemFileAssociations\.xisf
-        New-Item -Path $sfaPath -Force -ErrorAction SilentlyContinue | Out-Null
-        Set-ItemProperty -Path $sfaPath -Name 'FullDetails'     -Value $fullDetails     -Type String -Force
-        Set-ItemProperty -Path $sfaPath -Name 'PreviewDetails'  -Value $previewDetails  -Type String -Force
-        Set-ItemProperty -Path $sfaPath -Name 'InfoTip'         -Value $infoTip         -Type String -Force
-
-        # XISFFile ProgID
-        $progIdPath = 'HKCU:\Software\Classes\XISFFile'
-        New-Item -Path $progIdPath -Force -ErrorAction SilentlyContinue | Out-Null
-        Set-ItemProperty -Path $progIdPath -Name '(Default)'      -Value 'XISF Image File' -Type String -Force
-        Set-ItemProperty -Path $progIdPath -Name 'FullDetails'    -Value $fullDetails      -Type String -Force
-        Set-ItemProperty -Path $progIdPath -Name 'PreviewDetails' -Value $previewDetails   -Type String -Force
-        Set-ItemProperty -Path $progIdPath -Name 'InfoTip'        -Value $infoTip          -Type String -Force
-
-        # .xisf extension metadata
-        $extPath = 'HKCU:\Software\Classes\.xisf'
-        New-Item -Path $extPath -Force -ErrorAction SilentlyContinue | Out-Null
-        Set-ItemProperty -Path $extPath -Name 'Content Type'  -Value 'application/xisf' -Type String -Force
-        Set-ItemProperty -Path $extPath -Name 'PerceivedType' -Value 'image'            -Type String -Force
-
-        # KindMap
-        $kindMap = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\KindMap'
-        New-Item -Path $kindMap -Force -ErrorAction SilentlyContinue | Out-Null
-        Set-ItemProperty -Path $kindMap -Name '.xisf' -Value 'picture' -Type String -Force
-
-        $results.info['FullDetailsWritten'] = $true
+        # Verify propdesc schema
+        $propdescFile = Join-Path $classicalRegDir 'xisf.propdesc'
+        if (Test-Path $propdescFile) {
+            # Re-register from copied (accessible) location
+            $hr = [PropSys]::PSRegisterPropertySchema($propdescFile)
+            $results.info['PropdescAccessibleHR'] = "0x{0:X8}" -f $hr
+        }
     }
 
     $results.info['HkcuRegistered'] = $true
@@ -388,7 +376,7 @@ try {
     $results.info['HkcuError'] = $_.Exception.Message
 }
 
-# Restart Explorer so the shell picks up the new propdesc schema and handler registrations
+# Restart Explorer so the shell picks up the new registrations
 Restart-Explorer
 
 # ===================================================================

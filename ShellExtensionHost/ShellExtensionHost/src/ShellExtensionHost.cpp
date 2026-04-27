@@ -495,6 +495,32 @@ int RunMsixRegistration()
 
     int failures = 0;
 
+    // Property handler CLSID mapping — tells the Property System which COM
+    // object to instantiate for .xisf files.  DllRegisterServer writes this
+    // to HKLM; for per-user MSIX we try HKCU (may or may not be honored).
+    const wchar_t* phKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\"
+                           L"PropertySystem\\PropertyHandlers\\.xisf";
+    if (!SetHKCU(phKey, nullptr, L"{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}"))
+        failures++;
+
+    // shellex handler CLSID mappings — Explorer uses these GUIDs to look up
+    // which COM class provides thumbnails, preview, and property sheets.
+    const wchar_t* thumbShellEx =
+        L"Software\\Classes\\.xisf\\shellex\\"
+        L"{E357FCCD-A995-4576-B01F-234630154E96}";
+    SetHKCU(thumbShellEx, nullptr, L"{9C76E8AD-4E85-5F30-B00D-3C7D1AB5F6E0}");
+
+    const wchar_t* previewShellEx =
+        L"Software\\Classes\\.xisf\\shellex\\"
+        L"{8895b1c6-b41f-4c1c-a562-0d564250836f}";
+    SetHKCU(previewShellEx, nullptr, L"{AD87F6CE-5B03-6E41-C11E-4DB2AC06F5F1}");
+
+    // Property sheet handler (Astro details tab)
+    const wchar_t* propSheetKey =
+        L"Software\\Classes\\SystemFileAssociations\\.xisf\\shellex\\"
+        L"PropertySheetHandlers\\XISFHistogram";
+    SetHKCU(propSheetKey, nullptr, L"{A3B7C8D9-E1F2-4A5B-8C6D-7E8F9A0B1C2D}");
+
     // SystemFileAssociations\.xisf — reliable regardless of ProgID resolution
     const wchar_t* sfaKey = L"Software\\Classes\\SystemFileAssociations\\.xisf";
     if (!SetHKCU(sfaKey, L"FullDetails",    kFullDetails))    failures++;
@@ -517,14 +543,43 @@ int RunMsixRegistration()
     SetHKCU(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\KindMap",
             L".xisf", L"picture");
 
-    // Register property description schema (propdesc next to this exe)
+    // Register property description schema.
+    // The propdesc file inside WindowsApps may not be readable by Explorer
+    // (ACL restrictions), so copy it to a user-accessible location first.
     wchar_t szExePath[MAX_PATH] = {};
     if (GetModuleFileNameW(nullptr, szExePath, MAX_PATH)) {
         PathRemoveFileSpecW(szExePath);
-        PathAppendW(szExePath, L"xisf.propdesc");
-        if (GetFileAttributesW(szExePath) != INVALID_FILE_ATTRIBUTES) {
-            HRESULT hr = PSRegisterPropertySchema(szExePath);
-            if (FAILED(hr)) failures++;
+        wchar_t szSrcPropdesc[MAX_PATH];
+        wcscpy_s(szSrcPropdesc, szExePath);
+        PathAppendW(szSrcPropdesc, L"xisf.propdesc");
+        if (GetFileAttributesW(szSrcPropdesc) != INVALID_FILE_ATTRIBUTES) {
+            // Copy to %LOCALAPPDATA%\DennisPayne\XISF Shell Extension
+            wchar_t szLocalAppData[MAX_PATH] = {};
+            if (SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0,
+                                 szLocalAppData) == S_OK) {
+                wchar_t szDestDir[MAX_PATH];
+                wcscpy_s(szDestDir, szLocalAppData);
+                PathAppendW(szDestDir, L"DennisPayne\\XISF Shell Extension");
+                CreateDirectoryW(szDestDir, nullptr);
+                // Ensure parent exists
+                wchar_t szParent[MAX_PATH];
+                wcscpy_s(szParent, szLocalAppData);
+                PathAppendW(szParent, L"DennisPayne");
+                CreateDirectoryW(szParent, nullptr);
+                CreateDirectoryW(szDestDir, nullptr);
+
+                wchar_t szDestPropdesc[MAX_PATH];
+                wcscpy_s(szDestPropdesc, szDestDir);
+                PathAppendW(szDestPropdesc, L"xisf.propdesc");
+                CopyFileW(szSrcPropdesc, szDestPropdesc, FALSE);
+
+                HRESULT hr = PSRegisterPropertySchema(szDestPropdesc);
+                if (FAILED(hr)) failures++;
+            } else {
+                // Fallback: register from package location
+                HRESULT hr = PSRegisterPropertySchema(szSrcPropdesc);
+                if (FAILED(hr)) failures++;
+            }
         }
     }
 
