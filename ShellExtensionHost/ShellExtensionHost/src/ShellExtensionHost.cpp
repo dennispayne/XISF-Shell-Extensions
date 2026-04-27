@@ -8,6 +8,9 @@
 #include <commctrl.h>
 #include <commdlg.h>
 #include <shellapi.h>
+#include <shlobj.h>
+#include <shlwapi.h>
+#include <propsys.h>
 #include <string>
 #include <vector>
 #include <thread>
@@ -30,6 +33,8 @@
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "comdlg32.lib")
 #pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "shlwapi.lib")
+#pragma comment(lib, "propsys.lib")
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "version.lib")
 
@@ -417,6 +422,118 @@ int RunSilentCatalogInstall()
     return failures > 0 ? 1 : 0;
 }
 
+// ---------------------------------------------------------------------------
+// MSIX registration: write per-user shell metadata to HKCU.
+//
+// MSIX manifests register COM classes and file type associations but do NOT
+// call DllRegisterServer.  Explorer also needs FullDetails / PreviewDetails /
+// InfoTip to know which columns to display, plus KindMap, PerceivedType,
+// Content Type, and the propdesc schema for custom property definitions.
+//
+// All writes target HKCU (no elevation required).  Idempotent — safe to call
+// on every login via the windows.startupTask manifest extension.
+// ---------------------------------------------------------------------------
+int RunMsixRegistration()
+{
+    auto SetHKCU = [](const wchar_t* subKey, const wchar_t* valueName,
+                      const wchar_t* data) -> bool {
+        HKEY hKey = nullptr;
+        DWORD dwDisp = 0;
+        LONG lr = RegCreateKeyExW(HKEY_CURRENT_USER, subKey, 0, nullptr,
+                                  REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr,
+                                  &hKey, &dwDisp);
+        if (lr != ERROR_SUCCESS) return false;
+        DWORD cbData = static_cast<DWORD>((wcslen(data) + 1) * sizeof(wchar_t));
+        lr = RegSetValueExW(hKey, valueName, 0, REG_SZ,
+                            reinterpret_cast<const BYTE*>(data), cbData);
+        RegCloseKey(hKey);
+        return lr == ERROR_SUCCESS;
+    };
+
+    // FullDetails — determines columns in Explorer Details view.
+    // Must match the authoritative copy in dllmain.cpp.
+    static const wchar_t kFullDetails[] =
+        L"prop:System.PropGroup.Description;"
+        L"XISF.Constellation;XISF.Dec;XISF.DecBand;"
+        L"XISF.MatchedObjects;XISF.ObjectDec;XISF.ObjectName;XISF.ObjectRA;"
+        L"XISF.RA;XISF.RAHour;"
+        L"System.PropGroup.Origin;"
+        L"XISF.DateLocal;XISF.DateObserved;XISF.Software;"
+        L"System.PropGroup.Image;"
+        L"XISF.Airmass;XISF.Altitude;XISF.Azimuth;"
+        L"XISF.ChannelCount;XISF.ColorSpace;XISF.DataState;"
+        L"XISF.ExposureTime;XISF.FilterName;"
+        L"XISF.ImageCount;XISF.ImageHeight;XISF.ImageType;XISF.ImageWidth;"
+        L"XISF.PierSide;XISF.Rotation;XISF.SampleFormat;"
+        L"System.PropGroup.Camera;"
+        L"XISF.BayerPattern;XISF.Binning;XISF.CameraModel;"
+        L"XISF.FilterWheel;XISF.FNumber;XISF.FocalLength;"
+        L"XISF.FocuserName;XISF.FocuserPosition;XISF.FocuserTemp;"
+        L"XISF.Gain;XISF.Offset;XISF.PixelSize;XISF.ReadoutMode;"
+        L"XISF.RotatorAngle;XISF.RotatorName;"
+        L"XISF.SensorTemperature;XISF.SetTemp;XISF.Telescope;"
+        L"System.PropGroup.PhotoAdvanced;"
+        L"XISF.GuideDec;XISF.GuideRA;"
+        L"XISF.Median;XISF.Mean;XISF.ClippingLow;XISF.ClippingHigh;"
+        L"XISF.StarFWHM;XISF.SkyBrightness;XISF.SkyQuality;"
+        L"System.PropGroup.GPS;"
+        L"XISF.SiteElevation;XISF.SiteLatitude;XISF.SiteLongitude;"
+        L"XISF.AmbientTemp;XISF.CloudCover;XISF.DewPoint;XISF.Humidity;"
+        L"XISF.Pressure;XISF.SkyTemp;XISF.WindSpeed;"
+        L"System.PropGroup.FileSystem;"
+        L"System.ItemNameDisplay;System.ItemType;System.ItemFolderPathDisplay;"
+        L"System.DateCreated;System.DateModified;System.Size;System.FileAttributes";
+
+    static const wchar_t kPreviewDetails[] =
+        L"prop:XISF.ObjectName;XISF.ExposureTime;XISF.FilterName;XISF.CameraModel;"
+        L"XISF.Gain;XISF.SensorTemperature;XISF.Telescope;XISF.FocalLength;XISF.FNumber;"
+        L"XISF.Constellation;XISF.MatchedObjects;XISF.DataState;XISF.ColorSpace;XISF.SampleFormat";
+
+    static const wchar_t kInfoTip[] =
+        L"prop:System.ItemTypeText;System.Size;XISF.ObjectName;XISF.ExposureTime;XISF.FilterName;"
+        L"XISF.CameraModel;XISF.Constellation;XISF.MatchedObjects";
+
+    int failures = 0;
+
+    // SystemFileAssociations\.xisf — reliable regardless of ProgID resolution
+    const wchar_t* sfaKey = L"Software\\Classes\\SystemFileAssociations\\.xisf";
+    if (!SetHKCU(sfaKey, L"FullDetails",    kFullDetails))    failures++;
+    if (!SetHKCU(sfaKey, L"PreviewDetails", kPreviewDetails)) failures++;
+    if (!SetHKCU(sfaKey, L"InfoTip",        kInfoTip))        failures++;
+
+    // XISFFile ProgID
+    const wchar_t* progIdKey = L"Software\\Classes\\XISFFile";
+    SetHKCU(progIdKey, nullptr,          L"XISF Image File");
+    SetHKCU(progIdKey, L"FullDetails",    kFullDetails);
+    SetHKCU(progIdKey, L"PreviewDetails", kPreviewDetails);
+    SetHKCU(progIdKey, L"InfoTip",        kInfoTip);
+
+    // .xisf extension metadata
+    const wchar_t* extKey = L"Software\\Classes\\.xisf";
+    SetHKCU(extKey, L"Content Type",  L"application/xisf");
+    SetHKCU(extKey, L"PerceivedType", L"image");
+
+    // KindMap — tells Explorer .xisf is a "picture"
+    SetHKCU(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\KindMap",
+            L".xisf", L"picture");
+
+    // Register property description schema (propdesc next to this exe)
+    wchar_t szExePath[MAX_PATH] = {};
+    if (GetModuleFileNameW(nullptr, szExePath, MAX_PATH)) {
+        PathRemoveFileSpecW(szExePath);
+        PathAppendW(szExePath, L"xisf.propdesc");
+        if (GetFileAttributesW(szExePath) != INVALID_FILE_ATTRIBUTES) {
+            HRESULT hr = PSRegisterPropertySchema(szExePath);
+            if (FAILED(hr)) failures++;
+        }
+    }
+
+    // Notify Explorer of association changes
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+
+    return failures > 0 ? 1 : 0;
+}
+
 bool TryHandleCommandMode(LPWSTR rawCmdLine, int& exitCode)
 {
     int argc = 0;
@@ -431,6 +548,7 @@ bool TryHandleCommandMode(LPWSTR rawCmdLine, int& exitCode)
     bool prop = false;
     bool prev = false;
     bool silentInstall = false;
+    bool registerMsix = false;
     for (int i = 1; i < argc; ++i) {
         std::wstring a = argv[i];
         if (a == L"--register-direct") mode = true;
@@ -438,8 +556,14 @@ bool TryHandleCommandMode(LPWSTR rawCmdLine, int& exitCode)
         else if (a == L"--property") prop = true;
         else if (a == L"--preview") prev = true;
         else if (a == L"--silent-install") silentInstall = true;
+        else if (a == L"--register-msix") registerMsix = true;
     }
     LocalFree(argv);
+
+    if (registerMsix) {
+        exitCode = RunMsixRegistration();
+        return true;
+    }
 
     if (silentInstall) {
         exitCode = RunSilentCatalogInstall();
@@ -1677,6 +1801,10 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int)
         }
         return cmdExit;
     }
+
+    // Self-healing: ensure HKCU shell metadata is registered every launch.
+    // Idempotent and fast — just overwrites existing values.
+    RunMsixRegistration();
 
     INITCOMMONCONTROLSEX icc{ sizeof(icc), ICC_STANDARD_CLASSES | ICC_PROGRESS_CLASS | ICC_LINK_CLASS };
     InitCommonControlsEx(&icc);

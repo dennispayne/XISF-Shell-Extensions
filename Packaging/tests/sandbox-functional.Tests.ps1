@@ -61,6 +61,13 @@ Describe 'MSIX functional validation in sandbox' -Tag 'Sandbox', 'Functional' {
         . (Join-Path $TestsDir 'New-TestXisf.ps1')
         New-TestXisf -Path (Join-Path $TestDataDir 'test.xisf')
 
+        # Copy real XISF data if available (D:\Astro or XISF_TEST_DATA_DIR)
+        $script:RealDataDir = $env:XISF_TEST_DATA_DIR
+        if (-not $RealDataDir -and (Test-Path 'D:\Astro')) {
+            $script:RealDataDir = 'D:\Astro'
+        }
+        $script:HasRealData = $RealDataDir -and (Test-Path $RealDataDir)
+
         # Build MSIX
         & $BuildScript -Version '0.99.0' -BuildNumber 0 -OutputDir $PkgDir
 
@@ -99,6 +106,19 @@ Describe 'MSIX functional validation in sandbox' -Tag 'Sandbox', 'Functional' {
 
         # Generate .wsb
         $script:WsbPath = Join-Path $WorkDir 'functional-test.wsb'
+
+        # Build optional mapped-folder for real XISF data
+        $realDataMapping = ''
+        if ($HasRealData) {
+            $realDataMapping = @"
+    <MappedFolder>
+      <HostFolder>$RealDataDir</HostFolder>
+      <SandboxFolder>C:\AstroData</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+"@
+        }
+
         @"
 <Configuration>
   <MappedFolders>
@@ -117,7 +137,7 @@ Describe 'MSIX functional validation in sandbox' -Tag 'Sandbox', 'Functional' {
       <SandboxFolder>C:\Results</SandboxFolder>
       <ReadOnly>false</ReadOnly>
     </MappedFolder>
-  </MappedFolders>
+$realDataMapping  </MappedFolders>
   <LogonCommand>
     <Command>powershell -ExecutionPolicy Bypass -File C:\Installer\sandbox-functional-validate.ps1</Command>
   </LogonCommand>
@@ -238,6 +258,19 @@ Describe 'MSIX functional validation in sandbox' -Tag 'Sandbox', 'Functional' {
         $passed = $Results.pass -contains 'ShellProp_FILTER'
         if (-not $passed) {
             Set-ItResult -Inconclusive -Because 'Packaged COM property handlers are not resolved by SHGetPropertyStoreFromParsingName'
+        }
+    }
+
+    # --- Real XISF Data ---
+
+    It 'Real XISF file from D:\Astro is readable [informational]' {
+        if (-not $Results) { Set-ItResult -Skipped -Because 'No results' }
+        if ($Results.info['RealDataAvailable'] -eq $false) {
+            Set-ItResult -Skipped -Because 'No real XISF data mapped (set XISF_TEST_DATA_DIR or have D:\Astro)'
+        }
+        $passed = $Results.pass -contains 'RealDataRead'
+        if (-not $passed) {
+            Set-ItResult -Inconclusive -Because 'Real data property read via packaged COM may not work from PowerShell'
         }
     }
 

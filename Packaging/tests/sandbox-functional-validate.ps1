@@ -283,77 +283,28 @@ public static class PropSys {
 }
 
 # ===================================================================
-# 1b. HKCU Shell Metadata Registration (MSIX does not call DllRegisterServer)
+# 1b. HKCU Shell Metadata Registration (via --register-msix)
 # ===================================================================
-# MSIX only registers COM classes and file type association. Explorer also
-# needs FullDetails/PreviewDetails/InfoTip to know which columns to show,
-# plus KindMap and PerceivedType for proper classification.
+# MSIX only registers COM classes and file type association. The settings
+# app's --register-msix mode writes FullDetails/PreviewDetails/InfoTip,
+# KindMap, PerceivedType, Content Type, and registers the propdesc schema
+# — all to HKCU (no elevation required).
 try {
-    $sfaPath = 'HKCU:\Software\Classes\SystemFileAssociations\.xisf'
-    $extPath = 'HKCU:\Software\Classes\.xisf'
-    $kindMap = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\KindMap'
+    if ($pkg) {
+        $exePath = Join-Path $pkg.InstallLocation 'XISFShellExtensionHost.exe'
+        $proc = Start-Process -FilePath $exePath -ArgumentList '--register-msix' `
+                    -Wait -PassThru -NoNewWindow -ErrorAction Stop
+        $results.info['RegisterMsixExitCode'] = $proc.ExitCode
+        $results.info['HkcuRegistered'] = ($proc.ExitCode -eq 0)
 
-    # FullDetails — determines columns in Explorer Details view
-    $fullDetails = @(
-        'prop:System.PropGroup.Description',
-        'XISF.Constellation','XISF.Dec','XISF.DecBand',
-        'XISF.MatchedObjects','XISF.ObjectDec','XISF.ObjectName','XISF.ObjectRA',
-        'XISF.RA','XISF.RAHour',
-        'System.PropGroup.Origin',
-        'XISF.DateLocal','XISF.DateObserved','XISF.Software',
-        'System.PropGroup.Image',
-        'XISF.Airmass','XISF.Altitude','XISF.Azimuth',
-        'XISF.ChannelCount','XISF.ColorSpace','XISF.DataState',
-        'XISF.ExposureTime','XISF.FilterName',
-        'XISF.ImageCount','XISF.ImageHeight','XISF.ImageType','XISF.ImageWidth',
-        'XISF.PierSide','XISF.Rotation','XISF.SampleFormat',
-        'System.PropGroup.Camera',
-        'XISF.BayerPattern','XISF.Binning','XISF.CameraModel',
-        'XISF.FilterWheel','XISF.FNumber','XISF.FocalLength',
-        'XISF.FocuserName','XISF.FocuserPosition','XISF.FocuserTemp',
-        'XISF.Gain','XISF.Offset','XISF.PixelSize','XISF.ReadoutMode',
-        'XISF.RotatorAngle','XISF.RotatorName',
-        'XISF.SensorTemperature','XISF.SetTemp','XISF.Telescope',
-        'System.PropGroup.PhotoAdvanced',
-        'XISF.GuideDec','XISF.GuideRA',
-        'XISF.Median','XISF.Mean','XISF.ClippingLow','XISF.ClippingHigh',
-        'XISF.StarFWHM','XISF.SkyBrightness','XISF.SkyQuality',
-        'System.PropGroup.GPS',
-        'XISF.SiteElevation','XISF.SiteLatitude','XISF.SiteLongitude',
-        'XISF.AmbientTemp','XISF.CloudCover','XISF.DewPoint','XISF.Humidity',
-        'XISF.Pressure','XISF.SkyTemp','XISF.WindSpeed',
-        'System.PropGroup.FileSystem',
-        'System.ItemNameDisplay','System.ItemType','System.ItemFolderPathDisplay',
-        'System.DateCreated','System.DateModified','System.Size','System.FileAttributes'
-    ) -join ';'
-
-    $previewDetails = @(
-        'prop:XISF.ObjectName','XISF.ExposureTime','XISF.FilterName','XISF.CameraModel',
-        'XISF.Gain','XISF.SensorTemperature','XISF.Telescope','XISF.FocalLength','XISF.FNumber',
-        'XISF.Constellation','XISF.MatchedObjects','XISF.DataState','XISF.ColorSpace','XISF.SampleFormat'
-    ) -join ';'
-
-    $infoTip = @(
-        'prop:System.ItemTypeText','System.Size','XISF.ObjectName','XISF.ExposureTime','XISF.FilterName',
-        'XISF.CameraModel','XISF.Constellation','XISF.MatchedObjects'
-    ) -join ';'
-
-    # SystemFileAssociations\.xisf — reliable path regardless of ProgID
-    New-Item -Path $sfaPath -Force -ErrorAction SilentlyContinue | Out-Null
-    Set-ItemProperty -Path $sfaPath -Name 'FullDetails'     -Value $fullDetails     -Type String -Force
-    Set-ItemProperty -Path $sfaPath -Name 'PreviewDetails'  -Value $previewDetails  -Type String -Force
-    Set-ItemProperty -Path $sfaPath -Name 'InfoTip'         -Value $infoTip         -Type String -Force
-
-    # .xisf extension metadata
-    New-Item -Path $extPath -Force -ErrorAction SilentlyContinue | Out-Null
-    Set-ItemProperty -Path $extPath -Name 'Content Type'  -Value 'application/xisf' -Type String -Force
-    Set-ItemProperty -Path $extPath -Name 'PerceivedType' -Value 'image'            -Type String -Force
-
-    # KindMap — tells Explorer .xisf is a "picture"
-    New-Item -Path $kindMap -Force -ErrorAction SilentlyContinue | Out-Null
-    Set-ItemProperty -Path $kindMap -Name '.xisf' -Value 'picture' -Type String -Force
-
-    $results.info['HkcuRegistered'] = $true
+        # Verify key entries were written
+        $sfaPath = 'HKCU:\Software\Classes\SystemFileAssociations\.xisf'
+        $fd = (Get-ItemProperty -Path $sfaPath -Name 'FullDetails' -ErrorAction SilentlyContinue).FullDetails
+        $results.info['FullDetailsWritten'] = ($null -ne $fd -and $fd.Length -gt 20)
+    } else {
+        $results.info['HkcuRegistered'] = $false
+        $results.info['HkcuError'] = 'Package not installed'
+    }
 } catch {
     $results.info['HkcuRegistered'] = $false
     $results.info['HkcuError'] = $_.Exception.Message
@@ -461,6 +412,50 @@ try {
     Assert 'ShellProp_EXPTIME'  $false "Shell property scan threw: $($_.Exception.Message)"
     Assert 'ShellProp_INSTRUME' $false "Shell property scan threw: $($_.Exception.Message)"
     Assert 'ShellProp_FILTER'   $false "Shell property scan threw: $($_.Exception.Message)"
+}
+
+# ===================================================================
+# 4b. Real XISF Data Test (if C:\AstroData is mapped)
+# ===================================================================
+if (Test-Path 'C:\AstroData') {
+    try {
+        # Find the first .xisf LIGHT frame for testing
+        $realFile = Get-ChildItem 'C:\AstroData' -Recurse -Filter '*.xisf' -ErrorAction SilentlyContinue |
+            Where-Object { $_.DirectoryName -match '\\LIGHT' } |
+            Select-Object -First 1
+
+        if (-not $realFile) {
+            # Fall back to any .xisf file
+            $realFile = Get-ChildItem 'C:\AstroData' -Recurse -Filter '*.xisf' -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+        }
+
+        if ($realFile) {
+            $results.info['RealDataFile'] = $realFile.FullName
+            $results.info['RealDataSize'] = $realFile.Length
+
+            $realProps = Get-ShellProperties -FilePath $realFile.FullName
+            $results.info['RealDataPropertyCount'] = $realProps.Count
+
+            # Record a sample of discovered real properties for diagnostics
+            $realSample = @{}
+            foreach ($prop in $realProps.GetEnumerator()) {
+                if ($prop.Key -match 'XISF\.' -or $prop.Key -match 'Astro\.' -or
+                    $prop.Key -match 'ObjectName|ExposureTime|CameraModel|Filter|Telescope') {
+                    $realSample[$prop.Key] = $prop.Value
+                }
+            }
+            $results.info['RealDataProperties'] = $realSample
+
+            Assert 'RealDataRead' ($realProps.Count -gt 0) 'No properties returned for real XISF file'
+        } else {
+            $results.info['RealDataFile'] = 'No .xisf files found in C:\AstroData'
+        }
+    } catch {
+        Assert 'RealDataRead' $false "Real data test threw: $($_.Exception.Message)"
+    }
+} else {
+    $results.info['RealDataAvailable'] = $false
 }
 
 # ===================================================================

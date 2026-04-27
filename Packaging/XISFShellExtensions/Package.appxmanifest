@@ -19,8 +19,9 @@
     xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
     xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
     xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+    xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
     xmlns:desktop2="http://schemas.microsoft.com/appx/manifest/desktop/windows10/2"
-    IgnorableNamespaces="uap rescap com desktop2">
+    IgnorableNamespaces="uap rescap com desktop desktop2">
 
   <Identity
       Name="DennisPayne.XISF.ShellExtension"
@@ -72,11 +73,19 @@
             <uap:SupportedFileTypes>
               <uap:FileType>.xisf</uap:FileType>
             </uap:SupportedFileTypes>
+            <uap:InfoTip>XISF Image File</uap:InfoTip>
             <desktop2:DesktopPropertyHandler Clsid="7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E" />
             <desktop2:DesktopPreviewHandler Clsid="AD87F6CE-5B03-6E41-C11E-4DB2AC06F5F1" />
             <desktop2:ThumbnailHandler Clsid="9C76E8AD-4E85-5F30-B00D-3C7D1AB5F6E0" />
           </uap:FileTypeAssociation>
         </uap:Extension>
+        <desktop:Extension Category="windows.startupTask"
+                          Executable="XISFShellExtensionHost.exe"
+                          EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="XISFShellRegister"
+                               Enabled="true"
+                               DisplayName="XISF Shell Extension" />
+        </desktop:Extension>
       </Extensions>
     </Application>
   </Applications>
