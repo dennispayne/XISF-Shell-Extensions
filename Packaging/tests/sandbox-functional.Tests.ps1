@@ -30,7 +30,7 @@ BeforeAll {
     $script:BuildScript = Join-Path $RepoRoot 'Packaging\build-msix.ps1'
     $script:ReleaseDir  = Join-Path $RepoRoot 'x64\Release'
     $script:TestsDir    = $PSScriptRoot
-    $script:SandboxTimeoutSec = 300   # Functional tests need more time (Explorer restarts)
+    $script:SandboxTimeoutSec = 420   # Functional tests need time (regsvr32 + Explorer restarts)
     $script:KeepSandbox = $env:XISF_KEEP_SANDBOX -eq '1'
 
     # Check prerequisites

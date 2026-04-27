@@ -318,20 +318,45 @@ try {
             }
         }
 
-        # Copy VCLibs runtime DLLs to System32 so the handler DLLs can load.
+        # Ensure VCRuntime is available system-wide for the handler DLLs.
         # The DLL loader searches System32 but NOT the InProcServer32 directory.
         $vcLibsPkg = Get-AppxPackage -Name 'Microsoft.VCLibs.140.00.UWPDesktop' -ErrorAction SilentlyContinue |
             Where-Object { $_.Architecture -eq 'X64' } | Select-Object -First 1
+        $vcCopied = $false
         if ($vcLibsPkg) {
-            foreach ($vcDll in @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll',
-                                 'msvcp140_1.dll', 'msvcp140_2.dll', 'concrt140.dll',
-                                 'vccorlib140.dll')) {
-                $vcSrc = Join-Path $vcLibsPkg.InstallLocation $vcDll
-                if (Test-Path $vcSrc) {
-                    Copy-Item $vcSrc "$env:SystemRoot\System32\$vcDll" -Force -ErrorAction SilentlyContinue
+            # Method 1: Copy to System32
+            try {
+                foreach ($vcDll in @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll')) {
+                    $vcSrc = Join-Path $vcLibsPkg.InstallLocation $vcDll
+                    $vcDst = Join-Path "$env:SystemRoot\System32" $vcDll
+                    if ((Test-Path $vcSrc) -and -not (Test-Path $vcDst)) {
+                        Copy-Item $vcSrc $vcDst -Force
+                    }
+                }
+                $vcCopied = $true
+            } catch {
+                $results.info['VCRuntime_CopyError'] = $_.Exception.Message
+            }
+
+            # Method 2: If System32 copy failed, add handler dir to system PATH
+            if (-not $vcCopied) {
+                try {
+                    foreach ($vcDll in @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll')) {
+                        $vcSrc = Join-Path $vcLibsPkg.InstallLocation $vcDll
+                        if (Test-Path $vcSrc) {
+                            Copy-Item $vcSrc (Join-Path $classicalRegDir $vcDll) -Force
+                        }
+                    }
+                    $curPath = [Environment]::GetEnvironmentVariable('PATH', 'Machine')
+                    if ($curPath -notlike "*$classicalRegDir*") {
+                        [Environment]::SetEnvironmentVariable('PATH', "$classicalRegDir;$curPath", 'Machine')
+                    }
+                    $vcCopied = $true
+                } catch {
+                    $results.info['VCRuntime_PathError'] = $_.Exception.Message
                 }
             }
-            $results.info['VCRuntime_CopiedToSystem32'] = $true
+            $results.info['VCRuntime_CopiedToSystem32'] = $vcCopied
         }
 
         # Register both handler DLLs classically (requires admin — sandbox has it)
