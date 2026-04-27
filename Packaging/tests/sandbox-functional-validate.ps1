@@ -22,10 +22,29 @@
 
 $ErrorActionPreference = 'Continue'
 
+# Early heartbeat — proves script is executing at all
+New-Item -ItemType Directory -Path 'C:\Results' -Force -ErrorAction SilentlyContinue | Out-Null
+"script_started $(Get-Date -Format o)" | Set-Content 'C:\Results\heartbeat.txt' -ErrorAction SilentlyContinue
+
+# Redirect all output to a log file for diagnostics
+Start-Transcript -Path 'C:\Results\validate.log' -Force -ErrorAction SilentlyContinue | Out-Null
+
+# ---------------------------------------------------------------------------
+# Result accumulator (initialize BEFORE trap/Write-Results so trap is safe)
+# ---------------------------------------------------------------------------
+$results = @{
+    pass = [System.Collections.Generic.List[string]]::new()
+    fail = [System.Collections.Generic.List[hashtable]]::new()
+    info = @{}
+}
+
 # ---------------------------------------------------------------------------
 # Emergency result writer — ensures results are always persisted
 # ---------------------------------------------------------------------------
 function Write-Results {
+    try {
+        Stop-Transcript -ErrorAction SilentlyContinue | Out-Null
+    } catch {}
     try {
         $json  = $script:results | ConvertTo-Json -Depth 5
         $tmp   = 'C:\Results\functional-results.tmp'
@@ -33,27 +52,25 @@ function Write-Results {
         Set-Content -Path $tmp -Value $json -Encoding UTF8
         Move-Item -Path $tmp -Destination $final -Force
     } catch {
-        $script:results | ConvertTo-Json -Depth 5 |
-            Set-Content -Path 'C:\Results\functional-results.json' -Encoding UTF8
+        try {
+            $script:results | ConvertTo-Json -Depth 5 |
+                Set-Content -Path 'C:\Results\functional-results.json' -Encoding UTF8
+        } catch {
+            '{"pass":[],"fail":[],"info":{"FatalWriteError":"' + $_.Exception.Message + '"}}' |
+                Set-Content -Path 'C:\Results\functional-results.json' -Encoding UTF8
+        }
     }
     New-Item -Path 'C:\Results\done.marker' -ItemType File -Force -ErrorAction SilentlyContinue | Out-Null
 }
 
 # Trap unhandled terminating errors — flush partial results before dying
 trap {
-    $script:results.info['UnhandledError'] = $_.Exception.Message
-    $script:results.info['UnhandledErrorAt'] = $_.InvocationInfo.ScriptLineNumber
+    if ($null -ne $script:results) {
+        $script:results.info['UnhandledError'] = $_.Exception.Message
+        $script:results.info['UnhandledErrorAt'] = $_.InvocationInfo.ScriptLineNumber
+    }
     Write-Results
     continue
-}
-
-# ---------------------------------------------------------------------------
-# Result accumulator
-# ---------------------------------------------------------------------------
-$results = @{
-    pass = [System.Collections.Generic.List[string]]::new()
-    fail = [System.Collections.Generic.List[hashtable]]::new()
-    info = @{}
 }
 
 function Assert {
@@ -78,6 +95,12 @@ $msixPath  = 'C:\Installer\XISF.ShellExtension_0.99.0.0_x64.msix'
 $xisfPath  = 'C:\TestData\test.xisf'
 $pkgName   = 'DennisPayne.XISF.ShellExtension'
 $regBase   = 'HKCU:\Software\DennisPayne\XISF Shell Extension'
+
+# Local test data dir — files copied here to avoid oplock issues with
+# sandbox mapped folders (0x8007012C / ERROR_OPLOCK_NOT_GRANTED)
+$localTestDir  = 'C:\LocalTestData'
+$localXisfPath = Join-Path $localTestDir 'test.xisf'
+New-Item -ItemType Directory -Path $localTestDir -Force -ErrorAction SilentlyContinue | Out-Null
 
 $PropertyHandlerClsid   = '7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E'
 $ThumbnailProviderClsid = '9C76E8AD-4E85-5F30-B00D-3C7D1AB5F6E0'
@@ -238,6 +261,10 @@ public static class PropertyStoreHelper {
         }
         $results.info['DirectPropertyStoreCount'] = $directProps.Count
         $results.info['DirectPropertyStoreKeys'] = ($directProps.Keys | Sort-Object) -join '; '
+        # Capture the HRESULT if SHGetPropertyStoreFromParsingName failed
+        if ($directProps.ContainsKey('__SHGetPropStore_HR')) {
+            $results.info['SHGetPropStore_HR'] = $directProps['__SHGetPropStore_HR']
+        }
     } catch {
         $results.info['DirectPropertyStoreError'] = $_.Exception.Message
     }
@@ -388,12 +415,14 @@ try {
             $regProc = Start-Process regsvr32 -ArgumentList "/s `"$propDll`"" `
                 -PassThru -NoNewWindow -ErrorAction Stop
             if (-not $regProc.WaitForExit(30000)) { $regProc.Kill() }
+            $regProc.Refresh()
             $results.info['RegSvr32PropertyHandler'] = $regProc.ExitCode
         }
         if (Test-Path $prevDll) {
             $regProc = Start-Process regsvr32 -ArgumentList "/s `"$prevDll`"" `
                 -PassThru -NoNewWindow -ErrorAction Stop
             if (-not $regProc.WaitForExit(30000)) { $regProc.Kill() }
+            $regProc.Refresh()
             $results.info['RegSvr32PreviewHandler'] = $regProc.ExitCode
         }
 
@@ -410,6 +439,19 @@ try {
         $phPath = 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\PropertySystem\PropertyHandlers\.xisf'
         $ph = (Get-ItemProperty -Path $phPath -Name '(Default)' -ErrorAction SilentlyContinue).'(Default)'
         $results.info['PropertyHandlerRegistered'] = ($null -ne $ph -and $ph.Length -gt 10)
+        $results.info['PropertyHandlerClsidValue'] = $ph
+
+        # Verify InProcServer32 path is correct
+        $inproc = (Get-ItemProperty -Path "Registry::HKEY_CLASSES_ROOT\CLSID\{$PropertyHandlerClsid}\InProcServer32" `
+            -Name '(Default)' -ErrorAction SilentlyContinue).'(Default)'
+        $results.info['InProcServer32Path'] = $inproc
+        if ($inproc) {
+            $results.info['InProcServer32Exists'] = Test-Path $inproc
+        }
+
+        # Check what files exist in C:\XISFHandlers
+        $handlerFiles = Get-ChildItem $classicalRegDir -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+        $results.info['HandlerDirFiles'] = ($handlerFiles -join '; ')
 
         # Verify propdesc schema
         $propdescFile = Join-Path $classicalRegDir 'xisf.propdesc'
@@ -477,10 +519,15 @@ foreach ($entry in @(
 # 4. Property Handler via Shell (Most Important Test)
 # ===================================================================
 try {
+    # Copy test file to local path — sandbox mapped folders don't support
+    # oplocks, which causes SHGetPropertyStoreFromParsingName to fail
+    # with 0x8007012C (ERROR_OPLOCK_NOT_GRANTED)
+    Copy-Item $xisfPath $localXisfPath -Force
+
     # Give Explorer time to pick up the new handler registration
     Start-Sleep -Seconds 3
 
-    $shellProps = Get-ShellProperties -FilePath $xisfPath
+    $shellProps = Get-ShellProperties -FilePath $localXisfPath
     $results.info['ShellPropertyCount'] = $shellProps.Count
 
     # Store all discovered property values for diagnostics
@@ -547,10 +594,13 @@ if (Test-Path 'C:\AstroData') {
         }
 
         if ($realFile) {
+            # Copy to local path to avoid oplock issues with mapped folders
+            $localRealFile = Join-Path $localTestDir $realFile.Name
+            Copy-Item $realFile.FullName $localRealFile -Force -ErrorAction SilentlyContinue
             $results.info['RealDataFile'] = $realFile.FullName
             $results.info['RealDataSize'] = $realFile.Length
 
-            $realProps = Get-ShellProperties -FilePath $realFile.FullName
+            $realProps = Get-ShellProperties -FilePath $localRealFile
             $results.info['RealDataPropertyCount'] = $realProps.Count
 
             # Record a sample of discovered real properties for diagnostics
@@ -618,7 +668,7 @@ try {
     # Restart Explorer so the handler picks up the registry change
     Restart-Explorer
 
-    $propsDisabled = Get-ShellProperties -FilePath $xisfPath
+    $propsDisabled = Get-ShellProperties -FilePath $localXisfPath
     $disabledFound = $false
     foreach ($prop in $propsDisabled.GetEnumerator()) {
         if ($prop.Value -match 'IC 1396') {
@@ -633,7 +683,7 @@ try {
 
     Restart-Explorer
 
-    $propsEnabled = Get-ShellProperties -FilePath $xisfPath
+    $propsEnabled = Get-ShellProperties -FilePath $localXisfPath
     $enabledFound = $false
     foreach ($prop in $propsEnabled.GetEnumerator()) {
         if ($prop.Value -match 'IC 1396') {
@@ -661,7 +711,7 @@ try {
 
     Restart-Explorer
 
-    $propsBasic = Get-ShellProperties -FilePath $xisfPath
+    $propsBasic = Get-ShellProperties -FilePath $localXisfPath
 
     # At Basic tier, core FITS keywords (OBJECT, EXPTIME) should still appear
     $basicHasCore = $false
@@ -679,7 +729,7 @@ try {
 
     Restart-Explorer
 
-    $propsFull = Get-ShellProperties -FilePath $xisfPath
+    $propsFull = Get-ShellProperties -FilePath $localXisfPath
     $results.info['TierFullPropertyCount'] = $propsFull.Count
 
     # Full tier should have at least as many properties as Basic tier

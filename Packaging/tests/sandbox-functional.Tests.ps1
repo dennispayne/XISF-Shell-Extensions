@@ -37,10 +37,17 @@ BeforeAll {
     $script:SandboxAvailable = $null -ne (Get-Command 'WindowsSandbox.exe' -ErrorAction SilentlyContinue)
 
     # If another sandbox is running, stop it first to avoid blocking
-    $existingSandbox = Get-Process -Name 'WindowsSandbox' -ErrorAction SilentlyContinue
+    $existingSandbox = Get-Process -Name 'WindowsSandbox','WindowsSandboxClient' -ErrorAction SilentlyContinue
     if ($existingSandbox) {
         Write-Host 'Stopping existing Windows Sandbox instance...' -ForegroundColor Yellow
-        $existingSandbox | Stop-Process -Force -ErrorAction SilentlyContinue
+        foreach ($p in $existingSandbox) {
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+        }
+        # Wait for all sandbox processes to fully exit
+        $stopDeadline = (Get-Date).AddSeconds(30)
+        while ((Get-Process -Name 'WindowsSandbox*' -ErrorAction SilentlyContinue) -and (Get-Date) -lt $stopDeadline) {
+            Start-Sleep -Seconds 2
+        }
         Start-Sleep -Seconds 5
     }
 
@@ -147,26 +154,69 @@ Describe 'MSIX functional validation in sandbox' -Tag 'Sandbox', 'Functional' {
     </MappedFolder>
 $realDataMapping  </MappedFolders>
   <LogonCommand>
-    <Command>powershell -ExecutionPolicy Bypass -File C:\Installer\sandbox-functional-validate.ps1</Command>
+    <Command>cmd /c powershell -ExecutionPolicy Bypass -File C:\Installer\sandbox-functional-validate.ps1</Command>
   </LogonCommand>
   <MemoryInMB>4096</MemoryInMB>
 </Configuration>
 "@ | Set-Content -Path $WsbPath -Encoding UTF8
 
-        # Launch sandbox and wait
-        $script:SandboxProcess = Start-Process -FilePath $WsbPath -PassThru
+        # Launch sandbox and wait (with retry on LogonCommand failure)
         $script:DoneMarker  = Join-Path $ResultsDir 'done.marker'
         $script:ResultsFile = Join-Path $ResultsDir 'functional-results.json'
+        $script:HeartbeatFile = Join-Path $ResultsDir 'heartbeat.txt'
+        $script:LogFile = Join-Path $ResultsDir 'validate.log'
 
-        $deadline = (Get-Date).AddSeconds($SandboxTimeoutSec)
-        while (-not (Test-Path $DoneMarker) -and (Get-Date) -lt $deadline) {
-            Start-Sleep -Seconds 5
+        $maxAttempts = 2
+        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            # Clean results from any previous attempt
+            Remove-Item $DoneMarker -Force -ErrorAction SilentlyContinue
+            Remove-Item $ResultsFile -Force -ErrorAction SilentlyContinue
+            Remove-Item $HeartbeatFile -Force -ErrorAction SilentlyContinue
+            Remove-Item $LogFile -Force -ErrorAction SilentlyContinue
+
+            if ($attempt -gt 1) {
+                Write-Host "Retry ${attempt}/${maxAttempts}: Restarting sandbox..." -ForegroundColor Yellow
+                if ($SandboxProcess -and -not $SandboxProcess.HasExited) {
+                    Stop-Process -Id $SandboxProcess.Id -Force -ErrorAction SilentlyContinue
+                }
+                Start-Sleep -Seconds 15
+            }
+
+            $script:SandboxProcess = Start-Process -FilePath $WsbPath -PassThru
+
+            # Wait for heartbeat first (proves script started), then done marker
+            $heartbeatDeadline = (Get-Date).AddSeconds(120)
+            while (-not (Test-Path $HeartbeatFile) -and -not (Test-Path $DoneMarker) -and (Get-Date) -lt $heartbeatDeadline) {
+                Start-Sleep -Seconds 5
+            }
+
+            if (-not (Test-Path $HeartbeatFile) -and -not (Test-Path $DoneMarker)) {
+                Write-Host "Attempt ${attempt}/${maxAttempts}: No heartbeat after 120s — LogonCommand may not have executed" -ForegroundColor Yellow
+                if ($attempt -lt $maxAttempts) { continue }
+            }
+
+            # Heartbeat found — now wait for done marker
+            $deadline = (Get-Date).AddSeconds($SandboxTimeoutSec)
+            while (-not (Test-Path $DoneMarker) -and (Get-Date) -lt $deadline) {
+                Start-Sleep -Seconds 5
+            }
+            break
         }
 
         if (Test-Path $ResultsFile) {
             $script:Results = Get-Content $ResultsFile -Raw | ConvertFrom-Json -AsHashtable
         } else {
             $script:Results = $null
+            if (Test-Path $HeartbeatFile) {
+                Write-Host "Heartbeat found: $(Get-Content $HeartbeatFile -Raw)" -ForegroundColor Yellow
+            } else {
+                Write-Host "WARNING: No heartbeat file after ${maxAttempts} attempts — sandbox LogonCommand never executed" -ForegroundColor Red
+            }
+            if (Test-Path $LogFile) {
+                Write-Host "--- Last 50 lines of validate.log ---" -ForegroundColor Yellow
+                Get-Content $LogFile -Tail 50 | ForEach-Object { Write-Host $_ }
+                Write-Host "--- End of log ---" -ForegroundColor Yellow
+            }
         }
     }
 
