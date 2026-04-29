@@ -122,12 +122,10 @@ jobs:
       - name: Run installer tests
         shell: pwsh
         run: |
-          Invoke-Pester -Path Installer\XISFInstallerTests\installer.Tests.ps1 `
-            -OutputFormat NUnitXml `
-            -OutputFile TestResults\installer-tests.xml `
-            -PassThru | ForEach-Object {
-              if ($_.FailedCount -gt 0) { throw "$($_.FailedCount) installer test(s) failed." }
-            }
+          dotnet test Installer\XISFInstallerTests\XISFInstallerTests.csproj `
+            -c Release `
+            --logger "trx;LogFileName=installer-tests.trx" `
+            --results-directory TestResults
 
       - name: Upload MSI artifact
         uses: actions/upload-artifact@v4

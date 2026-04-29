@@ -36,11 +36,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Installer", "Installer", "{
 		Installer\XISFInstaller\XISFInstaller.wixproj = Installer\XISFInstaller\XISFInstaller.wixproj
 	EndProjectSection
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "XISFInstallerTests", "XISFInstallerTests", "{CAFE0007-0000-0000-0000-000000000001}"
-	ProjectSection(SolutionItems) = preProject
-		Installer\XISFInstallerTests\installer.Tests.ps1 = Installer\XISFInstallerTests\installer.Tests.ps1
-		Installer\XISFInstallerTests\New-TestXisf.ps1 = Installer\XISFInstallerTests\New-TestXisf.ps1
-	EndProjectSection
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XISFInstallerTests", "Installer\XISFInstallerTests\XISFInstallerTests.csproj", "{CAFE0007-0000-0000-0000-000000000001}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "repo root", "repo root", "{9FD08C55-1265-4E9E-8AF1-53C849FAEE77}"
 	ProjectSection(SolutionItems) = preProject
