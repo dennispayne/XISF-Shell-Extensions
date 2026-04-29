@@ -7,9 +7,11 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <!-- Version flows from version.json via CI or defaults -->
-    <XISFVersion Condition="'$(XISFVersion)' == ''">0.1.0</XISFVersion>
-    <ProductVersion>$(XISFVersion)</ProductVersion>
+    <!-- If caller passed /p:XISFVersion=..., honor it. Otherwise prefer
+         NB.GV's $(BuildVersionSimple), and finally fall back to a default. -->
+    <ProductVersion Condition="'$(XISFVersion)' != ''">$(XISFVersion)</ProductVersion>
+    <ProductVersion Condition="'$(ProductVersion)' == '' and '$(BuildVersionSimple)' != ''">$(BuildVersionSimple)</ProductVersion>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">0.1.0</ProductVersion>
     <DefineConstants>ProductVersion=$(ProductVersion)</DefineConstants>
   </PropertyGroup>
 
@@ -27,5 +29,8 @@
 
   <ItemGroup>
     <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
+    <PackageReference Include="Nerdbank.GitVersioning" Version="3.9.50">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
   </ItemGroup>
 </Project>

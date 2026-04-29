@@ -231,6 +231,17 @@ STDAPI DllRegisterServer()
                        nullptr, kPreviewClsidStr);
     if (FAILED(hr)) return SELFREG_E_CLASS;
 
+    // Approved Shell Extensions list — required when the
+    // EnforceShellExtensionSecurity GPO is set on managed/enterprise machines.
+    hr = SetRegSZValue(HKEY_LOCAL_MACHINE,
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Approved",
+        kThumbClsidStr, L"XISF Thumbnail Provider");
+    if (FAILED(hr)) return SELFREG_E_CLASS;
+    hr = SetRegSZValue(HKEY_LOCAL_MACHINE,
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Approved",
+        kPreviewClsidStr, L"XISF Preview Handler");
+    if (FAILED(hr)) return SELFREG_E_CLASS;
+
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return S_OK;
 }
@@ -253,6 +264,18 @@ STDAPI DllUnregisterServer()
 
     swprintf_s(szClsidRoot, L"CLSID\\%s", kPreviewClsidStr);
     RegDeleteTreeW(HKEY_CLASSES_ROOT, szClsidRoot);
+
+    // Remove from Approved Shell Extensions list.
+    {
+        HKEY hApproved = nullptr;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Approved",
+            0, KEY_SET_VALUE, &hApproved) == ERROR_SUCCESS) {
+            RegDeleteValueW(hApproved, kThumbClsidStr);
+            RegDeleteValueW(hApproved, kPreviewClsidStr);
+            RegCloseKey(hApproved);
+        }
+    }
 
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return S_OK;

@@ -62,6 +62,22 @@
         <File Id="xisf.propdesc" Source="$(var.PropdescDir)xisf.propdesc" KeyPath="yes" />
       </Component>
 
+      <!--
+        Restart Manager hint: the install folder hosts the loaded handler DLLs.
+        Telling MSI/RestartManager about it allows Explorer.exe (and any other
+        process that has the DLL mapped) to be shut down or notified cleanly
+        instead of forcing a "files in use" prompt or a reboot.
+      -->
+      <Component Id="RestartManagerHints" Bitness="always64" Guid="2C9A7DE6-3B58-4E4F-9C77-7B7AB9D0F12A">
+        <util:RestartResource Id="RR_InstallFolder" Path="[INSTALLFOLDER]" />
+        <util:RestartResource Id="RR_PropertyDll" Path="[INSTALLFOLDER]XISFPropertyHandler.dll" />
+        <util:RestartResource Id="RR_PreviewDll"  Path="[INSTALLFOLDER]XISFPreviewHandler.dll" />
+        <util:RestartResource Id="RR_FilterDll"   Path="[INSTALLFOLDER]XISFFilter.dll" />
+        <util:RestartResource Id="RR_HostExe"     Path="[INSTALLFOLDER]XISFShellExtensionHost.exe" />
+        <RegistryValue Root="HKLM" Key="SOFTWARE\DennisPayne\XISF Shell Extension\MSI"
+                       Name="RestartManagerInstalled" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+
     </ComponentGroup>
 
     <!-- ── Start Menu shortcut ── -->
@@ -91,46 +107,66 @@
          Custom Actions — COM registration via regsvr32
          Each DLL gets its own register/unregister CA so failures are isolated.
          Uses WixQuietExec64 from WixToolset.Util.wixext.
+         NOTE: regsvr32 CAs are an MSI anti-pattern. They survive here as a
+         pragmatic shim while the registry authoring is migrated into WiX
+         components (see docs/installer.md for the migration plan).
          ════════════════════════════════════════════════════════════════════ -->
+
+    <!-- Stop the Windows Search service before touching files so it releases
+         XISFFilter.dll. Failures are ignored (service may be disabled). -->
+    <SetProperty Id="CA_StopWSearch" Value="&quot;[System64Folder]net.exe&quot; stop wsearch /y"
+                 Before="CA_StopWSearch" Sequence="execute" />
+    <CustomAction Id="CA_StopWSearch" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
+                  Execute="deferred" Return="ignore" Impersonate="no" />
+
+    <!-- Restart the Windows Search service after registration so it picks up
+         the new filter immediately. Failures are ignored (service may be disabled). -->
+    <SetProperty Id="CA_StartWSearch" Value="&quot;[System64Folder]net.exe&quot; start wsearch"
+                 Before="CA_StartWSearch" Sequence="execute" Condition="NOT REMOVE" />
+    <CustomAction Id="CA_StartWSearch" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
+                  Execute="deferred" Return="ignore" Impersonate="no" />
 
     <!-- Register: property handler -->
     <SetProperty Id="CA_RegisterProperty" Value="&quot;[System64Folder]regsvr32.exe&quot; /s &quot;[INSTALLFOLDER]XISFPropertyHandler.dll&quot;"
                  Before="CA_RegisterProperty" Sequence="execute" Condition="NOT REMOVE" />
-    <CustomAction Id="CA_RegisterProperty" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X86"
+    <CustomAction Id="CA_RegisterProperty" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="check" Impersonate="no" />
 
     <!-- Register: preview handler -->
     <SetProperty Id="CA_RegisterPreview" Value="&quot;[System64Folder]regsvr32.exe&quot; /s &quot;[INSTALLFOLDER]XISFPreviewHandler.dll&quot;"
                  Before="CA_RegisterPreview" Sequence="execute" Condition="NOT REMOVE" />
-    <CustomAction Id="CA_RegisterPreview" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X86"
+    <CustomAction Id="CA_RegisterPreview" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="check" Impersonate="no" />
 
     <!-- Register: search filter -->
     <SetProperty Id="CA_RegisterFilter" Value="&quot;[System64Folder]regsvr32.exe&quot; /s &quot;[INSTALLFOLDER]XISFFilter.dll&quot;"
                  Before="CA_RegisterFilter" Sequence="execute" Condition="NOT REMOVE" />
-    <CustomAction Id="CA_RegisterFilter" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X86"
+    <CustomAction Id="CA_RegisterFilter" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="check" Impersonate="no" />
 
     <!-- Unregister: property handler -->
     <SetProperty Id="CA_UnregisterProperty" Value="&quot;[System64Folder]regsvr32.exe&quot; /u /s &quot;[INSTALLFOLDER]XISFPropertyHandler.dll&quot;"
                  Before="CA_UnregisterProperty" Sequence="execute" Condition="REMOVE" />
-    <CustomAction Id="CA_UnregisterProperty" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X86"
+    <CustomAction Id="CA_UnregisterProperty" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="ignore" Impersonate="no" />
 
     <!-- Unregister: preview handler -->
     <SetProperty Id="CA_UnregisterPreview" Value="&quot;[System64Folder]regsvr32.exe&quot; /u /s &quot;[INSTALLFOLDER]XISFPreviewHandler.dll&quot;"
                  Before="CA_UnregisterPreview" Sequence="execute" Condition="REMOVE" />
-    <CustomAction Id="CA_UnregisterPreview" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X86"
+    <CustomAction Id="CA_UnregisterPreview" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="ignore" Impersonate="no" />
 
     <!-- Unregister: search filter -->
     <SetProperty Id="CA_UnregisterFilter" Value="&quot;[System64Folder]regsvr32.exe&quot; /u /s &quot;[INSTALLFOLDER]XISFFilter.dll&quot;"
                  Before="CA_UnregisterFilter" Sequence="execute" Condition="REMOVE" />
-    <CustomAction Id="CA_UnregisterFilter" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X86"
+    <CustomAction Id="CA_UnregisterFilter" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="ignore" Impersonate="no" />
 
     <!-- Schedule custom actions -->
     <InstallExecuteSequence>
+      <!-- Stop Search before file replacement so the indexer releases handles. -->
+      <Custom Action="CA_StopWSearch" Before="InstallFiles" />
+
       <Custom Action="CA_UnregisterFilter"   Before="CA_UnregisterPreview"  Condition="REMOVE" />
       <Custom Action="CA_UnregisterPreview"  Before="CA_UnregisterProperty" Condition="REMOVE" />
       <Custom Action="CA_UnregisterProperty" Before="RemoveFiles"           Condition="REMOVE" />
@@ -138,6 +174,9 @@
       <Custom Action="CA_RegisterProperty" After="InstallFiles"          Condition="NOT REMOVE" />
       <Custom Action="CA_RegisterPreview"  After="CA_RegisterProperty"   Condition="NOT REMOVE" />
       <Custom Action="CA_RegisterFilter"   After="CA_RegisterPreview"    Condition="NOT REMOVE" />
+
+      <!-- Bring Search back up after the filter is registered. -->
+      <Custom Action="CA_StartWSearch" After="CA_RegisterFilter" Condition="NOT REMOVE" />
     </InstallExecuteSequence>
 
   </Package>

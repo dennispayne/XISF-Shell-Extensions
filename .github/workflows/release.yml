@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
@@ -29,6 +31,14 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+
+      - name: Install nbgv
+        shell: pwsh
+        run: dotnet tool install --tool-path . nbgv
+
+      - name: Set cloud build variables (nbgv cloud)
+        shell: pwsh
+        run: ./nbgv cloud --all-vars
 
       - name: Resolve version
         id: ver
@@ -39,6 +49,8 @@ jobs:
             $v = $override
           } elseif ($env:GITHUB_REF -like 'refs/tags/v*') {
             $v = $env:GITHUB_REF -replace '^refs/tags/v', ''
+          } elseif ($env:NBGV_SemVer2) {
+            $v = $env:NBGV_SemVer2
           } else {
             $v = (Get-Content version.json | ConvertFrom-Json).version
           }
