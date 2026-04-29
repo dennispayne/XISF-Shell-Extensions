@@ -20,4 +20,4 @@ Closes #
 - [ ] `CHANGELOG.md` updated under `[Unreleased]`
 - [ ] No new third-party dependencies (or justification provided)
 - [ ] If this touches handler registration or packaging, I tested installing
-      the resulting MSIX (or dev script) on a clean Windows profile
+      the resulting MSI (or dev script) on a clean Windows profile
