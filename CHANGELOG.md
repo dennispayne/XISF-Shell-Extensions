@@ -13,20 +13,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial public release.
 - `XISFPropertyHandler` — Windows Details pane and Search metadata provider for `.xisf` files.
 - `XISFPreviewHandler` — Windows preview pane and thumbnail provider for `.xisf` files.
-- `XISFShellExtensionHost` — settings app (Start → **XISF Shell Extension**):
-  - Toggle the Property Handler and Preview/Thumbnail Handler independently at runtime
-    via `HKCU\Software\DennisPayne\XISF Shell Extension\{PropertyEnabled,PreviewEnabled}`.
+- `XISFShellExtensionHost` — settings app (Start → **XISF Shell Extension Settings**):
+  - Toggle all three handlers independently at runtime
+    via `HKCU\Software\DennisPayne\XISF Shell Extension\{PropertyEnabled,PreviewEnabled,FilterEnabled}`.
     Disabled handlers return `CLASS_E_CLASSNOTAVAILABLE` from `IClassFactory::CreateInstance`
     so Explorer falls back to default behavior.
+  - Tri-state toggle buttons: Disable (registered+enabled), Enable (registered+disabled),
+    Register (unregistered). Registration queues for Apply with UAC elevation.
   - Install or update OpenNGC catalogs on demand. Downloads are pinned to a specific
     OpenNGC commit SHA, fetched over HTTPS (TLS 1.2+), streamed through SHA-256, and
     atomically moved into place only after the hash matches the compiled-in pin.
   - Offline import of a local `NGC.csv` or `addendum.csv` against the same pin.
   - **Copy Expected Hashes** button for independent verification on github.com.
-- Single MSIX release artifact `XISF.ShellExtension_<ver>_x64.msix` (both handlers +
-  settings app). Replaces the prior per-handler MSIX design.
-- Developer scripts in `HelperScripts/` for `regsvr32`-based registration and
-  OpenNGC catalog fetch.
+- `XISFFilter` — Windows Search IFilter for full-text indexing of `.xisf` metadata.
+- MSI installer via WiX v5 (`Installer/XISFInstaller/`). Per-machine install to
+  Program Files with automatic COM registration via regsvr32 custom actions.
 
 ### Changed
 - OpenNGC / addendum / Sharpless catalogs are no longer embedded as RCDATA in

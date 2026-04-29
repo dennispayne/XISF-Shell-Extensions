@@ -1,0 +1,31 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <!-- Don't inherit C++ output paths from Directory.Build.targets -->
+    <ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Version flows from version.json via CI or defaults -->
+    <XISFVersion Condition="'$(XISFVersion)' == ''">0.1.0</XISFVersion>
+    <ProductVersion>$(XISFVersion)</ProductVersion>
+    <DefineConstants>ProductVersion=$(ProductVersion)</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Point to build output; CI or local builds place binaries here -->
+    <BinDir Condition="'$(BinDir)' == ''">$(MSBuildThisFileDirectory)..\..\x64\Release\</BinDir>
+    <PropdescDir Condition="'$(PropdescDir)' == ''">$(MSBuildThisFileDirectory)..\..\PropertyHandler\XISFPropertyHandler\propdesc\</PropdescDir>
+    <DefineConstants>$(DefineConstants);BinDir=$(BinDir);PropdescDir=$(PropdescDir)</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <BindPath Include="BinDir" Path="$(BinDir)" />
+    <BindPath Include="PropdescDir" Path="$(PropdescDir)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
+  </ItemGroup>
+</Project>

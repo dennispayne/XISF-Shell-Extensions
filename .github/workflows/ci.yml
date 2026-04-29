@@ -88,6 +88,17 @@ jobs:
             Write-Warning "PerformanceTests.dll not found — skipping perf tests"
           }
 
+      - name: Run host and filter tests
+        shell: pwsh
+        run: |
+          $extra = @(
+            'x64\Release\ShellExtensionHostTests.dll',
+            'x64\Release\XISFFilterTests.dll'
+          ) | Where-Object { Test-Path $_ }
+          if ($extra.Count -gt 0) {
+            vstest.console.exe $extra --Platform:x64 --Logger:trx --ResultsDirectory:TestResults\Extra
+          }
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -96,16 +107,31 @@ jobs:
           path: TestResults/**/*.trx
           if-no-files-found: warn
 
-      - name: Stage MSIX build (validation only, no sign)
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build MSI installer
         shell: pwsh
         run: |
-          .\Packaging\build-msix.ps1 `
-            -Version ${{ steps.ver.outputs.version }} `
-            -BuildNumber ${{ github.run_number }}
+          dotnet build Installer\XISFInstaller\XISFInstaller.wixproj `
+            -c Release `
+            -p:XISFVersion=${{ steps.ver.outputs.version }}
 
-      - name: Upload MSIX artifacts (unsigned CI build)
+      - name: Run installer tests
+        shell: pwsh
+        run: |
+          Invoke-Pester -Path Installer\XISFInstallerTests\installer.Tests.ps1 `
+            -OutputFormat NUnitXml `
+            -OutputFile TestResults\installer-tests.xml `
+            -PassThru | ForEach-Object {
+              if ($_.FailedCount -gt 0) { throw "$($_.FailedCount) installer test(s) failed." }
+            }
+
+      - name: Upload MSI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: msix-unsigned
-          path: artifacts\*.msix
+          name: msi-unsigned
+          path: Installer\XISFInstaller\bin\Release\**\*.msi
           if-no-files-found: error

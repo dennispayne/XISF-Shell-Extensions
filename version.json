@@ -1,5 +1,5 @@
 {
   "$schema": "https://raw.githubusercontent.com/dotnet/Nerdbank.GitVersioning/main/src/NerdBank.GitVersioning/version.schema.json",
   "version": "0.1.0",
-  "comment": "Single SemVer source of truth. CI maps MAJOR.MINOR.PATCH -> MAJOR.MINOR.PATCH.<build> for MSIX/RC."
+  "comment": "Single SemVer source of truth. CI maps MAJOR.MINOR.PATCH -> MAJOR.MINOR.PATCH.<build> for RC file versions. MSI uses 3-part MAJOR.MINOR.PATCH."
 }

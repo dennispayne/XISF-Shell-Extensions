@@ -10,8 +10,9 @@ for `.xisf` files on Windows 10 / 11:
 
 | Component             | What it does                                                        |
 | --------------------- | ------------------------------------------------------------------- |
-| `XISFPropertyHandler` | Details pane metadata and Windows Search indexing for `.xisf` files |
+| `XISFPropertyHandler` | Details pane metadata for `.xisf` files                             |
 | `XISFPreviewHandler`  | Preview pane renderer **and** Explorer thumbnail provider           |
+| `XISFFilter`          | Windows Search content indexing (IFilter) for `.xisf` files         |
 
 The Property Handler can also enrich metadata with deep-sky catalog names
 (NGC / IC / Sharpless / etc.) when files carry OBJECT / OBJCTRA / OBJCTDEC
@@ -23,53 +24,44 @@ commit (SHA-256-verified), or you can import a local copy offline. See
 
 ## Install
 
-### MSIX (recommended)
+### MSI installer (recommended)
 
-Download `XISF.ShellExtension_<ver>_x64.msix` from the [latest release](https://github.com/dennispayne/XISF-Shell-Extensions/releases/latest).
-The single package contains both handlers plus the settings app; you choose
-at runtime which handlers are active.
+Download `XISF.ShellExtensions_<ver>_x64.msi` from the [latest release](https://github.com/dennispayne/XISF-Shell-Extensions/releases/latest).
+The MSI installs all handlers plus the settings app to
+`C:\Program Files\XISF Shell Extensions\`. COM registration is handled
+automatically during install (requires admin). After install, **restart
+Explorer** (Task Manager → File Explorer → Restart) so the handlers load.
 
-**First install (self-signed builds):** the 0.x releases are signed with a
-self-signed certificate. Before sideloading, import the accompanying
-`XISF-Shell-Extensions.cer` into `Local Machine → Trusted People`:
-
-```powershell
-# From an elevated PowerShell prompt
-Import-Certificate -FilePath .\XISF-Shell-Extensions.cer `
-                   -CertStoreLocation Cert:\LocalMachine\TrustedPeople
-```
-
-Then install the `.msix`:
-
-```powershell
-Add-AppxPackage .\XISF.ShellExtension_<ver>_x64.msix
-```
-
-After install, **restart Explorer** (Task Manager → File Explorer → Restart)
-so the handlers load. Open **Start → XISF Shell Extension** to toggle
-individual handlers or fetch the optional catalogs.
+Open **Start → XISF Shell Extension Settings** to toggle individual handlers
+or fetch the optional catalogs.
 
 ### Uninstall
 
-From **Settings → Apps → Installed apps**, or:
+From **Settings → Apps → Installed apps**, or via **Control Panel → Programs
+and Features**, or:
 
 ```powershell
-Get-AppxPackage *XISF* | Remove-AppxPackage
+msiexec /x {product-code}
 ```
 
 ### Developer install (unpackaged)
 
-For local development without MSIX, use the **XISF Shell Extension** app
-(`ShellExtensionHost.exe`) to toggle handler registration, and see the
+For local development without the MSI, build the solution and use the
+**XISF Shell Extension** settings app (`XISFShellExtensionHost.exe`) to
+register/unregister handlers via the toggle buttons. See the
 [Contributing](CONTRIBUTING.md) guide.
 
 ## Enabling / disabling handlers at runtime
 
-Open the **XISF Shell Extension** app from Start. The two checkboxes toggle
-the Property Handler and Preview/Thumbnail Handler independently. Disabling
-a handler makes Explorer fall back to default behavior; the DLLs stay
-installed. Changes apply to new handler activations — restart Explorer to
-force a reload.
+Open the **XISF Shell Extension Settings** app from Start. The toggle buttons
+control each handler independently:
+- **Property Handler** — details pane file metadata
+- **Preview/Thumbnail Handler** — preview pane and Explorer thumbnails
+- **Search Filter** — Windows Search content indexing
+
+Disabling a handler makes Explorer fall back to default behavior; the DLLs
+stay installed. Changes apply to new handler activations — restart Explorer
+to force a reload.
 
 Under the hood, toggles write to:
 `HKCU\Software\DennisPayne\XISF Shell Extension\{PropertyEnabled,PreviewEnabled}` (DWORD, default 1).
@@ -110,11 +102,14 @@ XISF-Shell-Extensions/
 ├── PreviewHandler/
 │   ├── XISFPreviewHandler/          # DLL: preview pane + thumbnails
 │   └── XISFPreviewHandlerTests/
+├── Filter/
+│   ├── XISFFilter/                  # DLL: Windows Search IFilter
+│   └── XISFFilterTests/
 ├── PerformanceTests/                # Microbenchmarks
 ├── ShellExtensionHost/              # Settings app + catalog installer
-├── Packaging/
-│   ├── XISFShellExtensions/          # MSIX manifest
-│   └── Shared/Assets/
+├── Installer/
+│   ├── XISFInstaller/               # WiX v5 MSI project
+│   └── XISFInstallerTests/          # Pester tests for MSI validation
 ├── docs/                            # Design docs
 ├── build/                           # Shared MSBuild props (versioning)
 ├── version.json                     # SemVer source of truth
@@ -126,12 +121,11 @@ XISF-Shell-Extensions/
 - [`docs/handlers-overview.md`](docs/handlers-overview.md) — architecture and design.
 - [`docs/preview-handler.md`](docs/preview-handler.md) — preview/thumbnail rendering.
 - [`docs/telemetry.md`](docs/telemetry.md) — local-only ETW tracing.
-- [`docs/msix-packaging.md`](docs/msix-packaging.md) — MSIX build, catalog fetcher security model, release process.
 
 ## Versioning & release
 
 This project follows [Semantic Versioning](https://semver.org/). The current
-version lives in [`version.json`](version.json). CI produces a signed MSIX for
+version lives in [`version.json`](version.json). CI produces an MSI for
 every `v*.*.*` Git tag.
 
 ## License

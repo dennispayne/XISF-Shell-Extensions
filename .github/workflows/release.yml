@@ -15,12 +15,8 @@ permissions:
 
 jobs:
   release:
-    name: Build + Sign + Release
+    name: Build + Package + Release
     runs-on: windows-2025-vs2026
-    env:
-      # Subject/CN used for both self-signed cert and MSIX Identity/Publisher.
-      # Must match exactly.
-      PUBLISHER_CN: 'CN=Dennis Payne'
 
     steps:
       - name: Checkout
@@ -28,6 +24,11 @@ jobs:
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
 
       - name: Resolve version
         id: ver
@@ -94,81 +95,40 @@ jobs:
         run: |
           $tests = @(
             'x64\Release\XISFPropertyHandlerTests.dll',
-            'x64\Release\XISFPreviewHandlerTests.dll'
+            'x64\Release\XISFPreviewHandlerTests.dll',
+            'x64\Release\ShellExtensionHostTests.dll',
+            'x64\Release\XISFFilterTests.dll'
           ) | Where-Object { Test-Path $_ }
           vstest.console.exe $tests --Platform:x64 --Logger:trx --ResultsDirectory:TestResults
 
-      - name: Resolve signing certificate
-        id: cert
+      - name: Build MSI installer
         shell: pwsh
         run: |
-          $pfxB64 = '${{ secrets.SIGNING_PFX_BASE64 }}'
-          $pfxPwd = '${{ secrets.SIGNING_PFX_PASSWORD }}'
-          $pfxPath = Join-Path $env:RUNNER_TEMP 'xisf-signing.pfx'
-          $cerPath = Join-Path $env:RUNNER_TEMP 'xisf-signing.cer'
+          dotnet build Installer\XISFInstaller\XISFInstaller.wixproj `
+            -c Release `
+            -p:XISFVersion=${{ steps.ver.outputs.version }}
 
-          if ($pfxB64) {
-            Write-Host "Using repository signing certificate from secrets."
-            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($pfxB64))
-            "self_signed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          } else {
-            Write-Warning "No SIGNING_PFX_BASE64 secret set. Generating an EPHEMERAL self-signed certificate."
-            $password = ConvertTo-SecureString -String 'xisf-dev' -AsPlainText -Force
-            $cert = New-SelfSignedCertificate `
-                -Type CodeSigningCert `
-                -Subject $env:PUBLISHER_CN `
-                -KeyUsage DigitalSignature `
-                -FriendlyName 'XISF Shell Extension (self-signed)' `
-                -CertStoreLocation Cert:\CurrentUser\My `
-                -KeyAlgorithm RSA `
-                -KeyLength 2048 `
-                -HashAlgorithm SHA256 `
-                -NotAfter (Get-Date).AddYears(3) `
-                -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3','2.5.29.19={text}')
-            Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $password | Out-Null
-            Export-Certificate    -Cert $cert -FilePath $cerPath -Type CERT | Out-Null
-            "self_signed=true"    | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            "pfx_password=xisf-dev" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          }
-
-          "pfx_path=$pfxPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "cer_path=$cerPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
-      - name: Build and sign MSIX packages
+      - name: Run installer tests
         shell: pwsh
         run: |
-          $pwd = if ('${{ steps.cert.outputs.self_signed }}' -eq 'true') {
-            ConvertTo-SecureString -String '${{ steps.cert.outputs.pfx_password }}' -AsPlainText -Force
-          } else {
-            ConvertTo-SecureString -String '${{ secrets.SIGNING_PFX_PASSWORD }}' -AsPlainText -Force
-          }
-          .\Packaging\build-msix.ps1 `
-            -Version ${{ steps.ver.outputs.version }} `
-            -BuildNumber ${{ github.run_number }} `
-            -Publisher '${{ env.PUBLISHER_CN }}' `
-            -CertificatePath '${{ steps.cert.outputs.pfx_path }}' `
-            -CertificatePassword $pwd
-
-      - name: Compute SHA256SUMS
-        shell: pwsh
-        run: |
-          $out = Join-Path 'artifacts' 'SHA256SUMS.txt'
-          Get-ChildItem artifacts\*.msix | ForEach-Object {
-            $h = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLower()
-            "$h  $($_.Name)"
-          } | Set-Content $out -Encoding ascii
-          Get-Content $out
+          Invoke-Pester -Path Installer\XISFInstallerTests\installer.Tests.ps1 `
+            -OutputFormat NUnitXml `
+            -OutputFile TestResults\installer-tests.xml `
+            -PassThru | ForEach-Object {
+              if ($_.FailedCount -gt 0) { throw "$($_.FailedCount) installer test(s) failed." }
+            }
 
       - name: Stage release assets
         shell: pwsh
         run: |
           $stage = Join-Path $env:RUNNER_TEMP 'release-assets'
           New-Item -ItemType Directory -Path $stage -Force | Out-Null
-          Copy-Item artifacts\*.msix $stage
-          Copy-Item artifacts\SHA256SUMS.txt $stage
-          if ('${{ steps.cert.outputs.self_signed }}' -eq 'true') {
-            Copy-Item '${{ steps.cert.outputs.cer_path }}' (Join-Path $stage 'XISF-Shell-Extensions.cer')
-          }
+          $msi = Get-ChildItem 'Installer\XISFInstaller\bin\Release\**\*.msi' -Recurse | Select-Object -First 1
+          if (-not $msi) { throw 'MSI not found after build.' }
+          $destName = "XISF.ShellExtensions_${{ steps.ver.outputs.version }}_x64.msi"
+          Copy-Item $msi.FullName (Join-Path $stage $destName)
+          $h = (Get-FileHash -Algorithm SHA256 $msi.FullName).Hash.ToLower()
+          "$h  $destName" | Set-Content (Join-Path $stage 'SHA256SUMS.txt') -Encoding ascii
           "release_dir=$stage" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           Get-ChildItem $stage
 
@@ -181,14 +141,13 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ contains(steps.ver.outputs.full_version, '-') }}
           files: |
-            artifacts/*.msix
-            artifacts/SHA256SUMS.txt
-            ${{ runner.temp }}/release-assets/XISF-Shell-Extensions.cer
+            ${{ runner.temp }}/release-assets/*.msi
+            ${{ runner.temp }}/release-assets/SHA256SUMS.txt
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ steps.ver.outputs.full_version }}
           path: |
-            artifacts/*.msix
-            artifacts/SHA256SUMS.txt
+            ${{ runner.temp }}/release-assets/*.msi
+            ${{ runner.temp }}/release-assets/SHA256SUMS.txt

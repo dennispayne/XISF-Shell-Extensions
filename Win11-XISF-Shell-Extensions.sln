@@ -30,35 +30,41 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "XISFFilterTests", "Filter\X
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Filter", "Filter", "{10000001-0000-0000-0000-000000000006}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Packaging", "Packaging", "{CAFE0001-0000-0000-0000-000000000001}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Installer", "Installer", "{CAFE0001-0000-0000-0000-000000000001}"
 	ProjectSection(SolutionItems) = preProject
-		Packaging\build-msix.ps1 = Packaging\build-msix.ps1
-		Packaging\XISFShellExtensions\Package.appxmanifest = Packaging\XISFShellExtensions\Package.appxmanifest
+		Installer\XISFInstaller\Package.wxs = Installer\XISFInstaller\Package.wxs
+		Installer\XISFInstaller\XISFInstaller.wixproj = Installer\XISFInstaller\XISFInstaller.wixproj
 	EndProjectSection
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{CAFE0002-0000-0000-0000-000000000001}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "XISFInstallerTests", "XISFInstallerTests", "{CAFE0007-0000-0000-0000-000000000001}"
+	ProjectSection(SolutionItems) = preProject
+		Installer\XISFInstallerTests\installer.Tests.ps1 = Installer\XISFInstallerTests\installer.Tests.ps1
+		Installer\XISFInstallerTests\New-TestXisf.ps1 = Installer\XISFInstallerTests\New-TestXisf.ps1
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "repo root", "repo root", "{9FD08C55-1265-4E9E-8AF1-53C849FAEE77}"
 	ProjectSection(SolutionItems) = preProject
 		.gitignore = .gitignore
 		CHANGELOG.md = CHANGELOG.md
 		CodeCoverage.runsettings = CodeCoverage.runsettings
 		CODE_OF_CONDUCT.md = CODE_OF_CONDUCT.md
 		CONTRIBUTING.md = CONTRIBUTING.md
+		global.json = global.json
 		LICENSE = LICENSE
 		README.md = README.md
 		SECURITY.md = SECURITY.md
 		version.json = version.json
-		Win11-XISF-Shell-Extensions.sln = Win11-XISF-Shell-Extensions.sln
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "build", "build", "{CAFE0003-0000-0000-0000-000000000001}"
 	ProjectSection(SolutionItems) = preProject
 		build\version.props = build\version.props
+		Directory.Build.targets = Directory.Build.targets
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{CAFE0004-0000-0000-0000-000000000001}"
 	ProjectSection(SolutionItems) = preProject
 		docs\handlers-overview.md = docs\handlers-overview.md
-		docs\msix-packaging.md = docs\msix-packaging.md
 		docs\preview-handler.md = docs\preview-handler.md
 		docs\property-handler.md = docs\property-handler.md
 		docs\telemetry.md = docs\telemetry.md
@@ -74,20 +80,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{
 	ProjectSection(SolutionItems) = preProject
 		.github\workflows\ci.yml = .github\workflows\ci.yml
 		.github\workflows\release.yml = .github\workflows\release.yml
-	EndProjectSection
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "repo root", "repo root", "{9FD08C55-1265-4E9E-8AF1-53C849FAEE77}"
-	ProjectSection(SolutionItems) = preProject
-		.gitignore = .gitignore
-		CHANGELOG.md = CHANGELOG.md
-		CodeCoverage.runsettings = CodeCoverage.runsettings
-		CODE_OF_CONDUCT.md = CODE_OF_CONDUCT.md
-		CONTRIBUTING.md = CONTRIBUTING.md
-		LICENSE = LICENSE
-		README.md = README.md
-		SECURITY.md = SECURITY.md
-		version.json = version.json
-		Win11-XISF-Shell-Extensions.sln = Win11-XISF-Shell-Extensions.sln
 	EndProjectSection
 EndProject
 Global
@@ -146,10 +138,8 @@ Global
 		{F3079C99-44B3-CEC6-C1D0-E54F888F4D80} = {84BAAC9F-994B-4C6E-B41A-F503EE515F8D}
 		{B4E7F2A1-3D8C-4F5E-9A1B-6C2D8E4F7A3B} = {10000001-0000-0000-0000-000000000006}
 		{AB027F72-FE24-4FE3-B7FD-183AE95BCDB6} = {10000001-0000-0000-0000-000000000006}
-		{CAFE0001-0000-0000-0000-000000000001} = {CAFE0002-0000-0000-0000-000000000001}
-		{CAFE0003-0000-0000-0000-000000000001} = {CAFE0002-0000-0000-0000-000000000001}
+		{CAFE0007-0000-0000-0000-000000000001} = {CAFE0001-0000-0000-0000-000000000001}
 		{CAFE0006-0000-0000-0000-000000000001} = {CAFE0005-0000-0000-0000-000000000001}
-		{9FD08C55-1265-4E9E-8AF1-53C849FAEE77} = {CAFE0002-0000-0000-0000-000000000001}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {6D5DCEB3-7DBA-46D0-8A5D-0ED883A9A1B8}
