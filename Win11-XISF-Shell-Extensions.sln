@@ -31,10 +31,8 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Filter", "Filter", "{10000001-0000-0000-0000-000000000006}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Installer", "Installer", "{CAFE0001-0000-0000-0000-000000000001}"
-	ProjectSection(SolutionItems) = preProject
-		Installer\XISFInstaller\Package.wxs = Installer\XISFInstaller\Package.wxs
-		Installer\XISFInstaller\XISFInstaller.wixproj = Installer\XISFInstaller\XISFInstaller.wixproj
-	EndProjectSection
+EndProject
+Project("{930C7802-8A8C-48F9-8165-68863BCCD9DD}") = "XISFInstaller", "Installer\XISFInstaller\XISFInstaller.wixproj", "{CAFE0008-0000-0000-0000-000000000001}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XISFInstallerTests", "Installer\XISFInstallerTests\XISFInstallerTests.csproj", "{CAFE0007-0000-0000-0000-000000000001}"
 EndProject
@@ -120,6 +118,12 @@ Global
 		{AB027F72-FE24-4FE3-B7FD-183AE95BCDB6}.Debug|x64.Build.0 = Debug|x64
 		{AB027F72-FE24-4FE3-B7FD-183AE95BCDB6}.Release|x64.ActiveCfg = Release|x64
 		{AB027F72-FE24-4FE3-B7FD-183AE95BCDB6}.Release|x64.Build.0 = Release|x64
+		{CAFE0008-0000-0000-0000-000000000001}.Debug|x64.ActiveCfg = Debug|x86
+		{CAFE0008-0000-0000-0000-000000000001}.Release|x64.ActiveCfg = Release|x86
+		{CAFE0008-0000-0000-0000-000000000001}.Release|x64.Build.0 = Release|x86
+		{CAFE0007-0000-0000-0000-000000000001}.Debug|x64.ActiveCfg = Debug|AnyCPU
+		{CAFE0007-0000-0000-0000-000000000001}.Release|x64.ActiveCfg = Release|AnyCPU
+		{CAFE0007-0000-0000-0000-000000000001}.Release|x64.Build.0 = Release|AnyCPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -135,6 +139,7 @@ Global
 		{B4E7F2A1-3D8C-4F5E-9A1B-6C2D8E4F7A3B} = {10000001-0000-0000-0000-000000000006}
 		{AB027F72-FE24-4FE3-B7FD-183AE95BCDB6} = {10000001-0000-0000-0000-000000000006}
 		{CAFE0007-0000-0000-0000-000000000001} = {CAFE0001-0000-0000-0000-000000000001}
+		{CAFE0008-0000-0000-0000-000000000001} = {CAFE0001-0000-0000-0000-000000000001}
 		{CAFE0006-0000-0000-0000-000000000001} = {CAFE0005-0000-0000-0000-000000000001}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution

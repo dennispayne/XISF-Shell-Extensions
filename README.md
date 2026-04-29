@@ -109,7 +109,7 @@ XISF-Shell-Extensions/
 ├── ShellExtensionHost/              # Settings app + catalog installer
 ├── Installer/
 │   ├── XISFInstaller/               # WiX v5 MSI project
-│   └── XISFInstallerTests/          # Pester tests for MSI validation
+│   └── XISFInstallerTests/          # MSTest MSI validation tests
 ├── docs/                            # Design docs
 ├── build/                           # Shared MSBuild props (versioning)
 ├── version.json                     # SemVer source of truth

@@ -35,7 +35,9 @@ enable/disable handlers.
 
 ## Building the MSI installer
 
-The installer uses WiX v5 and requires the .NET 8 SDK:
+The installer uses WiX v5 and requires the .NET 8 SDK. Install the
+[HeatWave for Visual Studio](https://marketplace.visualstudio.com/items?itemName=FireGiant.FireGiantHeatWaveDev17)
+extension to load the `.wixproj` in Solution Explorer with full IntelliSense.
 
 ```powershell
 dotnet build Installer\XISFInstaller\XISFInstaller.wixproj -c Release
