@@ -4,6 +4,8 @@
     <InstallerPlatform>x64</InstallerPlatform>
     <!-- Don't inherit C++ output paths from Directory.Build.targets -->
     <ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets>
+    <!-- Supply-chain hardening: pin transitive package versions + hashes via packages.lock.json -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
   <PropertyGroup>

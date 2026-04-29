@@ -20,21 +20,25 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
 
       - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
+        uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce  # v2
 
       - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4
         with:
           dotnet-version: '8.0.x'
 
-      - name: Install nbgv
+      - name: Install nbgv (pinned)
         shell: pwsh
-        run: dotnet tool install --tool-path . nbgv
+        # Pinned to match the Nerdbank.GitVersioning PackageReference version
+        # used by Installer/XISFInstaller/XISFInstaller.wixproj. Bump both
+        # together (Dependabot will surface the wixproj bump as a PR; pair
+        # this `--version` accordingly).
+        run: dotnet tool install --tool-path . nbgv --version 3.9.50
 
       - name: Set cloud build variables (nbgv cloud)
         shell: pwsh
@@ -66,14 +70,16 @@ jobs:
         shell: pwsh
         run: |
           msbuild Win11-XISF-Shell-Extensions.sln `
+            /restore `
             /p:Configuration=Release `
             /p:Platform=x64 `
+            /p:RestoreLockedMode=true `
             /p:XISFVersion=${{ steps.ver.outputs.version }} `
             /p:XISFBuildNumber=${{ github.run_number }} `
             /m /v:minimal /nologo
 
       - name: Setup VSTest
-        uses: darenm/Setup-VSTest@v1.3
+        uses: darenm/Setup-VSTest@3a16d909a1f3bbc65b52f8270d475d905e7d3e44  # v1.3
 
       - name: Download OpenNGC catalogs
         shell: pwsh
@@ -118,6 +124,7 @@ jobs:
         run: |
           dotnet build Installer\XISFInstaller\XISFInstaller.wixproj `
             -c Release `
+            -p:RestoreLockedMode=true `
             -p:XISFVersion=${{ steps.ver.outputs.version }}
 
       - name: Run installer tests
@@ -125,6 +132,7 @@ jobs:
         run: |
           dotnet test Installer\XISFInstallerTests\XISFInstallerTests.csproj `
             -c Release `
+            -p:RestoreLockedMode=true `
             --logger "trx;LogFileName=installer-tests.trx" `
             --results-directory TestResults
 
@@ -144,7 +152,7 @@ jobs:
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
           name: ${{ steps.ver.outputs.tag }}
@@ -155,7 +163,7 @@ jobs:
             ${{ runner.temp }}/release-assets/SHA256SUMS.txt
 
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: release-${{ steps.ver.outputs.full_version }}
           path: |
