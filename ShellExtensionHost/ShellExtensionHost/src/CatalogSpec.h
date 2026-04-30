@@ -81,7 +81,7 @@ inline constexpr CatalogSource kSharpless {
     L"https://raw.githubusercontent.com/dennispayne/XISF-Shell-Extensions/"
     L"9bc8d1e71a298ca68365c515ce1237d2a3a12e63/data/sharpless.csv",
     L"94e8f0bed41db343479fce9daafc2cb8e751d0099202b14ae86d8fbe6eb30134",
-    2ull * 1024ull * 1024ull
+    256ull * 1024ull
 };
 
 inline constexpr CatalogSource kConstellationBoundaries {
@@ -90,7 +90,7 @@ inline constexpr CatalogSource kConstellationBoundaries {
     L"https://raw.githubusercontent.com/dennispayne/XISF-Shell-Extensions/"
     L"9bc8d1e71a298ca68365c515ce1237d2a3a12e63/data/constellation_boundaries.csv",
     L"3b77df84ca6b4c87e1a45a7a7fa8a93424b51f0f163e0fd8fcb19f53b0d5f5ce",
-    1ull * 1024ull * 1024ull
+    64ull * 1024ull
 };
 
 inline constexpr CatalogSource kConstellationNames {
@@ -99,7 +99,7 @@ inline constexpr CatalogSource kConstellationNames {
     L"https://raw.githubusercontent.com/dennispayne/XISF-Shell-Extensions/"
     L"9bc8d1e71a298ca68365c515ce1237d2a3a12e63/data/constellation_names.csv",
     L"2f6bc186ae95f3a7ffc4294cefc4a139653ac1668a079d5c9fcaf0ca818fcc81",
-    256ull * 1024ull
+    16ull * 1024ull
 };
 
 inline constexpr std::array<const CatalogSource*, 5> kAllCatalogs = {
