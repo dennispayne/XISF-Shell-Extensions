@@ -1,5 +1,15 @@
 {
   "$schema": "https://raw.githubusercontent.com/dotnet/Nerdbank.GitVersioning/main/src/NerdBank.GitVersioning/version.schema.json",
   "version": "0.1.0",
-  "comment": "Single SemVer source of truth. CI maps MAJOR.MINOR.PATCH -> MAJOR.MINOR.PATCH.<build> for MSIX/RC."
+  "publicReleaseRefSpec": [ "^refs/heads/main$", "^refs/tags/v\\d+\\.\\d+" ],
+  "nugetPackageVersion": { "semVer": 2 },
+  "comment": [
+    "Repo-wide user-facing SemVer (used by the MSI, GitHub Releases, and as the base",
+    "for each handler DLL when no nested version.json is in scope).",
+    "",
+    "Per-DLL independent versions live in nested version.json files alongside each",
+    "handler's source so Git height (commits since the last version bump) is scoped",
+    "to that subtree. CI flows $(BuildVersion) from Nerdbank.GitVersioning into the",
+    "RC FILEVERSION via build/version.props. The MSI uses 3-part Major.Minor.Patch."
+  ]
 }

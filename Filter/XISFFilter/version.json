@@ -1,0 +1,9 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dotnet/Nerdbank.GitVersioning/main/src/NerdBank.GitVersioning/version.schema.json",
+  "inherit": true,
+  "pathFilters": [
+    "./src",
+    "./XISFFilter.vcxproj"
+  ],
+  "comment": "Inherits version from repo root. Git height is scoped to Filter subtree so this DLL's FILEVERSION revs only when its own code changes."
+}

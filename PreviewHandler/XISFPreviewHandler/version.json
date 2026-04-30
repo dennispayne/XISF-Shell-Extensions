@@ -1,0 +1,9 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dotnet/Nerdbank.GitVersioning/main/src/NerdBank.GitVersioning/version.schema.json",
+  "inherit": true,
+  "pathFilters": [
+    "./src",
+    "./XISFPreviewHandler.vcxproj"
+  ],
+  "comment": "Inherits version from repo root. Git height is scoped to PreviewHandler subtree so this DLL's FILEVERSION revs only when its own code changes."
+}

@@ -101,6 +101,12 @@ STDAPI DllRegisterServer(void) {
     if (FAILED(hr)) return SELFREG_E_CLASS;
     hr = SetRegSZValue(HKEY_LOCAL_MACHINE, kPropertyHandlersKey, nullptr, kClsidStr);
     if (FAILED(hr)) return SELFREG_E_CLASS;
+    // Approved Shell Extensions list — required when EnforceShellExtensionSecurity GPO is set.
+    // Cheap insurance for managed/enterprise machines; harmless on default Windows.
+    hr = SetRegSZValue(HKEY_LOCAL_MACHINE,
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Approved",
+        kClsidStr, L"XISF Property Handler");
+    if (FAILED(hr)) return SELFREG_E_CLASS;
     hr = SetRegSZValue(HKEY_CLASSES_ROOT, kExtKey, nullptr, kProgID);
     if (FAILED(hr)) return SELFREG_E_CLASS;
     hr = SetRegSZValue(HKEY_CLASSES_ROOT, kExtKey, L"Content Type", L"application/xisf");
@@ -257,6 +263,16 @@ STDAPI DllUnregisterServer(void) {
     }
     RegDeleteTreeW(HKEY_LOCAL_MACHINE, kSearchExtKey);
     RegDeleteTreeW(HKEY_LOCAL_MACHINE, kPropertyHandlersKey);
+    // Remove from Approved Shell Extensions list (property handler CLSID).
+    {
+        HKEY hApproved = nullptr;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Approved",
+            0, KEY_SET_VALUE, &hApproved) == ERROR_SUCCESS) {
+            RegDeleteValueW(hApproved, kClsidStr);
+            RegCloseKey(hApproved);
+        }
+    }
     wchar_t szClsidRoot[128]; swprintf_s(szClsidRoot, L"CLSID\\%s", kClsidStr);
     RegDeleteTreeW(HKEY_CLASSES_ROOT, szClsidRoot);
     // Only remove our values from .xisf — don't nuke the entire key (PixInsight may own it)

@@ -1,0 +1,36 @@
+version: 2
+
+# Group weekly updates so dependabot doesn't drown the PR queue.
+# All third-party action updates land as pinned commit SHAs (because we use
+# SHA pins in the workflows), giving us reviewable supply-chain updates.
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      gha-deps:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "nuget"
+    directory: "/Installer/XISFInstaller"
+    schedule:
+      interval: "weekly"
+    groups:
+      installer-deps:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "nuget"
+    directory: "/Installer/XISFInstallerTests"
+    schedule:
+      interval: "weekly"
+    groups:
+      installer-test-deps:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 5
