@@ -1,5 +1,9 @@
 # Property Handler — Full Property Mapping + DSO Alias Database
 
+**Note:** This file has been migrated to the new documentation structure. Please see [Property Mapping Reference](docs/reference/property-mapping.md) for the updated version.
+
+---
+
 ## Objective
 
 Expand the Phase 3 handler to expose the complete set of meaningful XISF/FITS metadata as Windows properties, and add a JSON-backed Deep-Sky Object (DSO) alias database that resolves common object name variants to canonical names.

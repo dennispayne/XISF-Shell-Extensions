@@ -1,5 +1,9 @@
 # Win11 XISF Shell Extension Overview
 
+**Note:** This file has been migrated to the new documentation structure. Please see [Handlers Overview (User Guide)](docs/user-guide/handlers-overview.md) for the updated version.
+
+---
+
 This repository packages the shippable shell-extension stages:
 
 - **Property handler** (`IPropertyStore`) for Details pane + search indexing
@@ -29,7 +33,9 @@ Use the combined solution:
 
 `Win11-XISF-Shell-Extensions.sln`
 
-## Supporting docs
+## Supporting docs (migrated)
 
-- [`preview-handler.md`](preview-handler.md)
-- [`telemetry.md`](telemetry.md)
+- [Preview Handler Deep Dive](docs/features/preview-handler-deep-dive.md) - Technical details on thumbnail and preview implementation
+- [Telemetry & ETW](docs/features/telemetry-etw.md) - Event tracing documentation
+- [Handlers Overview (User Guide)](docs/user-guide/handlers-overview.md) - User-facing handler documentation
+- [Property Mapping Reference](docs/reference/property-mapping.md) - Complete property mapping reference
