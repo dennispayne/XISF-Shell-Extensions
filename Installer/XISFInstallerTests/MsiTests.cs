@@ -16,7 +16,7 @@ public class MsiTests
     public static void FindMsi(TestContext context)
     {
         // MsiDir can be overridden via runsettings
-        var msiDir = context.Properties.Contains("MsiDir")
+        var msiDir = context.Properties.ContainsKey("MsiDir")
             ? context.Properties["MsiDir"]!.ToString()!
             : Path.Combine(FindRepoRoot(), "Installer", "XISFInstaller", "bin", "Release");
 
