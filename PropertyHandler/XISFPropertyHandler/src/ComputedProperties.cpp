@@ -146,6 +146,25 @@ static void EnsureCatalogLoaded()
 
         if (cat->Count() > 0) s_dsoCatalog = cat;
 
+        // Load constellation boundary and name files from the catalog directory.
+        // Falls back to compiled-in data if files are absent.
+        auto loadConstellationFile = [](const wchar_t* fileName, bool isBoundaries) -> bool {
+            PWSTR pszBase = nullptr;
+            if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &pszBase)) || !pszBase)
+                return false;
+            std::wstring wpath = std::wstring(pszBase) + L"\\XISFShellExtension\\catalogs\\" + fileName;
+            CoTaskMemFree(pszBase);
+            int len = WideCharToMultiByte(CP_UTF8, 0, wpath.c_str(), -1, nullptr, 0, nullptr, nullptr);
+            if (len <= 0) return false;
+            std::string path(static_cast<size_t>(len - 1), '\0');
+            WideCharToMultiByte(CP_UTF8, 0, wpath.c_str(), -1, path.data(), len, nullptr, nullptr);
+            return isBoundaries
+                ? ConstellationDB::LoadBoundariesFromFile(path.c_str())
+                : ConstellationDB::LoadNamesFromFile(path.c_str());
+        };
+        loadConstellationFile(L"constellation_boundaries.csv", true);
+        loadConstellationFile(L"constellation_names.csv", false);
+
         WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_CATALOG | XISF_ETW_KEYWORD_PERF,
             L"CatalogConfigured Source=%ls PriorityCount=%u MatchToleranceDeg=%.3f EntryCount=%u",
             anyLoaded ? L"localappdata-csv" : L"none",

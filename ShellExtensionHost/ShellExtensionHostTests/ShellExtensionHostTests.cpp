@@ -404,6 +404,12 @@ namespace ShellExtensionHostTests_CatalogSpec
                 bool ok = (c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f');
                 Assert::IsTrue(ok, L"commit SHA must be lowercase hex");
             }
+            Assert::AreEqual<size_t>(40, kProjectDataCommit.size());
+            for (wchar_t c : kProjectDataCommit)
+            {
+                bool ok = (c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f');
+                Assert::IsTrue(ok, L"project data commit SHA must be lowercase hex");
+            }
         }
 
         TEST_METHOD(AllCatalogs_HaveValidPinData)
@@ -431,10 +437,17 @@ namespace ShellExtensionHostTests_CatalogSpec
         {
             for (auto* src : kAllCatalogs)
             {
-                Assert::IsTrue(src->url.size() >= kAllowedUrlPrefix.size());
-                Assert::IsTrue(src->url.compare(0, kAllowedUrlPrefix.size(),
-                                                kAllowedUrlPrefix) == 0,
-                               L"url must start with allowed prefix");
+                bool matched = false;
+                for (auto prefix : kAllowedUrlPrefixes)
+                {
+                    if (src->url.size() >= prefix.size() &&
+                        src->url.compare(0, prefix.size(), prefix) == 0)
+                    {
+                        matched = true;
+                        break;
+                    }
+                }
+                Assert::IsTrue(matched, L"url must start with one of the allowed prefixes");
             }
         }
 
@@ -442,15 +455,21 @@ namespace ShellExtensionHostTests_CatalogSpec
         {
             for (auto* src : kAllCatalogs)
             {
-                Assert::IsTrue(src->url.find(kOpenNGCCommit) != std::wstring_view::npos,
-                               L"url must embed the pinned commit SHA");
+                bool hasOpenNGC  = src->url.find(kOpenNGCCommit)      != std::wstring_view::npos;
+                bool hasProject  = src->url.find(kProjectDataCommit)  != std::wstring_view::npos;
+                Assert::IsTrue(hasOpenNGC || hasProject,
+                               L"url must embed one of the pinned commit SHAs");
             }
         }
 
-        TEST_METHOD(AllowedPrefix_IsHttps)
+        TEST_METHOD(AllowedPrefixes_AreAllHttps)
         {
             constexpr std::wstring_view https = L"https://";
-            Assert::IsTrue(kAllowedUrlPrefix.compare(0, https.size(), https) == 0);
+            for (auto prefix : kAllowedUrlPrefixes)
+            {
+                Assert::IsTrue(prefix.compare(0, https.size(), https) == 0,
+                               L"all allowed URL prefixes must use https://");
+            }
         }
 
         TEST_METHOD(CatalogFileNames_AreUnique)

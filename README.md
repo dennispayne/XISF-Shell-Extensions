@@ -70,21 +70,26 @@ Under the hood, toggles write to:
 
 The Property Handler looks for catalog files in
 `%LOCALAPPDATA%\XISFShellExtension\catalogs\` and loads whatever is present
-(`NGC.csv`, `addendum.csv`, `sharpless.csv`). Missing files are simply skipped.
+(`NGC.csv`, `addendum.csv`, `sharpless.csv`, `constellation_boundaries.csv`,
+`constellation_names.csv`). Missing files are simply skipped (constellation
+lookups fall back to compiled-in data when the CSV files are absent).
 
 Two ways to install them:
 
-1. **Online (pinned + verified).** In the settings app, click
-   **Install / Update from GitHub**. The app downloads each file from a
-   specific OpenNGC commit SHA over HTTPS (TLS 1.2+, cert validation
-   enforced), hashes the stream with SHA-256, and rejects any file whose
-   hash does not match the compiled-in pin. The download is written to a
-   temp file and only `MoveFileEx`-ed into place after verification.
-2. **Offline / air-gapped.** Click **Import from File…**, pick a local
-   `NGC.csv` or `addendum.csv`, and choose which pin it should match. The
-   same SHA-256 check applies; mismatched files are rejected.
+1. **Online (pinned + verified).** In the settings app, use the per-catalog
+   **Install / Update** buttons. The app downloads each file from a specific
+   pinned commit SHA over HTTPS (TLS 1.2+, cert validation enforced), hashes
+   the stream with SHA-256, and rejects any file whose hash does not match the
+   compiled-in pin. The download is written to a temp file and only
+   `MoveFileEx`-ed into place after verification.
+   - `NGC.csv`, `addendum.csv` — from OpenNGC (mattiaverga/OpenNGC)
+   - `sharpless.csv`, `constellation_boundaries.csv`, `constellation_names.csv`
+     — from this project's own repository (`data/` directory)
+2. **Offline / air-gapped.** Click **Import from File…**, pick a local file,
+   and choose which catalog pin it should match. The same SHA-256 check
+   applies; mismatched files are rejected.
 
-The **Copy Expected Hashes** button puts the pinned commit SHA, URLs, and
+The **Copy Expected Hashes** button puts all pinned commit SHAs, URLs, and
 expected SHA-256 values on the clipboard so you can cross-verify them
 independently on github.com before trusting a build.
 

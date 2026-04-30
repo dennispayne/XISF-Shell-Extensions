@@ -105,6 +105,21 @@ jobs:
               Name = 'addendum.csv'
               Url  = 'https://raw.githubusercontent.com/mattiaverga/OpenNGC/36cb178a0f69dba8bfc03a99c10512831edf1c6b/database_files/addendum.csv'
               Sha256 = '1d8f0914e643ada325a5a94d88d8fefad6a4937a2f77cc34f21483af22b11983'
+            },
+            @{
+              Name = 'sharpless.csv'
+              Url  = 'https://raw.githubusercontent.com/dennispayne/XISF-Shell-Extensions/9bc8d1e71a298ca68365c515ce1237d2a3a12e63/data/sharpless.csv'
+              Sha256 = '94e8f0bed41db343479fce9daafc2cb8e751d0099202b14ae86d8fbe6eb30134'
+            },
+            @{
+              Name = 'constellation_boundaries.csv'
+              Url  = 'https://raw.githubusercontent.com/dennispayne/XISF-Shell-Extensions/9bc8d1e71a298ca68365c515ce1237d2a3a12e63/data/constellation_boundaries.csv'
+              Sha256 = '3b77df84ca6b4c87e1a45a7a7fa8a93424b51f0f163e0fd8fcb19f53b0d5f5ce'
+            },
+            @{
+              Name = 'constellation_names.csv'
+              Url  = 'https://raw.githubusercontent.com/dennispayne/XISF-Shell-Extensions/9bc8d1e71a298ca68365c515ce1237d2a3a12e63/data/constellation_names.csv'
+              Sha256 = '2f6bc186ae95f3a7ffc4294cefc4a139653ac1668a079d5c9fcaf0ca818fcc81'
             }
           )
           foreach ($cat in $catalogs) {

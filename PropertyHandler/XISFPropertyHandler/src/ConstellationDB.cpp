@@ -5,6 +5,12 @@
 // Data from Roman (1987), precessed to J2000 epoch.
 #include "ConstellationDB.h"
 #include <algorithm>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <string>
+#include <cstdlib>
+#include <cstring>
 
 namespace xisf {
 
@@ -432,11 +438,134 @@ static const BoundaryRow kBoundaries[] = {
 
 static const int kBoundaryCount = sizeof(kBoundaries) / sizeof(kBoundaries[0]);
 
+// ---------------------------------------------------------------------------
+// Runtime-loaded data (overrides compiled-in when present)
+// ---------------------------------------------------------------------------
+
+// Runtime boundary rows loaded from constellation_boundaries.csv.
+// Empty = use compiled-in kBoundaries fallback.
+struct RuntimeBoundaryRow {
+    float raLow;
+    float raHigh;
+    float decLow;
+    char  con[8]; // 3-letter + NUL
+};
+static std::vector<RuntimeBoundaryRow> s_runtimeBoundaries;
+
+// Runtime name table loaded from constellation_names.csv.
+// Empty = use compiled-in kConstellationNames fallback.
+struct RuntimeNameEntry {
+    std::string abbrev;
+    std::string name;
+};
+static std::vector<RuntimeNameEntry> s_runtimeNames;
+
+// Trim whitespace (including \r) from both ends
+static std::string TrimField(const std::string& s)
+{
+    size_t a = s.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) return {};
+    size_t b = s.find_last_not_of(" \t\r\n");
+    return s.substr(a, b - a + 1);
+}
+
+bool ConstellationDB::LoadBoundariesFromFile(const char* path)
+{
+    std::ifstream f(path);
+    if (!f.is_open()) return false;
+
+    std::vector<RuntimeBoundaryRow> rows;
+    std::string line;
+    bool headerSkipped = false;
+
+    while (std::getline(f, line)) {
+        std::string trimmed = TrimField(line);
+        if (trimmed.empty() || trimmed[0] == '#') continue;
+        if (!headerSkipped) {
+            // Skip header row (starts with "raLow")
+            if (trimmed.size() >= 5 && trimmed.substr(0, 5) == "raLow") {
+                headerSkipped = true;
+                continue;
+            }
+        }
+        // Parse raLow;raHigh;decLow;con
+        std::istringstream ss(trimmed);
+        std::string tok;
+        std::string parts[4];
+        int idx = 0;
+        while (idx < 4 && std::getline(ss, tok, ';'))
+            parts[idx++] = TrimField(tok);
+        if (idx < 4) continue;
+
+        RuntimeBoundaryRow row{};
+        char* ep = nullptr;
+        row.raLow  = static_cast<float>(std::strtod(parts[0].c_str(), &ep));
+        if (ep == parts[0].c_str()) continue;
+        row.raHigh = static_cast<float>(std::strtod(parts[1].c_str(), &ep));
+        if (ep == parts[1].c_str()) continue;
+        row.decLow = static_cast<float>(std::strtod(parts[2].c_str(), &ep));
+        if (ep == parts[2].c_str()) continue;
+        if (parts[3].empty() || parts[3].size() > 7) continue;
+        std::strncpy(row.con, parts[3].c_str(), sizeof(row.con) - 1);
+        row.con[sizeof(row.con) - 1] = '\0';
+        rows.push_back(row);
+    }
+
+    if (rows.empty()) return false;
+    s_runtimeBoundaries = std::move(rows);
+    return true;
+}
+
+bool ConstellationDB::LoadNamesFromFile(const char* path)
+{
+    std::ifstream f(path);
+    if (!f.is_open()) return false;
+
+    std::vector<RuntimeNameEntry> entries;
+    std::string line;
+    bool headerSkipped = false;
+
+    while (std::getline(f, line)) {
+        std::string trimmed = TrimField(line);
+        if (trimmed.empty() || trimmed[0] == '#') continue;
+        if (!headerSkipped) {
+            // Skip header row (starts with "abbrev")
+            if (trimmed.size() >= 6 && trimmed.substr(0, 6) == "abbrev") {
+                headerSkipped = true;
+                continue;
+            }
+        }
+        // Parse abbrev;name
+        std::istringstream ss(trimmed);
+        std::string tok;
+        std::string parts[2];
+        int idx = 0;
+        while (idx < 2 && std::getline(ss, tok, ';'))
+            parts[idx++] = TrimField(tok);
+        if (idx < 2 || parts[0].empty() || parts[1].empty()) continue;
+        entries.push_back({parts[0], parts[1]});
+    }
+
+    if (entries.empty()) return false;
+    s_runtimeNames = std::move(entries);
+    return true;
+}
+
 std::string ConstellationDB::Identify(double raDeg, double decDeg) {
     // Convert RA from degrees to hours
     double raHours = raDeg / 15.0;
     if (raHours < 0.0) raHours += 24.0;
     if (raHours >= 24.0) raHours -= 24.0;
+
+    // Prefer runtime-loaded boundaries if available; fall back to compiled-in.
+    if (!s_runtimeBoundaries.empty()) {
+        for (const auto& b : s_runtimeBoundaries) {
+            if (decDeg >= b.decLow && raHours >= b.raLow && raHours < b.raHigh) {
+                return b.con;
+            }
+        }
+        return {};
+    }
 
     // Scan boundary rows — they are ordered by decreasing decLow.
     // First match where dec >= decLow and raHours in [raLow, raHigh) wins.
@@ -479,6 +608,13 @@ static const struct { const char* abbrev; const char* name; } kConstellationName
 };
 
 std::string ConstellationDB::FullName(const std::string& abbrev) {
+    // Prefer runtime-loaded names if available; fall back to compiled-in.
+    if (!s_runtimeNames.empty()) {
+        for (const auto& c : s_runtimeNames) {
+            if (abbrev == c.abbrev) return c.name;
+        }
+        return abbrev;
+    }
     for (const auto& c : kConstellationNames) {
         if (abbrev == c.abbrev) return c.name;
     }

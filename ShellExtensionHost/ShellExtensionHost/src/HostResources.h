@@ -86,3 +86,17 @@
 #define IDC_BTN_REMOVE_SHP           1054
 #define IDC_STATIC_SHP_LOCAL         1055
 #define IDC_STATIC_SHP_MATCH         1056
+
+#define IDC_STATIC_CBN_LABEL         1090
+#define IDC_STATIC_CBN_GITHUB        1091
+#define IDC_STATIC_CBN_LOCAL         1092
+#define IDC_STATIC_CBN_MATCH         1093
+#define IDC_BTN_FETCH_CBN            1094
+#define IDC_BTN_REMOVE_CBN           1095
+
+#define IDC_STATIC_CNM_LABEL         1096
+#define IDC_STATIC_CNM_GITHUB        1097
+#define IDC_STATIC_CNM_LOCAL         1098
+#define IDC_STATIC_CNM_MATCH         1099
+#define IDC_BTN_FETCH_CNM            1100
+#define IDC_BTN_REMOVE_CNM           1101

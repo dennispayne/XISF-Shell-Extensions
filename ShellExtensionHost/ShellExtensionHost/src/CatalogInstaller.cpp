@@ -249,14 +249,21 @@ Report InstallFromPinnedUrl(const catalogspec::CatalogSource& src,
 {
     Report rep{};
 
-    // Allow-list check: only pinned repo host + path prefix.
-    if (src.url.size() < catalogspec::kAllowedUrlPrefix.size() ||
-        std::wstring_view(src.url.data(), catalogspec::kAllowedUrlPrefix.size())
-            != catalogspec::kAllowedUrlPrefix)
+    // Allow-list check: URL must begin with one of the compiled-in prefixes.
     {
-        rep.result = Result::UrlNotAllowed;
-        rep.errorDetail = L"URL not in compiled allow-list";
-        return rep;
+        bool allowed = false;
+        for (auto prefix : catalogspec::kAllowedUrlPrefixes) {
+            if (src.url.size() >= prefix.size() &&
+                std::wstring_view(src.url.data(), prefix.size()) == prefix) {
+                allowed = true;
+                break;
+            }
+        }
+        if (!allowed) {
+            rep.result = Result::UrlNotAllowed;
+            rep.errorDetail = L"URL not in compiled allow-list";
+            return rep;
+        }
     }
 
     std::wstring targetDir = paths::CatalogDir();
