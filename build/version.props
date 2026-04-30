@@ -1,21 +1,86 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Shared version properties for XISF Shell Extension binaries.
-  Overridden by CI via /p:XISFVersion=X.Y.Z and /p:XISFBuildNumber=N.
-  Local builds produce X.Y.Z.0.
+
+  Resolution order for the version stamped into each DLL's RC FILEVERSION:
+
+    1. If $(BuildVersion) is set (Nerdbank.GitVersioning is wired up in the
+       project), use it. NB.GV computes a per-project build number from the
+       Git height of that project's subtree (see version.json files alongside
+       each handler's source), so each DLL versions independently.
+
+    2. Otherwise, $(XISFVersion).$(XISFBuildNumber) — the legacy CI path:
+       /p:XISFVersion=Major.Minor.Patch and /p:XISFBuildNumber=N.
+
+    3. Default 0.1.0.0 for clean local builds without CI flags.
+
+  The MSI installer always uses 3-part Major.Minor.Patch ($(XISFVersion))
+  to satisfy MajorUpgrade semantics; per-DLL revisions are not exposed there.
 -->
 <Project>
   <PropertyGroup>
+    <!-- Legacy CI fallback when NB.GV is not active. -->
     <XISFVersion Condition="'$(XISFVersion)' == ''">0.1.0</XISFVersion>
     <XISFBuildNumber Condition="'$(XISFBuildNumber)' == ''">0</XISFBuildNumber>
-    <XISFFullVersion>$(XISFVersion).$(XISFBuildNumber)</XISFFullVersion>
+
+    <!-- Suppress NB.GV's auto-generated native Version.rc. Each handler ships
+         its own .rc with VERSIONINFO populated from the XISF_VERSION_* macros
+         this file injects via PreprocessorDefinitions; letting NB.GV emit a
+         second VERSIONINFO would cause CVT1100 "duplicate resource" linker
+         errors. -->
+    <GenerateAssemblyVersionInfo Condition="'$(GenerateAssemblyVersionInfo)' == ''">false</GenerateAssemblyVersionInfo>
+
+    <!-- NB.GV (when installed) imports its props before ours and predefines
+         GetBuildVersion. The Sdk for native projects doesn't auto-import NB.GV;
+         the project must reference the Nerdbank.GitVersioning package. We
+         detect NB.GV by its own marker property. -->
+    <_XISFVersionDependsOn Condition="'$(NerdbankGitVersioningTasksPath)' != ''">GetBuildVersion</_XISFVersionDependsOn>
   </PropertyGroup>
-  <ItemDefinitionGroup>
-    <ClCompile>
-      <PreprocessorDefinitions>XISF_VERSION_STR="$(XISFFullVersion)";XISF_VERSION_MAJOR_MINOR_PATCH="$(XISFVersion)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
-    </ClCompile>
-    <ResourceCompile>
-      <PreprocessorDefinitions>XISF_VERSION_TEXT=$(XISFFullVersion);XISF_VERSION_COMMA=$([System.String]::Copy('$(XISFFullVersion)').Replace('.',','));%(PreprocessorDefinitions)</PreprocessorDefinitions>
-    </ResourceCompile>
-  </ItemDefinitionGroup>
+
+  <!--
+    Resolve the version stamp at *build time* (target phase), not at evaluation
+    time. NB.GV computes $(BuildVersion) and $(BuildVersionSimple) inside the
+    GetBuildVersion target, so we have to read those after that target has run
+    and *before* ResourceCompile / ClCompile consume preprocessor metadata.
+
+    GetBuildVersion is a no-op (not defined) when NB.GV isn't installed; the
+    legacy XISFVersion / XISFBuildNumber path then takes over.
+  -->
+  <!--
+    The version stamp must be applied after NB.GV's GetBuildVersion target has
+    populated $(BuildVersion), but before ResourceCompile / ClCompile read the
+    PreprocessorDefinitions metadata. We invoke GetBuildVersion through
+    DependsOnTargets when NB.GV is installed (detected via $(NBGV_GitCommitId)
+    being defined by NB.GV's own props). Otherwise we skip the dependency and
+    rely on the legacy XISFVersion / XISFBuildNumber fallback.
+  -->
+  <Target Name="XISFStampVersion"
+          BeforeTargets="ResourceCompile;ClCompile"
+          DependsOnTargets="$(_XISFVersionDependsOn)">
+
+    <PropertyGroup>
+      <!-- Prefer NB.GV's 4-part BuildVersion; fall back to the legacy CI inputs. -->
+      <XISFFullVersion Condition="'$(BuildVersion)' != ''">$(BuildVersion)</XISFFullVersion>
+      <XISFFullVersion Condition="'$(XISFFullVersion)' == ''">$(XISFVersion).$(XISFBuildNumber)</XISFFullVersion>
+
+      <!-- NB.GV's BuildVersionSimple is 3-part Major.Minor.Build (no revision). -->
+      <XISFSimpleVersion Condition="'$(BuildVersionSimple)' != ''">$(BuildVersionSimple)</XISFSimpleVersion>
+      <XISFSimpleVersion Condition="'$(XISFSimpleVersion)' == ''">$(XISFVersion)</XISFSimpleVersion>
+
+      <_XISFFullVersionCommas>$([System.String]::Copy('$(XISFFullVersion)').Replace('.',','))</_XISFFullVersionCommas>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ClCompile>
+        <PreprocessorDefinitions>XISF_VERSION_STR="$(XISFFullVersion)";XISF_VERSION_MAJOR_MINOR_PATCH="$(XISFSimpleVersion)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      </ClCompile>
+      <ResourceCompile>
+        <PreprocessorDefinitions>XISF_VERSION_TEXT=$(XISFFullVersion);XISF_VERSION_COMMA=$(_XISFFullVersionCommas);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      </ResourceCompile>
+    </ItemGroup>
+
+    <Message Importance="low"
+             Text="$(MSBuildProjectName): XISF_VERSION_TEXT=$(XISFFullVersion) (BuildVersion=$(BuildVersion))" />
+  </Target>
 </Project>
+

@@ -29,11 +29,21 @@ vstest.console.exe .\x64\Release\XISFPropertyHandlerTests.dll .\x64\Release\XISF
 
 ## Registering handlers for local testing
 
-For local development without MSIX, launch **XISF Shell Extension** from the
-Start menu (or run `ShellExtensionHost.exe` from your build output) and use the
-handler toggles to enable/disable registration.
+For local development, launch `XISFShellExtensionHost.exe` from your build
+output and use the handler toggle buttons to register/unregister and
+enable/disable handlers.
 
-Or install an MSIX package built from `Packaging\` (see `docs/msix-packaging.md`).
+## Building the MSI installer
+
+The installer uses WiX v5 and requires the .NET 8 SDK. Install the
+[HeatWave for Visual Studio](https://marketplace.visualstudio.com/items?itemName=FireGiant.FireGiantHeatWaveDev17)
+extension to load the `.wixproj` in Solution Explorer with full IntelliSense.
+
+```powershell
+dotnet build Installer\XISFInstaller\XISFInstaller.wixproj -c Release
+```
+
+The MSI is placed in `Installer\XISFInstaller\bin\Release\`.
 
 ## Submitting changes
 
@@ -56,4 +66,5 @@ Or install an MSIX package built from `Packaging\` (see `docs/msix-packaging.md`
 ## Release process
 
 Releases are produced by the `release.yml` workflow when a `v*.*.*` tag is
-pushed. See `docs/msix-packaging.md` for details.
+pushed. The workflow builds the solution, runs tests, produces an MSI, and
+creates a GitHub Release with the MSI and SHA256SUMS.

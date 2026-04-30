@@ -132,6 +132,12 @@ STDAPI DllRegisterServer(void) {
         nullptr, kFilterClsidStr);
     if (FAILED(hr)) return SELFREG_E_CLASS;
 
+    // Approved Shell Extensions list — required when EnforceShellExtensionSecurity GPO is set.
+    hr = SetRegSZValue(HKEY_LOCAL_MACHINE,
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Approved",
+        kFilterClsidStr, L"XISF Search Filter");
+    if (FAILED(hr)) return SELFREG_E_CLASS;
+
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return S_OK;
 }
@@ -141,8 +147,22 @@ STDAPI DllRegisterServer(void) {
 // ---------------------------------------------------------------------------
 
 STDAPI DllUnregisterServer(void) {
-    // Remove persistent handler registration from .xisf
-    RegDeleteTreeW(HKEY_CLASSES_ROOT, L".xisf\\PersistentHandler");
+    // Only remove .xisf\PersistentHandler if its default value is OUR
+    // persistent handler GUID. Other XISF tooling (e.g. PixInsight) may
+    // install a different IFilter chain and we must not nuke theirs.
+    {
+        HKEY hPH = nullptr;
+        if (RegOpenKeyExW(HKEY_CLASSES_ROOT, L".xisf\\PersistentHandler",
+                          0, KEY_READ, &hPH) == ERROR_SUCCESS) {
+            wchar_t buf[64] = {};
+            DWORD cb = sizeof(buf);
+            LONG g = RegGetValueW(hPH, nullptr, nullptr, RRF_RT_REG_SZ, nullptr, buf, &cb);
+            RegCloseKey(hPH);
+            if (g == ERROR_SUCCESS && _wcsicmp(buf, kPersistentHandlerClsidStr) == 0) {
+                RegDeleteTreeW(HKEY_CLASSES_ROOT, L".xisf\\PersistentHandler");
+            }
+        }
+    }
 
     // Remove persistent handler CLSID
     wchar_t szPHRoot[128];
@@ -154,9 +174,33 @@ STDAPI DllUnregisterServer(void) {
     swprintf_s(szClsidRoot, L"CLSID\\%s", kFilterClsidStr);
     RegDeleteTreeW(HKEY_CLASSES_ROOT, szClsidRoot);
 
-    // Remove Windows Search indexer extension
-    RegDeleteTreeW(HKEY_LOCAL_MACHINE,
-        L"SOFTWARE\\Microsoft\\Windows Search\\ContentIndexer\\Extensions\\.xisf");
+    // Remove Windows Search indexer extension only if it currently points at our filter.
+    {
+        HKEY hExt = nullptr;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Microsoft\\Windows Search\\ContentIndexer\\Extensions\\.xisf",
+            0, KEY_READ, &hExt) == ERROR_SUCCESS) {
+            wchar_t buf[64] = {};
+            DWORD cb = sizeof(buf);
+            LONG g = RegGetValueW(hExt, nullptr, nullptr, RRF_RT_REG_SZ, nullptr, buf, &cb);
+            RegCloseKey(hExt);
+            if (g == ERROR_SUCCESS && _wcsicmp(buf, kFilterClsidStr) == 0) {
+                RegDeleteTreeW(HKEY_LOCAL_MACHINE,
+                    L"SOFTWARE\\Microsoft\\Windows Search\\ContentIndexer\\Extensions\\.xisf");
+            }
+        }
+    }
+
+    // Remove from Approved Shell Extensions list.
+    {
+        HKEY hApproved = nullptr;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Approved",
+            0, KEY_SET_VALUE, &hApproved) == ERROR_SUCCESS) {
+            RegDeleteValueW(hApproved, kFilterClsidStr);
+            RegCloseKey(hApproved);
+        }
+    }
 
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return S_OK;
