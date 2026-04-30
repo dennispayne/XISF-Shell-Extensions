@@ -6,6 +6,8 @@
     <ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets>
     <!-- Supply-chain hardening: pin transitive package versions + hashes via packages.lock.json -->
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- Support multiple runtime identifiers for cross-platform builds -->
+    <RuntimeIdentifiers>win;win-arm64;win-x64;win-x86</RuntimeIdentifiers>
   </PropertyGroup>
 
   <PropertyGroup>
