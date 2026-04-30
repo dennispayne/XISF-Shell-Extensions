@@ -68,6 +68,8 @@ COLORREF g_previewIconColor = RGB(180, 32, 32);
 COLORREF g_filterIconColor = RGB(180, 32, 32);
 COLORREF g_ngcIconColor = RGB(180, 32, 32);
 COLORREF g_addIconColor = RGB(180, 32, 32);
+COLORREF g_shpIconColor = RGB(180, 32, 32);
+COLORREF g_cstIconColor = RGB(180, 32, 32);
 
 // Tooltip text storage — keeps strings alive for the tooltip control
 std::unordered_map<int, std::wstring> g_tooltipStrings;
@@ -77,6 +79,10 @@ std::wstring g_tipNgcGitHub;
 std::wstring g_tipNgcLocal;
 std::wstring g_tipAddGitHub;
 std::wstring g_tipAddLocal;
+std::wstring g_tipShpGitHub;
+std::wstring g_tipShpLocal;
+std::wstring g_tipCstGitHub;
+std::wstring g_tipCstLocal;
 std::wstring g_tracePath;
 bool g_traceRunning = false;
 std::atomic<bool> g_traceExportInProgress{false};
@@ -745,6 +751,8 @@ void SetStatusLabelColorById(int id, COLORREF color)
     else if (id == IDC_STATIC_FILTER_STATUS) g_filterIconColor = color;
     else if (id == IDC_STATIC_NGC_MATCH) g_ngcIconColor = color;
     else if (id == IDC_STATIC_ADD_MATCH) g_addIconColor = color;
+    else if (id == IDC_STATIC_SHP_MATCH) g_shpIconColor = color;
+    else if (id == IDC_STATIC_CST_MATCH) g_cstIconColor = color;
 }
 
 void SetStatusIconTextAndColor(int id, const wchar_t* icon, COLORREF color)
@@ -872,6 +880,8 @@ void UpdateCatalogActionButtons()
     };
     setRow(IDC_BTN_FETCH_NGC, IDC_BTN_REMOVE_NGC, catalogspec::kNGC);
     setRow(IDC_BTN_FETCH_ADD, IDC_BTN_REMOVE_ADD, catalogspec::kAddendum);
+    setRow(IDC_BTN_FETCH_SHP, IDC_BTN_REMOVE_SHP, catalogspec::kSharpless);
+    setRow(IDC_BTN_FETCH_CST, IDC_BTN_REMOVE_CST, catalogspec::kConstellations);
 }
 
 std::wstring BuildCommitLinkText()
@@ -938,9 +948,15 @@ void RefreshPresenceRow(int githubLabelId, int localLabelId, int matchLabelId, c
     if (githubLabelId == IDC_STATIC_NGC_GITHUB) {
         SetHashCellTooltip(IDC_STATIC_NGC_GITHUB, g_tipNgcGitHub, ghFull);
         SetHashCellTooltip(IDC_STATIC_NGC_LOCAL, g_tipNgcLocal, localFull.empty() ? L"(missing)" : localFull);
-    } else {
+    } else if (githubLabelId == IDC_STATIC_ADD_GITHUB) {
         SetHashCellTooltip(IDC_STATIC_ADD_GITHUB, g_tipAddGitHub, ghFull);
         SetHashCellTooltip(IDC_STATIC_ADD_LOCAL, g_tipAddLocal, localFull.empty() ? L"(missing)" : localFull);
+    } else if (githubLabelId == IDC_STATIC_SHP_GITHUB) {
+        SetHashCellTooltip(IDC_STATIC_SHP_GITHUB, g_tipShpGitHub, ghFull);
+        SetHashCellTooltip(IDC_STATIC_SHP_LOCAL, g_tipShpLocal, localFull.empty() ? L"(missing)" : localFull);
+    } else {
+        SetHashCellTooltip(IDC_STATIC_CST_GITHUB, g_tipCstGitHub, ghFull);
+        SetHashCellTooltip(IDC_STATIC_CST_LOCAL, g_tipCstLocal, localFull.empty() ? L"(missing)" : localFull);
     }
 
     if (p.state == installer::PresenceState::PresentVerified) {
@@ -960,6 +976,8 @@ void RefreshAllPresence()
     EnsureHashTooltipHost();
     RefreshPresenceRow(IDC_STATIC_NGC_GITHUB, IDC_STATIC_NGC_LOCAL, IDC_STATIC_NGC_MATCH, catalogspec::kNGC);
     RefreshPresenceRow(IDC_STATIC_ADD_GITHUB, IDC_STATIC_ADD_LOCAL, IDC_STATIC_ADD_MATCH, catalogspec::kAddendum);
+    RefreshPresenceRow(IDC_STATIC_SHP_GITHUB, IDC_STATIC_SHP_LOCAL, IDC_STATIC_SHP_MATCH, catalogspec::kSharpless);
+    RefreshPresenceRow(IDC_STATIC_CST_GITHUB, IDC_STATIC_CST_LOCAL, IDC_STATIC_CST_MATCH, catalogspec::kConstellations);
 }
 
 void SetProgressText(const std::wstring& s)
@@ -973,6 +991,10 @@ void SetBusy(bool busy)
     EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_FETCH_ADD), !busy);
     EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_REMOVE_NGC), !busy);
     EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_REMOVE_ADD), !busy);
+    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_FETCH_SHP), !busy);
+    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_REMOVE_SHP), !busy);
+    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_FETCH_CST), !busy);
+    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_REMOVE_CST), !busy);
     EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_IMPORT_FILE),  !busy);
     g_opInProgress = busy;
 }
@@ -1042,9 +1064,12 @@ void OnFetchOnline()
 
 int ChooseCatalogIndexForImport()
 {
+    // Build a message showing all catalogs with their indices
     int r = MessageBoxW(g_hDlg,
         L"Which catalog file are you importing?\r\n\r\n"
         L"Yes = NGC.csv\r\nNo = addendum.csv\r\nCancel = abort\r\n\r\n"
+        L"To import sharpless.csv or constellations.csv, use 'Open Catalog Folder' "
+        L"and place the file there manually, then use Install/Update to verify it.\r\n\r\n"
         L"The file's SHA-256 will be verified against the pinned value. "
         L"Files that don't match are rejected.",
         L"Select Catalog", MB_YESNOCANCEL | MB_ICONQUESTION);
@@ -1165,6 +1190,10 @@ void OnCopyExpectedHashes()
     text += catalogspec::kOpenNGCCommit;
     text += L"\r\nDate: ";
     text += catalogspec::kOpenNGCCommitDate;
+    text += L"\r\n\r\nProject data commit: ";
+    text += catalogspec::kXISFDataCommit;
+    text += L"\r\nDate: ";
+    text += catalogspec::kXISFDataCommitDate;
     text += L"\r\n\r\n";
     for (auto* src : catalogspec::kAllCatalogs) {
         text += src->fileName; text += L"  sha256 = ";
@@ -1419,13 +1448,16 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         int id = GetDlgCtrlID(hCtl);
         if (id == IDC_STATIC_PROPERTY_STATUS || id == IDC_STATIC_PREVIEW_STATUS ||
             id == IDC_STATIC_FILTER_STATUS ||
-            id == IDC_STATIC_NGC_MATCH || id == IDC_STATIC_ADD_MATCH) {
+            id == IDC_STATIC_NGC_MATCH || id == IDC_STATIC_ADD_MATCH ||
+            id == IDC_STATIC_SHP_MATCH || id == IDC_STATIC_CST_MATCH) {
             COLORREF color = g_iconBadColor;
             if (id == IDC_STATIC_PROPERTY_STATUS) color = g_propertyIconColor;
             else if (id == IDC_STATIC_PREVIEW_STATUS) color = g_previewIconColor;
             else if (id == IDC_STATIC_FILTER_STATUS) color = g_filterIconColor;
             else if (id == IDC_STATIC_NGC_MATCH) color = g_ngcIconColor;
             else if (id == IDC_STATIC_ADD_MATCH) color = g_addIconColor;
+            else if (id == IDC_STATIC_SHP_MATCH) color = g_shpIconColor;
+            else if (id == IDC_STATIC_CST_MATCH) color = g_cstIconColor;
             SetTextColor(hdc, color);
             SetBkColor(hdc, GetSysColor(COLOR_BTNFACE));
             SetBkMode(hdc, OPAQUE);
@@ -1535,8 +1567,12 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         case IDC_BTN_REGISTER_HANDLERS:    OnRegisterHandlers();      return TRUE;
         case IDC_BTN_FETCH_NGC:            OnFetchOnline(0);         return TRUE;
         case IDC_BTN_FETCH_ADD:            OnFetchOnline(1);         return TRUE;
+        case IDC_BTN_FETCH_SHP:            OnFetchOnline(2);         return TRUE;
+        case IDC_BTN_FETCH_CST:            OnFetchOnline(3);         return TRUE;
         case IDC_BTN_REMOVE_NGC:           OnRemoveCatalog(0);       return TRUE;
         case IDC_BTN_REMOVE_ADD:           OnRemoveCatalog(1);       return TRUE;
+        case IDC_BTN_REMOVE_SHP:           OnRemoveCatalog(2);       return TRUE;
+        case IDC_BTN_REMOVE_CST:           OnRemoveCatalog(3);       return TRUE;
         case IDC_BTN_IMPORT_FILE:          OnImportFile();           return TRUE;
         case IDC_BTN_OPEN_CATALOG_DIR:     OnOpenCatalogDir();       return TRUE;
         case IDC_BTN_COPY_EXPECTED_HASHES: OnCopyExpectedHashes();   return TRUE;

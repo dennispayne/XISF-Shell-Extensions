@@ -117,6 +117,28 @@ jobs:
             Write-Host "OK  $($cat.Name) ($hash)"
           }
 
+      - name: Install project-hosted catalogs
+        shell: pwsh
+        run: |
+          $catalogDir = Join-Path $env:LOCALAPPDATA 'XISFShellExtension\catalogs'
+          New-Item -ItemType Directory -Path $catalogDir -Force | Out-Null
+          # constellations.csv and sharpless.csv live in data/ in this repo;
+          # copy directly from the checkout so tests always match the in-tree data.
+          $projectCatalogs = @(
+            @{ Name = 'constellations.csv'; Sha256 = '9e742f498fc6f355df37ff941c3d3adfcb3d759b05d7e0760a7b85822b5c074b' },
+            @{ Name = 'sharpless.csv';      Sha256 = '3452cd838e2c9252a0b99ceb2c9c222ad4cbf38f3770cebd251e85dac725c081' }
+          )
+          foreach ($cat in $projectCatalogs) {
+            $src  = Join-Path $env:GITHUB_WORKSPACE "data\$($cat.Name)"
+            $dest = Join-Path $catalogDir $cat.Name
+            Copy-Item $src $dest -Force
+            $hash = (Get-FileHash -Algorithm SHA256 $dest).Hash.ToLower()
+            if ($hash -ne $cat.Sha256) {
+              throw "SHA-256 mismatch for $($cat.Name): expected $($cat.Sha256), got $hash"
+            }
+            Write-Host "OK  $($cat.Name) ($hash)"
+          }
+
       - name: Run unit tests
         shell: pwsh
         run: |

@@ -431,10 +431,17 @@ namespace ShellExtensionHostTests_CatalogSpec
         {
             for (auto* src : kAllCatalogs)
             {
-                Assert::IsTrue(src->url.size() >= kAllowedUrlPrefix.size());
-                Assert::IsTrue(src->url.compare(0, kAllowedUrlPrefix.size(),
-                                                kAllowedUrlPrefix) == 0,
-                               L"url must start with allowed prefix");
+                bool matched = false;
+                for (const auto& prefix : kAllowedUrlPrefixes)
+                {
+                    if (src->url.size() >= prefix.size() &&
+                        src->url.compare(0, prefix.size(), prefix) == 0)
+                    {
+                        matched = true;
+                        break;
+                    }
+                }
+                Assert::IsTrue(matched, L"url must start with one of the allowed prefixes");
             }
         }
 
@@ -442,15 +449,21 @@ namespace ShellExtensionHostTests_CatalogSpec
         {
             for (auto* src : kAllCatalogs)
             {
-                Assert::IsTrue(src->url.find(kOpenNGCCommit) != std::wstring_view::npos,
-                               L"url must embed the pinned commit SHA");
+                bool embedsOpenNGC  = src->url.find(kOpenNGCCommit)  != std::wstring_view::npos;
+                bool embedsXISFData = src->url.find(kXISFDataCommit) != std::wstring_view::npos;
+                Assert::IsTrue(embedsOpenNGC || embedsXISFData,
+                               L"url must embed a pinned commit SHA");
             }
         }
 
-        TEST_METHOD(AllowedPrefix_IsHttps)
+        TEST_METHOD(AllowedPrefixes_AreHttps)
         {
             constexpr std::wstring_view https = L"https://";
-            Assert::IsTrue(kAllowedUrlPrefix.compare(0, https.size(), https) == 0);
+            for (const auto& prefix : kAllowedUrlPrefixes)
+            {
+                Assert::IsTrue(prefix.compare(0, https.size(), https) == 0,
+                               L"every allowed prefix must use HTTPS");
+            }
         }
 
         TEST_METHOD(CatalogFileNames_AreUnique)
