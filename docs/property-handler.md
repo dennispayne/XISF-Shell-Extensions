@@ -1,6 +1,6 @@
 # Property Handler — Full Property Mapping + DSO Alias Database
 
-**Note:** This file has been migrated to the new documentation structure. Please see [Property Mapping Reference](docs/reference/property-mapping.md) for the updated version.
+**Note:** This file has been migrated to the new documentation structure. Please see [Property Mapping Reference](reference/property-mapping.md) for the updated version.
 
 ---
 

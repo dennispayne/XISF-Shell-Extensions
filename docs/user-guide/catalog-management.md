@@ -713,5 +713,5 @@ To verify the pinned commit on GitHub:
 ## Related Documentation
 
 - **[Feature Tiers](../features/feature-tiers.md)** — Basic vs. Enriched features
-- **[Security](../SECURITY.md)** — Overall security model
+- **[Security](../../SECURITY.md)** — Overall security model
 - **[OpenNGC Repository](https://github.com/mattiaverga/OpenNGC)** — Catalog source

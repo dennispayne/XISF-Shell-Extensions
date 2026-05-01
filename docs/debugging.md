@@ -1,6 +1,6 @@
 # Debugging XISF Shell Extensions
 
-**Note:** This file has been migrated to the new documentation structure. Please see [Debugging Guide](docs/developer-guide/debugging.md) for the updated version.
+**Note:** This file has been migrated to the new documentation structure. Please see [Debugging Guide](developer-guide/debugging.md) for the updated version.
 
 ---
 

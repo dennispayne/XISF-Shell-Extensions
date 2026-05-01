@@ -1,6 +1,6 @@
 # Win11 XISF Shell Extension Overview
 
-**Note:** This file has been migrated to the new documentation structure. Please see [Handlers Overview (User Guide)](docs/user-guide/handlers-overview.md) for the updated version.
+**Note:** This file has been migrated to the new documentation structure. Please see [Handlers Overview (User Guide)](user-guide/handlers-overview.md) for the updated version.
 
 ---
 
@@ -35,7 +35,7 @@ Use the combined solution:
 
 ## Supporting docs (migrated)
 
-- [Preview Handler Deep Dive](docs/features/preview-handler-deep-dive.md) - Technical details on thumbnail and preview implementation
-- [Telemetry & ETW](docs/features/telemetry-etw.md) - Event tracing documentation
-- [Handlers Overview (User Guide)](docs/user-guide/handlers-overview.md) - User-facing handler documentation
-- [Property Mapping Reference](docs/reference/property-mapping.md) - Complete property mapping reference
+- [Preview Handler Deep Dive](features/preview-handler-deep-dive.md) - Technical details on thumbnail and preview implementation
+- [Telemetry & ETW](features/telemetry-etw.md) - Event tracing documentation
+- [Handlers Overview (User Guide)](user-guide/handlers-overview.md) - User-facing handler documentation
+- [Property Mapping Reference](reference/property-mapping.md) - Complete property mapping reference

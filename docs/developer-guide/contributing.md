@@ -6,7 +6,7 @@ Thanks for your interest in improving XISF Shell Extensions! This document outli
 
 ## Code of Conduct
 
-This project adheres to the [Contributor Covenant Code of Conduct](../CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to the project maintainers.
+This project adheres to the [Contributor Covenant Code of Conduct](../../CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to the project maintainers.
 
 ## Getting Started as a Contributor
 
@@ -280,7 +280,7 @@ Fixes #142
 
 - **New code must include tests** — Unit tests in corresponding `*Tests` project
 - **Bug fixes should include regression tests** — Prevent re-introduction
-- **Performance-critical code:** Profile before and after (use [PerformanceTests](../../PerformanceTests))
+- **Performance-critical code:** Profile before and after (use PerformanceTests project)
 - **Handlers tested independently** — Mock IStream for isolated testing
 
 **Run tests locally before pushing:**

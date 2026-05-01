@@ -254,14 +254,14 @@ See [Search Indexing](user-guide/search-indexing.md) for more search tips.
 
 ### Explore Features
 
-- **[Pixel Statistics](../features/pixel-statistics.md)** — Analyze image brightness and contrast
-- **[Computed Properties](../features/computed-properties.md)** — Learn what metadata is automatically calculated
-- **[Constellation Mapping](../features/constellation-mapping.md)** — Understand sky coordinate resolution
+- **[Pixel Statistics](features/pixel-statistics.md)** — Analyze image brightness and contrast
+- **[Computed Properties](features/computed-properties.md)** — Learn what metadata is automatically calculated
+- **[Constellation Mapping](features/constellation-mapping.md)** — Understand sky coordinate resolution
 
 ### Troubleshooting
 
-- **[Troubleshooting Guide](../reference/troubleshooting.md)** — Solutions to common issues
-- **[FAQ](../reference/troubleshooting.md#faq)** — Frequently asked questions
+- **[Troubleshooting Guide](reference/troubleshooting.md)** — Solutions to common issues
+- **[FAQ](reference/troubleshooting.md#faq)** — Frequently asked questions
 
 ## Tips & Tricks
 

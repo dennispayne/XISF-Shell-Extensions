@@ -282,7 +282,7 @@ All XISF Shell Extensions features will be removed from Windows Explorer.
 
 - Check [Getting Started Guide](getting-started.md) for first steps
 - See [User Guide](user-guide/handlers-overview.md) for feature details
-- Visit the [Troubleshooting Reference](../reference/troubleshooting.md) for more help
+- Visit the [Troubleshooting Reference](reference/troubleshooting.md) for more help
 - Open an issue on [GitHub](https://github.com/dennispayne/XISF-Shell-Extensions/issues)
 
 ---

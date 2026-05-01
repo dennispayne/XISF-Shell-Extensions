@@ -173,21 +173,16 @@ XISF-Shell-Extensions/
 
 ## Docs
 
-### User Guides
-- [Installation & setup](docs/install.md)
-- [Settings and configuration](docs/settings.md)
-- [Troubleshooting](docs/troubleshooting.md)
+For comprehensive documentation, see [`docs/index.md`](docs/index.md).
 
-### Developer Guides
-- [Architecture & design](docs/architecture.md)
-- [Contributing](CONTRIBUTING.md)
-- [Build from source](docs/building.md)
-
-### Feature References
-- [Property Handler technical details](docs/property-handler.md)
-- [Preview Handler & thumbnails](docs/preview-handler.md)
-- [IFilter search integration](docs/ifilter.md)
-- [Telemetry & ETW tracing](docs/telemetry.md)
+### Quick Links
+- [Installation & setup](docs/installation-guide.md)
+- [Getting started](docs/getting-started.md)
+- [Troubleshooting](docs/reference/troubleshooting.md)
+- [Architecture & design](docs/developer-guide/architecture.md)
+- [Building from source](docs/developer-guide/building.md)
+- [Property metadata reference](docs/user-guide/property-metadata.md)
+- [Settings reference](docs/user-guide/settings-reference.md)
 
 ## Versioning & release
 

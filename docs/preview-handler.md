@@ -1,6 +1,6 @@
 # Preview Handler — Thumbnail Provider + Preview Pane
 
-**Note:** This file has been migrated to the new documentation structure. Please see [Preview Handler Deep Dive](docs/features/preview-handler-deep-dive.md) for the updated version.
+**Note:** This file has been migrated to the new documentation structure. Please see [Preview Handler Deep Dive](features/preview-handler-deep-dive.md) for the updated version.
 
 ---
 

@@ -1,6 +1,6 @@
 # XISF Handler Telemetry
 
-**Note:** This file has been migrated to the new documentation structure. Please see [Telemetry & ETW](docs/features/telemetry-etw.md) for the updated version.
+**Note:** This file has been migrated to the new documentation structure. Please see [Telemetry & ETW](features/telemetry-etw.md) for the updated version.
 
 ---
 
