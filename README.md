@@ -6,21 +6,23 @@
 Native Windows shell extensions for [XISF](https://pixinsight.com/xisf/) — the
 Extensible Image Serialization Format used by PixInsight and other
 astrophotography tools. This project adds first-class File Explorer support
-for `.xisf` files on Windows 10 / 11:
+for `.xisf` files on Windows 10 / 11, with deep-sky catalog integration,
+pixel statistics, and sky coordinate resolution.
 
-| Component             | What it does                                                        |
-| --------------------- | ------------------------------------------------------------------- |
-| `XISFPropertyHandler` | Details pane metadata for `.xisf` files                             |
-| `XISFPreviewHandler`  | Preview pane renderer **and** Explorer thumbnail provider           |
-| `XISFFilter`          | Windows Search content indexing (IFilter) for `.xisf` files         |
+## Components
 
-The Property Handler can also enrich metadata with deep-sky catalog names
-(NGC / IC / Sharpless / etc.) when files carry OBJECT / OBJCTRA / OBJCTDEC
-headers. The catalog data is **not** shipped inside the installer. Instead,
-the bundled **XISF Shell Extension** settings app fetches it on demand from
-a cryptographically-pinned [OpenNGC](https://github.com/mattiaverga/OpenNGC)
-commit (SHA-256-verified), or you can import a local copy offline. See
-[Catalogs](#catalogs) below.
+| Component             | Function                                          | Key Features                                              |
+| --------------------- | ------------------------------------------------- | --------------------------------------------------------- |
+| **PropertyHandler**   | Details pane metadata display                     | Metadata enrichment, sky coordinates, catalog names       |
+| **PreviewHandler**    | Preview pane renderer & Explorer thumbnails       | Fast image rendering, inline histogram                    |
+| **IFilter**           | Windows Search content indexing for `.xisf` files | Index object names, coordinates, image properties         |
+
+The Property Handler enriches metadata with deep-sky catalog names (NGC / IC / 
+Sharpless / etc.) when files carry OBJECT / OBJCTRA / OBJCTDEC headers. Catalog 
+data is **not** shipped inside the installer; instead, the bundled **XISF Shell 
+Extension** settings app fetches it on demand from a cryptographically-pinned 
+[OpenNGC](https://github.com/mattiaverga/OpenNGC) commit (SHA-256-verified), or 
+you can import locally offline.
 
 ## Install
 
@@ -51,6 +53,34 @@ For local development without the MSI, build the solution and use the
 register/unregister handlers via the toggle buttons. See the
 [Contributing](CONTRIBUTING.md) guide.
 
+## Feature Highlights
+
+### Deep-Sky Catalog Integration
+Automatic object name and constellation resolution for frames with OBJECT, 
+OBJCTRA, and OBJCTDEC headers. Supports NGC, IC, and Sharpless catalogs via 
+OpenNGC. Cone search matches images to known sky objects with configurable 
+search radius. Works online or offline — import catalogs locally for air-gapped 
+systems.
+
+### Pixel Statistics
+Computed statistics directly from XISF image data: mean, median, minimum, 
+maximum, and clipping analysis. Displayed in the Details pane — no external 
+processing needed.
+
+### Sky Coordinate Resolution
+Automatic constellation mapping and RA/Dec band display for frames with 
+astrometry. Understand image orientation and coverage at a glance from Explorer 
+Details pane.
+
+### Computed Properties
+Derived metadata from XISF headers: observation date, filter, camera, telescope, 
+binning, exposure time, and more. Pulled directly from file headers — always 
+accurate.
+
+### Windows Search Integration
+Full-text indexing of image properties, object names, and catalog data. Search 
+for "NGC 1234" or "M31" across your entire image library via Windows Search.
+
 ## Enabling / disabling handlers at runtime
 
 Open the **XISF Shell Extension Settings** app from Start. The toggle buttons
@@ -66,23 +96,48 @@ to force a reload.
 Under the hood, toggles write to:
 `HKCU\Software\DennisPayne\XISF Shell Extension\{PropertyEnabled,PreviewEnabled}` (DWORD, default 1).
 
+## Feature Tiers
+
+**Basic** — Always available without additional setup:
+- Standard XISF properties: image dimensions, date created, color space, file size
+- Computed metadata from headers: camera, telescope, exposure time, binning
+- Fast thumbnail generation in Explorer
+- Windows Search indexing of file properties
+
+**Enriched** — Unlocked by installing catalogs:
+- Deep-sky catalog names (NGC, IC, Sharpless)
+- Constellation mapping for RA/Dec coordinates
+- Sky object cone search (find images of M31, NGC 224, etc. together)
+- Search Windows for "Orion" and get all frames of objects in that constellation
+- Full-text search for object names across your entire image library
+
+Installing catalogs is optional and takes ~30 seconds. See [Catalogs](#catalogs) for details.
+
 ## Catalogs
 
-The Property Handler looks for catalog files in
-`%LOCALAPPDATA%\XISFShellExtension\catalogs\` and loads whatever is present
+Catalog files enable enriched metadata: deep-sky object names, constellation 
+mapping, and full-text search. They live in
+`%LOCALAPPDATA%\XISFShellExtension\catalogs\` and are loaded automatically if present 
 (`NGC.csv`, `addendum.csv`, `sharpless.csv`). Missing files are simply skipped.
 
-Two ways to install them:
+**Why catalogs matter:**
+- Enriches your image library with discoverable metadata
+- Essential for air-gapped systems (import once, use offline)
+- Enables constellation-level search across thousands of frames
+- Used by Property Handler and Windows Search IFilter
+
+**Install catalogs:**
 
 1. **Online (pinned + verified).** In the settings app, click
    **Install / Update from GitHub**. The app downloads each file from a
-   specific OpenNGC commit SHA over HTTPS (TLS 1.2+, cert validation
-   enforced), hashes the stream with SHA-256, and rejects any file whose
-   hash does not match the compiled-in pin. The download is written to a
-   temp file and only `MoveFileEx`-ed into place after verification.
+   specific OpenNGC commit SHA over HTTPS (TLS 1.2+, cert validation enforced),
+   hashes the stream with SHA-256, and rejects any file whose hash does not
+   match the compiled-in pin. The download is written to a temp file and only
+   `MoveFileEx`-ed into place after verification.
+
 2. **Offline / air-gapped.** Click **Import from File…**, pick a local
-   `NGC.csv` or `addendum.csv`, and choose which pin it should match. The
-   same SHA-256 check applies; mismatched files are rejected.
+   `NGC.csv` or `addendum.csv`, and choose which pin it should match. The same
+   SHA-256 check applies; mismatched files are rejected.
 
 The **Copy Expected Hashes** button puts the pinned commit SHA, URLs, and
 expected SHA-256 values on the clipboard so you can cross-verify them
@@ -118,9 +173,21 @@ XISF-Shell-Extensions/
 
 ## Docs
 
-- [`docs/handlers-overview.md`](docs/handlers-overview.md) — architecture and design.
-- [`docs/preview-handler.md`](docs/preview-handler.md) — preview/thumbnail rendering.
-- [`docs/telemetry.md`](docs/telemetry.md) — local-only ETW tracing.
+### User Guides
+- [Installation & setup](docs/install.md)
+- [Settings and configuration](docs/settings.md)
+- [Troubleshooting](docs/troubleshooting.md)
+
+### Developer Guides
+- [Architecture & design](docs/architecture.md)
+- [Contributing](CONTRIBUTING.md)
+- [Build from source](docs/building.md)
+
+### Feature References
+- [Property Handler technical details](docs/property-handler.md)
+- [Preview Handler & thumbnails](docs/preview-handler.md)
+- [IFilter search integration](docs/ifilter.md)
+- [Telemetry & ETW tracing](docs/telemetry.md)
 
 ## Versioning & release
 

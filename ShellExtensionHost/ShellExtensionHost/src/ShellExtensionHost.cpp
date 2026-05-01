@@ -99,6 +99,46 @@ bool IsTraceSessionRunning()
     return RunProcessHiddenAndWait(exe, L"query XISFTrace -ets", &ec) && ec == 0;
 }
 
+// Helper function to build documentation URLs
+std::wstring GetDocumentationUrl(const wchar_t* docPath)
+{
+    // Construct local file:// URL or GitHub URL fallback
+    // Try local path first (for MSI installs), fall back to GitHub
+    wchar_t appDir[MAX_PATH]{};
+    DWORD len = GetModuleFileNameW(nullptr, appDir, ARRAYSIZE(appDir));
+    if (len > 0) {
+        // Extract directory from exe path
+        wchar_t* lastBackslash = wcsrchr(appDir, L'\\');
+        if (lastBackslash) {
+            *lastBackslash = L'\0';
+        }
+    }
+
+    std::wstring localPath = appDir;
+    localPath += L"\\docs\\";
+    localPath += docPath;
+
+    // Check if file exists at local path
+    if (GetFileAttributesW(localPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        // Convert to file:// URL
+        std::wstring fileUrl = L"file:///";
+        for (wchar_t c : localPath) {
+            if (c == L'\\') fileUrl += L'/';
+            else fileUrl += c;
+        }
+        return fileUrl;
+    }
+
+    // Fall back to GitHub
+    return L"https://github.com/dennispayne/XISF-Shell-Extensions/tree/main/docs/" + std::wstring(docPath);
+}
+
+void OpenDocumentation(HWND hDlg, const wchar_t* docPath)
+{
+    std::wstring url = GetDocumentationUrl(docPath);
+    ShellExecuteW(hDlg, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+
 std::wstring BuildTimestampedTracePath()
 {
     wchar_t tmp[MAX_PATH]{};
@@ -1219,9 +1259,25 @@ void AddTooltips()
         SetTooltip(id, text);
     };
 
-    makeTip(IDC_BTN_TOGGLE_PROPERTY, L"Toggle the Property Handler (details pane, file info)");
-    makeTip(IDC_BTN_TOGGLE_PREVIEW, L"Toggle the Preview/Thumbnail Handler (preview pane, thumbnails)");
-    makeTip(IDC_BTN_TOGGLE_FILTER, L"Toggle the Search Filter (Windows Search content indexing)");
+    // Handler toggles with documentation references
+    makeTip(IDC_BTN_TOGGLE_PROPERTY, L"Toggle the Property Handler (details pane, file info)\nClick for more info about handlers: Open Settings > Help");
+    makeTip(IDC_BTN_TOGGLE_PREVIEW, L"Toggle the Preview/Thumbnail Handler (preview pane, thumbnails)\nClick for more info about handlers: Open Settings > Help");
+    makeTip(IDC_BTN_TOGGLE_FILTER, L"Toggle the Search Filter (Windows Search content indexing)\nClick for more info about handlers: Open Settings > Help");
+
+    // Catalog management buttons
+    makeTip(IDC_BTN_FETCH_NGC, L"Download and install the NGC catalog from GitHub (with hash verification)\nClick for more info: See Help");
+    makeTip(IDC_BTN_FETCH_ADD, L"Download and install the Addendum catalog from GitHub (with hash verification)\nClick for more info: See Help");
+    makeTip(IDC_BTN_IMPORT_FILE, L"Import a catalog from a local file\nClick for more info: See Help");
+    makeTip(IDC_BTN_COPY_EXPECTED_HASHES, L"Copy expected SHA-256 hashes for verification\nClick for more info: See Help");
+
+    // Feature tier
+    makeTip(IDC_BTN_SHOW_TIERS, L"Show detailed information about each feature tier\nClick for documentation: Open Settings > Help");
+
+    // Projection
+    makeTip(IDC_BTN_SHOW_MAPPING, L"Show System.Photo property mapping\nClick for documentation: Open Settings > Help");
+
+    // Advanced features
+    makeTip(IDC_BTN_ADVANCED, L"ETW tracing and other advanced handler management\nClick for documentation: Open Settings > Help");
 }
 
 void OnRegisterHandlers()
@@ -1397,17 +1453,28 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         if (hdr && hdr->idFrom == IDC_LINK_OPENNGC_COMMIT && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
             std::wstring url = OpenNGCSourceUrl();
             ShellExecuteW(hDlg, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            SetProgressText(L"Viewing NGC catalog source on GitHub.");
             return TRUE;
         }
         if (hdr && hdr->idFrom == IDC_LINK_HASH_HELP && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
-            ShellExecuteW(hDlg, L"open", L"https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-git-commit-signature-verification", nullptr, nullptr, SW_SHOWNORMAL);
-            SetProgressText(L"Open GitHub docs: independently verify file content and commit provenance.");
+            // Provide local documentation option first, fall back to GitHub
+            if (MessageBoxW(hDlg, L"Learn about catalog verification and security.\n\nOpen local documentation (preferred)?", L"XISF Shell Extensions", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
+                OpenDocumentation(hDlg, L"user-guide/catalog-management.md#verification");
+            } else {
+                ShellExecuteW(hDlg, L"open", L"https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-git-commit-signature-verification", nullptr, nullptr, SW_SHOWNORMAL);
+            }
+            SetProgressText(L"Opened catalog verification documentation.");
             return TRUE;
         }
         if (hdr && hdr->idFrom == IDC_LINK_VERSION && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
-            ShellExecuteW(hDlg, L"open",
-                L"https://github.com/dennispayne/XISF-Shell-Extensions",
-                nullptr, nullptr, SW_SHOWNORMAL);
+            if (MessageBoxW(hDlg, L"View XISF Shell Extensions on GitHub?\n\nAlternatively, open local documentation?", L"XISF Shell Extensions", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
+                ShellExecuteW(hDlg, L"open",
+                    L"https://github.com/dennispayne/XISF-Shell-Extensions",
+                    nullptr, nullptr, SW_SHOWNORMAL);
+            } else {
+                OpenDocumentation(hDlg, L"getting-started.md");
+                SetProgressText(L"Opened getting started guide.");
+            }
             return TRUE;
         }
         break;
@@ -1451,6 +1518,12 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
                 g_pending.registerProperty = true;
                 SetProgressText(L"Property Handler will be registered on Apply (requires elevation).");
             }
+            // Right-click or Shift+Click shows help (simple heuristic: if modifier keys are down, show help)
+            if ((GetKeyState(VK_CONTROL) & 0x8000) || (GetKeyState(VK_SHIFT) & 0x8000)) {
+                if (MessageBoxW(hDlg, L"Property Handler reads XISF file metadata.\n\nOpen handler documentation?", L"XISF Shell Extensions", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
+                    OpenDocumentation(hDlg, L"user-guide/handlers-overview.md#property-handler");
+                }
+            }
             RefreshHandlerStatuses();
             UpdatePendingDisplay();
             return TRUE;
@@ -1467,6 +1540,11 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             } else {
                 g_pending.registerPreview = true;
                 SetProgressText(L"Preview Handler will be registered on Apply (requires elevation).");
+            }
+            if ((GetKeyState(VK_CONTROL) & 0x8000) || (GetKeyState(VK_SHIFT) & 0x8000)) {
+                if (MessageBoxW(hDlg, L"Preview Handler displays XISF preview and thumbnails.\n\nOpen handler documentation?", L"XISF Shell Extensions", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
+                    OpenDocumentation(hDlg, L"user-guide/handlers-overview.md#preview-handler");
+                }
             }
             RefreshHandlerStatuses();
             UpdatePendingDisplay();
@@ -1485,8 +1563,27 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
                 g_pending.registerFilter = true;
                 SetProgressText(L"Search Filter will be registered on Apply (requires elevation).");
             }
+            if ((GetKeyState(VK_CONTROL) & 0x8000) || (GetKeyState(VK_SHIFT) & 0x8000)) {
+                if (MessageBoxW(hDlg, L"Search Filter enables Windows Search indexing for XISF files.\n\nOpen handler documentation?", L"XISF Shell Extensions", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
+                    OpenDocumentation(hDlg, L"user-guide/handlers-overview.md#search-filter");
+                }
+            }
             RefreshHandlerStatuses();
             UpdatePendingDisplay();
+            return TRUE;
+        }
+        case IDC_BTN_SHOW_TIERS: {
+            // Show feature tier dialog (already implemented)
+            DialogBoxParamW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDD_TIERS), hDlg,
+                [](HWND hDlg, UINT msg, WPARAM wParam, LPARAM) -> INT_PTR {
+                    if (msg == WM_COMMAND && LOWORD(wParam) == IDOK) { EndDialog(hDlg, IDOK); return TRUE; }
+                    if (msg == WM_CLOSE) { EndDialog(hDlg, IDCANCEL); return TRUE; }
+                    return FALSE;
+                }, 0);
+            // Also offer to open full documentation
+            if (MessageBoxW(hDlg, L"Open full feature tier documentation in browser?", L"XISF Shell Extensions", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+                OpenDocumentation(hDlg, L"features/feature-tiers.md");
+            }
             return TRUE;
         }
         case IDC_COMBO_FEATURE_TIER: {
@@ -1523,15 +1620,6 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
                 }, 0);
             return TRUE;
         }
-        case IDC_BTN_SHOW_TIERS: {
-            DialogBoxParamW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDD_TIERS), hDlg,
-                [](HWND hDlg, UINT msg, WPARAM wParam, LPARAM) -> INT_PTR {
-                    if (msg == WM_COMMAND && LOWORD(wParam) == IDOK) { EndDialog(hDlg, IDOK); return TRUE; }
-                    if (msg == WM_CLOSE) { EndDialog(hDlg, IDCANCEL); return TRUE; }
-                    return FALSE;
-                }, 0);
-            return TRUE;
-        }
         case IDC_BTN_REGISTER_HANDLERS:    OnRegisterHandlers();      return TRUE;
         case IDC_BTN_FETCH_NGC:            OnFetchOnline(0);         return TRUE;
         case IDC_BTN_FETCH_ADD:            OnFetchOnline(1);         return TRUE;
@@ -1540,7 +1628,46 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         case IDC_BTN_IMPORT_FILE:          OnImportFile();           return TRUE;
         case IDC_BTN_OPEN_CATALOG_DIR:     OnOpenCatalogDir();       return TRUE;
         case IDC_BTN_COPY_EXPECTED_HASHES: OnCopyExpectedHashes();   return TRUE;
+        case IDC_BTN_FETCH_NGC:
+        case IDC_BTN_FETCH_ADD: {
+            // Provide context-sensitive help about catalog installation
+            int btnId = LOWORD(wParam);
+            const wchar_t* catalogName = (btnId == IDC_BTN_FETCH_NGC) ? L"NGC" : L"Addendum";
+            wchar_t msg[256];
+            swprintf_s(msg, L"%s catalog will be downloaded from GitHub and verified.\n\nOpen documentation for more details?", catalogName);
+            if (MessageBoxW(hDlg, msg, L"XISF Shell Extensions", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
+                OpenDocumentation(hDlg, L"user-guide/catalog-management.md");
+                SetProgressText(L"Opened catalog management documentation.");
+            } else {
+                // Proceed with the actual download
+                OnFetchOnline(btnId == IDC_BTN_FETCH_NGC ? 0 : 1);
+            }
+            return TRUE;
+        }
+        case IDC_BTN_IMPORT_FILE: {
+            // Show information about local import before proceeding
+            if (MessageBoxW(hDlg, L"Import a catalog file from your local system.\n\nOpen documentation for import details?", L"XISF Shell Extensions", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
+                OpenDocumentation(hDlg, L"user-guide/catalog-management.md#offline-import");
+                SetProgressText(L"Opened offline import documentation.");
+                return TRUE;
+            }
+            OnImportFile();
+            return TRUE;
+        }
+        case IDC_BTN_COPY_EXPECTED_HASHES: {
+            OnCopyExpectedHashes();
+            if (MessageBoxW(hDlg, L"Hashes copied to clipboard.\n\nOpen documentation to verify file integrity?", L"XISF Shell Extensions", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
+                OpenDocumentation(hDlg, L"user-guide/catalog-management.md#verification");
+            }
+            return TRUE;
+        }
         case IDC_BTN_ADVANCED: {
+            // Offer documentation about ETW tracing before opening advanced dialog
+            if (MessageBoxW(hDlg, L"Advanced: ETW tracing and handler management.\n\nOpen documentation about ETW tracing first?", L"XISF Shell Extensions", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+                OpenDocumentation(hDlg, L"user-guide/settings-reference.md#etw-tracing");
+                SetProgressText(L"Opened ETW tracing documentation.");
+            }
+
             SHELLEXECUTEINFOW sei{};
             sei.cbSize = sizeof(sei);
             sei.fMask = SEE_MASK_NOCLOSEPROCESS;
@@ -2004,9 +2131,24 @@ INT_PTR CALLBACK AdvancedDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lPar
         case IDC_BTN_REGISTER_HANDLERS: OnRegisterHandlers(); return TRUE;
         case IDC_BTN_RESTART_EXPLORER:  OnRestartExplorer();  return TRUE;
         case IDC_BTN_FLUSH_THUMBCACHE:  OnFlushThumbnailCache(); return TRUE;
-        case IDC_BTN_TRACE_START: OnTraceStart(hDlg); return TRUE;
+        case IDC_BTN_TRACE_START: {
+            if (MessageBoxW(hDlg, L"Start ETW trace session.\n\nOpen ETW tracing documentation first?", L"XISF Shell Extensions", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+                OpenDocumentation(hDlg, L"features/telemetry-etw.md");
+                SetAdvStatus(hDlg, L"Opened ETW tracing documentation.");
+                return TRUE;
+            }
+            OnTraceStart(hDlg);
+            return TRUE;
+        }
         case IDC_BTN_TRACE_STOP:  OnTraceStop(hDlg);  return TRUE;
-        case IDC_BTN_TRACE_OPEN_ETL:  OnTraceView(hDlg);  return TRUE;
+        case IDC_BTN_TRACE_OPEN_ETL: {
+            if (MessageBoxW(hDlg, L"View ETL trace file.\n\nOpen ETW tracing documentation first?", L"XISF Shell Extensions", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+                OpenDocumentation(hDlg, L"features/telemetry-etw.md");
+            } else {
+                OnTraceView(hDlg);
+            }
+            return TRUE;
+        }
         case IDC_BTN_TRACE_EXPORT_XML: OnTraceExportXml(hDlg); return TRUE;
         case IDOK:
         case IDCANCEL: EndDialog(hDlg, 0); return TRUE;
