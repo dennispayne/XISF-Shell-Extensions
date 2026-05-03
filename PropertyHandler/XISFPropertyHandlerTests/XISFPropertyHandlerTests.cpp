@@ -2681,49 +2681,34 @@ TEST_CLASS(PropertyHandler_ConstellationDB_FileLoad)
         return path;
     }
 
-    TEST_METHOD(LoadBoundaries_ValidCsv_ReturnsTrue)
+    TEST_METHOD(LoadFromCSV_ValidCombinedCsv_ReturnsTrue)
     {
+        // PR #10's combined-format CSV: 'B' rows for boundaries, 'N' for names.
         std::string csv =
-            "raLow;raHigh;decLow;con\r\n"
-            "0.0000;24.0000;88.0000;UMi\r\n"
-            "0.0000;8.0000;85.0000;Cep\r\n";
+            "# Combined IAU constellation data\r\n"
+            "B,0.0000,24.0000,88.0000,UMi\r\n"
+            "B,0.0000,8.0000,85.0000,Cep\r\n"
+            "N,UMi,Ursa Minor\r\n"
+            "N,Cep,Cepheus\r\n";
         auto path = WriteTempCsv(csv);
-        bool ok = xisf::ConstellationDB::LoadBoundariesFromFile(path.c_str());
+        bool ok = xisf::ConstellationDB::LoadFromCSV(path);
         DeleteFileA(path.c_str());
-        Assert::IsTrue(ok, L"LoadBoundariesFromFile should return true for valid CSV");
+        Assert::IsTrue(ok, L"LoadFromCSV should return true for valid combined CSV");
     }
 
-    TEST_METHOD(LoadBoundaries_EmptyCsv_ReturnsFalse)
+    TEST_METHOD(LoadFromCSV_EmptyCsv_ReturnsFalse)
     {
-        std::string csv = "raLow;raHigh;decLow;con\r\n";
+        std::string csv = "# Header only, no records\r\n";
         auto path = WriteTempCsv(csv);
-        bool ok = xisf::ConstellationDB::LoadBoundariesFromFile(path.c_str());
+        bool ok = xisf::ConstellationDB::LoadFromCSV(path);
         DeleteFileA(path.c_str());
-        Assert::IsFalse(ok, L"LoadBoundariesFromFile should return false for empty CSV");
+        Assert::IsFalse(ok, L"LoadFromCSV should return false when no boundary rows are present");
     }
 
-    TEST_METHOD(LoadBoundaries_MissingFile_ReturnsFalse)
+    TEST_METHOD(LoadFromCSV_MissingFile_ReturnsFalse)
     {
-        bool ok = xisf::ConstellationDB::LoadBoundariesFromFile("C:\\nonexistent_xisf_test.csv");
-        Assert::IsFalse(ok, L"LoadBoundariesFromFile should return false for missing file");
-    }
-
-    TEST_METHOD(LoadNames_ValidCsv_ReturnsTrue)
-    {
-        std::string csv =
-            "abbrev;name\r\n"
-            "And;Andromeda\r\n"
-            "Ori;Orion\r\n";
-        auto path = WriteTempCsv(csv);
-        bool ok = xisf::ConstellationDB::LoadNamesFromFile(path.c_str());
-        DeleteFileA(path.c_str());
-        Assert::IsTrue(ok, L"LoadNamesFromFile should return true for valid CSV");
-    }
-
-    TEST_METHOD(LoadNames_MissingFile_ReturnsFalse)
-    {
-        bool ok = xisf::ConstellationDB::LoadNamesFromFile("C:\\nonexistent_xisf_test_names.csv");
-        Assert::IsFalse(ok, L"LoadNamesFromFile should return false for missing file");
+        bool ok = xisf::ConstellationDB::LoadFromCSV("C:\\nonexistent_xisf_test_combined.csv");
+        Assert::IsFalse(ok, L"LoadFromCSV should return false for missing file");
     }
 };
 

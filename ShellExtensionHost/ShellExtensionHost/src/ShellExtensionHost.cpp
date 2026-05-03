@@ -1664,39 +1664,6 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         case IDC_BTN_IMPORT_FILE:          OnImportFile();           return TRUE;
         case IDC_BTN_OPEN_CATALOG_DIR:     OnOpenCatalogDir();       return TRUE;
         case IDC_BTN_COPY_EXPECTED_HASHES: OnCopyExpectedHashes();   return TRUE;
-        case IDC_BTN_FETCH_NGC:
-        case IDC_BTN_FETCH_ADD: {
-            // Provide context-sensitive help about catalog installation
-            int btnId = LOWORD(wParam);
-            const wchar_t* catalogName = (btnId == IDC_BTN_FETCH_NGC) ? L"NGC" : L"Addendum";
-            wchar_t msg[256];
-            swprintf_s(msg, L"%s catalog will be downloaded from GitHub and verified.\n\nOpen documentation for more details?", catalogName);
-            if (MessageBoxW(hDlg, msg, L"XISF Shell Extensions", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
-                OpenDocumentation(hDlg, L"user-guide/catalog-management.md");
-                SetProgressText(L"Opened catalog management documentation.");
-            } else {
-                // Proceed with the actual download
-                OnFetchOnline(btnId == IDC_BTN_FETCH_NGC ? 0 : 1);
-            }
-            return TRUE;
-        }
-        case IDC_BTN_IMPORT_FILE: {
-            // Show information about local import before proceeding
-            if (MessageBoxW(hDlg, L"Import a catalog file from your local system.\n\nOpen documentation for import details?", L"XISF Shell Extensions", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
-                OpenDocumentation(hDlg, L"user-guide/catalog-management.md#offline-import");
-                SetProgressText(L"Opened offline import documentation.");
-                return TRUE;
-            }
-            OnImportFile();
-            return TRUE;
-        }
-        case IDC_BTN_COPY_EXPECTED_HASHES: {
-            OnCopyExpectedHashes();
-            if (MessageBoxW(hDlg, L"Hashes copied to clipboard.\n\nOpen documentation to verify file integrity?", L"XISF Shell Extensions", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
-                OpenDocumentation(hDlg, L"user-guide/catalog-management.md#verification");
-            }
-            return TRUE;
-        }
         case IDC_BTN_ADVANCED: {
             // Offer documentation about ETW tracing before opening advanced dialog
             if (MessageBoxW(hDlg, L"Advanced: ETW tracing and handler management.\n\nOpen documentation about ETW tracing first?", L"XISF Shell Extensions", MB_YESNO | MB_ICONQUESTION) == IDYES) {
