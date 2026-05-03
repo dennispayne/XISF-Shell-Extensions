@@ -1581,15 +1581,11 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         case IDC_BTN_FETCH_NGC:            OnFetchOnline(0);         return TRUE;
         case IDC_BTN_FETCH_ADD:            OnFetchOnline(1);         return TRUE;
         case IDC_BTN_FETCH_SHP:            OnFetchOnline(2);         return TRUE;
-        case IDC_BTN_FETCH_CST:            OnFetchOnline(2);         return TRUE;
-        case IDC_BTN_FETCH_CBN:            OnFetchOnline(3);         return TRUE;
-        case IDC_BTN_FETCH_CNM:            OnFetchOnline(4);         return TRUE;
+        case IDC_BTN_FETCH_CST:            OnFetchOnline(3);         return TRUE;
         case IDC_BTN_REMOVE_NGC:           OnRemoveCatalog(0);       return TRUE;
         case IDC_BTN_REMOVE_ADD:           OnRemoveCatalog(1);       return TRUE;
         case IDC_BTN_REMOVE_SHP:           OnRemoveCatalog(2);       return TRUE;
-        case IDC_BTN_REMOVE_CST:           OnRemoveCatalog(2);       return TRUE;
-        case IDC_BTN_REMOVE_CBN:           OnRemoveCatalog(3);       return TRUE;
-        case IDC_BTN_REMOVE_CNM:           OnRemoveCatalog(4);       return TRUE;
+        case IDC_BTN_REMOVE_CST:           OnRemoveCatalog(3);       return TRUE;
         case IDC_BTN_IMPORT_FILE:          OnImportFile();           return TRUE;
         case IDC_BTN_OPEN_CATALOG_DIR:     OnOpenCatalogDir();       return TRUE;
         case IDC_BTN_COPY_EXPECTED_HASHES: OnCopyExpectedHashes();   return TRUE;
