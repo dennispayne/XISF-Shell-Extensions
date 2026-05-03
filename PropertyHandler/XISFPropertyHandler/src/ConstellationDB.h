@@ -31,6 +31,19 @@ public:
     /// Return the full English name for a 3-letter IAU abbreviation.
     /// Returns empty string if data is not loaded or abbreviation not found.
     static std::string FullName(const std::string& abbrev);
+
+    /// Load boundary data from a semicolon-delimited CSV file.
+    /// Expected header: raLow;raHigh;decLow;con
+    /// Rows after the header are parsed as boundary records.
+    /// Returns true if at least one row was loaded. When loaded, the
+    /// runtime data takes precedence over the compiled-in fallback.
+    static bool LoadBoundariesFromFile(const char* path);
+
+    /// Load constellation name mappings from a semicolon-delimited CSV file.
+    /// Expected header: abbrev;name
+    /// Returns true if at least one entry was loaded. When loaded, the
+    /// runtime data takes precedence over the compiled-in fallback.
+    static bool LoadNamesFromFile(const char* path);
 };
 
 } // namespace xisf

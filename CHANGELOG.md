@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Sharpless catalog** (`sharpless.csv`): 313 Sharpless 2 HII regions are now
+  installable from the settings app. The file is hosted in this repo's `data/`
+  directory, pinned to a specific commit SHA and SHA-256 hash.  Resolves #1.
+- **Constellation boundary and name files** (`constellation_boundaries.csv`,
+  `constellation_names.csv`): IAU boundary data and full constellation name
+  mappings are now downloadable via the settings app. `ConstellationDB` loads
+  them at runtime when present and falls back to compiled-in data otherwise.
+  Resolves #2.
+- Settings dialog shows five installable catalog rows (NGC.csv, addendum.csv,
+  sharpless.csv, constellation_boundaries.csv, constellation_names.csv) each
+  with independent Install/Update/Remove buttons.
+- `CatalogSpec.h` gains `kSharpless`, `kConstellationBoundaries`,
+  `kConstellationNames` entries and a `kProjectDataCommit` constant for the
+  project-hosted data files.
+- `ConstellationDB` gains `LoadBoundariesFromFile` and `LoadNamesFromFile`
+  static methods; compiled-in data remains as a fallback.
+- `kAllowedUrlPrefixes` (array of two) replaces the single `kAllowedUrlPrefix`
+  to allow downloads from both OpenNGC and this project's own repository.
+
+### Security
+- URL allow-list expanded to two pinned `raw.githubusercontent.com` paths:
+  `mattiaverga/OpenNGC/` and `dennispayne/XISF-Shell-Extensions/`.
+  All three new files are pinned to a specific commit SHA and SHA-256 hash;
+  mismatches are rejected and the candidate files are deleted.
+
 ## [0.1.0] - TBD
 
 ### Added
@@ -39,10 +65,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - Catalog downloads pin an OpenNGC commit SHA and a SHA-256 hash per file;
   mismatches are rejected and the candidate file is deleted.
-- Only HTTPS URLs under `https://raw.githubusercontent.com/mattiaverga/OpenNGC/` are
+- Only HTTPS URLs under `https://raw.githubusercontent.com/mattiaverga/OpenNGC/`
+  or `https://raw.githubusercontent.com/dennispayne/XISF-Shell-Extensions/` are
   accepted — enforced by a compiled-in allow-list.
-- Per-file size cap (NGC ≤ 8 MB, addendum ≤ 1 MB) enforced during streaming to limit
-  DoS from a compromised CDN.
+- Per-file size caps enforced during streaming to limit DoS from a compromised CDN.
 - TLS 1.2 / 1.3 only; no fallback to legacy protocols; full certificate validation.
 - Atomic `MoveFileExW(MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)` install;
   no partial files left on disk after a failure.
