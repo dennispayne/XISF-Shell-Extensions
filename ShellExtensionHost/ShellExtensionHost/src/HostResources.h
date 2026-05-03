@@ -100,3 +100,10 @@
 #define IDC_STATIC_CNM_MATCH         1099
 #define IDC_BTN_FETCH_CNM            1100
 #define IDC_BTN_REMOVE_CNM           1101
+
+#define IDC_STATIC_CST_LABEL         1102
+#define IDC_STATIC_CST_GITHUB        1103
+#define IDC_STATIC_CST_LOCAL         1104
+#define IDC_STATIC_CST_MATCH         1105
+#define IDC_BTN_FETCH_CST            1106
+#define IDC_BTN_REMOVE_CST           1107
