@@ -90,23 +90,32 @@ BEGIN
     PUSHBUTTON      "Remove",
                     IDC_BTN_REMOVE_SHP, 428, 264, 52, 14
 
-    LTEXT           "const_bounds.csv", IDC_STATIC_CBN_LABEL, 20, 282, 60, 10
-    LTEXT           "-",                IDC_STATIC_CBN_GITHUB, 82, 282, 130, 10
-    LTEXT           "-",                IDC_STATIC_CBN_LOCAL, 218, 282, 130, 10
-    LTEXT           "?",                IDC_STATIC_CBN_MATCH, 352, 282, 10, 10
+    LTEXT           "constellations.csv", IDC_STATIC_CST_LABEL, 20, 282, 60, 10
+    LTEXT           "-",                IDC_STATIC_CST_GITHUB, 82, 282, 130, 10
+    LTEXT           "-",                IDC_STATIC_CST_LOCAL, 218, 282, 130, 10
+    LTEXT           "?",                IDC_STATIC_CST_MATCH, 352, 282, 10, 10
     PUSHBUTTON      "Install",
-                    IDC_BTN_FETCH_CBN, 370, 280, 52, 14
+                    IDC_BTN_FETCH_CST, 370, 280, 52, 14
     PUSHBUTTON      "Remove",
-                    IDC_BTN_REMOVE_CBN, 428, 280, 52, 14
+                    IDC_BTN_REMOVE_CST, 428, 280, 52, 14
 
-    LTEXT           "const_names.csv",  IDC_STATIC_CNM_LABEL, 20, 298, 60, 10
-    LTEXT           "-",                IDC_STATIC_CNM_GITHUB, 82, 298, 130, 10
-    LTEXT           "-",                IDC_STATIC_CNM_LOCAL, 218, 298, 130, 10
-    LTEXT           "?",                IDC_STATIC_CNM_MATCH, 352, 298, 10, 10
+    LTEXT           "const_bounds.csv", IDC_STATIC_CBN_LABEL, 20, 298, 60, 10
+    LTEXT           "-",                IDC_STATIC_CBN_GITHUB, 82, 298, 130, 10
+    LTEXT           "-",                IDC_STATIC_CBN_LOCAL, 218, 298, 130, 10
+    LTEXT           "?",                IDC_STATIC_CBN_MATCH, 352, 298, 10, 10
     PUSHBUTTON      "Install",
-                    IDC_BTN_FETCH_CNM, 370, 296, 52, 14
+                    IDC_BTN_FETCH_CBN, 370, 296, 52, 14
     PUSHBUTTON      "Remove",
-                    IDC_BTN_REMOVE_CNM, 428, 296, 52, 14
+                    IDC_BTN_REMOVE_CBN, 428, 296, 52, 14
+
+    LTEXT           "const_names.csv",  IDC_STATIC_CNM_LABEL, 20, 314, 60, 10
+    LTEXT           "-",                IDC_STATIC_CNM_GITHUB, 82, 314, 130, 10
+    LTEXT           "-",                IDC_STATIC_CNM_LOCAL, 218, 314, 130, 10
+    LTEXT           "?",                IDC_STATIC_CNM_MATCH, 352, 314, 10, 10
+    PUSHBUTTON      "Install",
+                    IDC_BTN_FETCH_CNM, 370, 312, 52, 14
+    PUSHBUTTON      "Remove",
+                    IDC_BTN_REMOVE_CNM, 428, 312, 52, 14
 
     PUSHBUTTON      "Import from File...",
                     IDC_BTN_IMPORT_FILE,  20, 322, 100, 14
@@ -305,3 +314,4 @@ BEGIN
     END
 END
 #endif
+
