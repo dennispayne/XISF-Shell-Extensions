@@ -1,8 +1,6 @@
-# Preview Handler — Thumbnail Provider + Preview Pane
+# Preview Handler — Deep Dive Technical Reference
 
-**Note:** This file has been migrated to the new documentation structure. Please see [Preview Handler Deep Dive](features/preview-handler-deep-dive.md) for the updated version.
-
----
+This document provides detailed technical reference for the Preview and Thumbnail handlers. For user-facing documentation, see [Handlers Overview](../user-guide/handlers-overview.md).
 
 ## Objective
 
@@ -283,3 +281,7 @@ PreviewHandler/
 - **Additional linker inputs for preview/thumbnail support**: `gdiplus.lib` or `windowscodecs.lib`, `user32.lib`, `gdi32.lib`
 - Preview handler hosting: add `AppID` registry value under your preview handler CLSID pointing to `{6d2b5079-2f0b-48dd-ab7f-97cec514d30b}` (the system-provided preview host).
 - Test the thumbnail by pressing **F5** to refresh Explorer's icon cache, or run `ie4uinit.exe -show` to clear the thumbnail cache.
+
+---
+
+Related: [Handlers Overview](../user-guide/handlers-overview.md), [Telemetry & ETW](telemetry-etw.md), [Property Mapping Reference](../reference/property-mapping.md)
