@@ -90,7 +90,7 @@
 #define IDC_STATIC_CST_LABEL         1057
 #define IDC_STATIC_CST_GITHUB        1058
 #define IDC_STATIC_CST_LOCAL         1059
-#define IDC_STATIC_CST_MATCH         1060
+#define IDC_STATIC_CST_MATCH         1046
 
 #define IDC_STATIC_CBN_LABEL         1090
 #define IDC_STATIC_CBN_GITHUB        1091
