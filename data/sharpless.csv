@@ -1,0 +1,3 @@
+Name;Type;RA;Dec;Const;MajAx;MinAx;PosAng;B-Mag;V-Mag;J-Mag;H-Mag;K-Mag;SurfBr;Hubble;Pax;Pm-RA;Pm-Dec;RadVel;Redshift;Cstar-U;Cstar-B;Cstar-V;M;NGC;IC;CstarNames;Identifiers;Common names;NED notes;OpenNGC notes
+Sh2-1;HII;17:20:50.0;-34:42:00;Sco;90;90;;;;;;;;;;;;;;;;;;;;;;;Sh2-1;;IAU HII region data placeholder – replace with full dataset
+Sh2-2;HII;17:14:42.0;-34:40:00;Sco;15;15;;;;;;;;;;;;;;;;;;;;;;;Sh2-2;;IAU HII region data placeholder – replace with full dataset

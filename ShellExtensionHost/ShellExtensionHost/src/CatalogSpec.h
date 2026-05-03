@@ -14,6 +14,14 @@
 //   3. Update kOpenNGCCommit and the kExpectedSha256 entries below
 //   4. Bump CHANGELOG.md and version.json
 //
+// To rotate the project-hosted catalogs (constellations.csv, sharpless.csv):
+//   1. Edit the file in the data/ directory and commit
+//   2. Recompute SHA-256 of the new file content (Get-FileHash -Algorithm SHA256)
+//   3. Update kXISFDataCommit to the new commit SHA and kXISFDataCommitDate
+//   4. Update the kSharpless and kConstellations URL string literals to embed
+//      the new commit SHA (the URL literal and kXISFDataCommit must match)
+//   5. Bump CHANGELOG.md and version.json
+//
 // DO NOT add URLs pointing to mutable refs (branches, tags). A pinned commit
 // SHA is cryptographically stable; master / main is not.
 #pragma once
@@ -29,6 +37,12 @@ namespace xisf::catalogspec {
 inline constexpr std::wstring_view kOpenNGCCommit =
     L"36cb178a0f69dba8bfc03a99c10512831edf1c6b";
 inline constexpr std::wstring_view kOpenNGCCommitDate = L"2026-04-16";
+
+// Project-hosted data commit (constellations.csv, sharpless.csv).
+// Update after merging new data files and pinning the resulting commit SHA.
+inline constexpr std::wstring_view kXISFDataCommit =
+    L"4d7057e58f78d361a865eba057eb65f9fbf5f680";
+inline constexpr std::wstring_view kXISFDataCommitDate = L"2026-04-30";
 
 struct CatalogSource {
     // Display name shown in the settings UI.
@@ -63,10 +77,37 @@ inline constexpr CatalogSource kAddendum {
     1ull * 1024ull * 1024ull
 };
 
-inline constexpr std::array<const CatalogSource*, 2> kAllCatalogs = { &kNGC, &kAddendum };
+// Sharpless HII-region catalog (OpenNGC-compatible semicolon-delimited CSV).
+// Hosted in the project repository; update kXISFDataCommit after changing the file.
+inline constexpr CatalogSource kSharpless {
+    L"Sharpless sharpless.csv",
+    L"sharpless.csv",
+    L"https://raw.githubusercontent.com/dennispayne/XISF-Shell-Extensions/"
+    L"4d7057e58f78d361a865eba057eb65f9fbf5f680/data/sharpless.csv",
+    L"3452cd838e2c9252a0b99ceb2c9c222ad4cbf38f3770cebd251e85dac725c081",
+    4ull * 1024ull * 1024ull
+};
 
-// Host allow-list. Any URL not beginning with one of these is rejected.
-inline constexpr std::wstring_view kAllowedUrlPrefix =
-    L"https://raw.githubusercontent.com/mattiaverga/OpenNGC/";
+// IAU constellation boundaries and names (Roman 1987 / Delporte 1930).
+// Hosted in the project repository; update kXISFDataCommit after changing the file.
+inline constexpr CatalogSource kConstellations {
+    L"IAU Constellations constellations.csv",
+    L"constellations.csv",
+    L"https://raw.githubusercontent.com/dennispayne/XISF-Shell-Extensions/"
+    L"4d7057e58f78d361a865eba057eb65f9fbf5f680/data/constellations.csv",
+    L"9e742f498fc6f355df37ff941c3d3adfcb3d759b05d7e0760a7b85822b5c074b",
+    1ull * 1024ull * 1024ull
+};
+
+inline constexpr std::array<const CatalogSource*, 4> kAllCatalogs = {
+    &kNGC, &kAddendum, &kSharpless, &kConstellations
+};
+
+// Host allow-list (full URL prefixes). Any URL not starting with one of these
+// entries is rejected by InstallFromPinnedUrl. Extend only for new trusted hosts.
+inline constexpr std::array<std::wstring_view, 2> kAllowedUrlPrefixes = {{
+    L"https://raw.githubusercontent.com/mattiaverga/OpenNGC/",
+    L"https://raw.githubusercontent.com/dennispayne/XISF-Shell-Extensions/",
+}};
 
 } // namespace xisf::catalogspec

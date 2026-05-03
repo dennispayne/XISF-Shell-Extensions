@@ -86,3 +86,11 @@
 #define IDC_BTN_REMOVE_SHP           1054
 #define IDC_STATIC_SHP_LOCAL         1055
 #define IDC_STATIC_SHP_MATCH         1056
+
+#define IDC_STATIC_CST_LABEL         1057
+#define IDC_STATIC_CST_GITHUB        1058
+#define IDC_STATIC_CST_LOCAL         1059
+#define IDC_STATIC_CST_MATCH         1046
+
+#define IDC_BTN_FETCH_CST            1102
+#define IDC_BTN_REMOVE_CST           1103
