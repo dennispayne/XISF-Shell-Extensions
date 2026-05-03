@@ -506,8 +506,8 @@ bool ConstellationDB::LoadBoundariesFromFile(const char* path)
         row.decLow = static_cast<float>(std::strtod(parts[2].c_str(), &ep));
         if (ep == parts[2].c_str()) continue;
         if (parts[3].empty() || parts[3].size() > 7) continue;
-        std::strncpy(row.con, parts[3].c_str(), sizeof(row.con) - 1);
-        row.con[sizeof(row.con) - 1] = '\0';
+        std::memcpy(row.con, parts[3].c_str(), parts[3].size());
+        row.con[parts[3].size()] = '\0';
         rows.push_back(row);
     }
 
