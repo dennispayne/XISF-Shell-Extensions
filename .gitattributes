@@ -1,0 +1,44 @@
+# Default: let git auto-detect text/binary and use platform-native line endings
+# in working tree (CRLF on Windows, LF on Unix), but always store LF in the repo.
+* text=auto
+
+# Catalog CSV files MUST be LF on disk on every platform, because their
+# SHA-256 is pinned in CatalogSpec.h. The hashes were computed against LF
+# bytes (matching what raw.githubusercontent.com serves to end users), so
+# Windows autocrlf checkout would otherwise break the verification step in CI
+# and at install time.
+data/*.csv text eol=lf
+
+# OpenNGC catalog files (downloaded into %LOCALAPPDATA% at install time, but
+# also relevant if anyone ever vendors them into the repo).
+*.NGC.csv text eol=lf
+*addendum.csv text eol=lf
+
+# Source files: normalize line endings on commit, native on checkout
+*.cpp text
+*.h text
+*.cs text
+*.csproj text
+*.vcxproj text
+*.vcxproj.filters text
+*.sln text
+*.json text
+*.md text
+*.yml text
+*.yaml text
+*.ps1 text
+*.wxs text
+*.wixproj text
+*.props text
+*.targets text
+*.config text
+
+# Resource and binary files
+*.rc text
+*.def text
+*.ico binary
+*.png binary
+*.jpg binary
+*.dll binary
+*.exe binary
+*.msi binary
