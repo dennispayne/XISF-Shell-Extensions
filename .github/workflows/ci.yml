@@ -39,6 +39,7 @@ jobs:
         shell: pwsh
         run: |
           msbuild Win11-XISF-Shell-Extensions.sln `
+            /t:Clean `
             /restore `
             /p:Configuration=Release `
             /p:Platform=x64 `
