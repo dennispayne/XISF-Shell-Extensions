@@ -94,8 +94,8 @@ jobs:
           # constellations.csv and sharpless.csv live in data/ in this repo;
           # copy directly from the checkout so tests always match the in-tree data.
           $projectCatalogs = @(
-            @{ Name = 'constellations.csv'; Sha256 = '9e742f498fc6f355df37ff941c3d3adfcb3d759b05d7e0760a7b85822b5c074b' },
-            @{ Name = 'sharpless.csv';      Sha256 = '3452cd838e2c9252a0b99ceb2c9c222ad4cbf38f3770cebd251e85dac725c081' }
+            @{ Name = 'constellations.csv'; Sha256 = 'e216ca80a2ae26b840dfbaf38f8b362602a2ddf9cc71a181e36f5d9a58a41cfb' },
+            @{ Name = 'sharpless.csv';      Sha256 = 'ce02fd84cf5ae7a0442c8cd236f124565063657516441255aa76abcaf10729ef' }
           )
           foreach ($cat in $projectCatalogs) {
             $src  = Join-Path $env:GITHUB_WORKSPACE "data\$($cat.Name)"
