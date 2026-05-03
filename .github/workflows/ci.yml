@@ -38,8 +38,12 @@ jobs:
       - name: Build solution
         shell: pwsh
         run: |
+          # /t:Rebuild = Clean + Build in one pass. The Clean half avoids the
+          # stale-cache C2196 (RC/resource compiler "duplicate case value")
+          # errors we hit on incremental builds; the Build half is what
+          # actually produces the test DLLs and the shipped binaries.
           msbuild Win11-XISF-Shell-Extensions.sln `
-            /t:Clean `
+            /t:Rebuild `
             /restore `
             /p:Configuration=Release `
             /p:Platform=x64 `
