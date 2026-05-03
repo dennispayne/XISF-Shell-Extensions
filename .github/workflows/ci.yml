@@ -60,7 +60,7 @@ jobs:
           Split-Path $vstest | Out-File -FilePath $env:GITHUB_PATH -Append
           Write-Host "VSTest: $vstest"
 
-      - name: Download OpenNGC catalogs
+      - name: Download OpenNGC catalogs (third-party, pinned)
         shell: pwsh
         run: |
           $catalogDir = Join-Path $env:LOCALAPPDATA 'XISFShellExtension\catalogs'
@@ -75,21 +75,6 @@ jobs:
               Name = 'addendum.csv'
               Url  = 'https://raw.githubusercontent.com/mattiaverga/OpenNGC/36cb178a0f69dba8bfc03a99c10512831edf1c6b/database_files/addendum.csv'
               Sha256 = '1d8f0914e643ada325a5a94d88d8fefad6a4937a2f77cc34f21483af22b11983'
-            },
-            @{
-              Name = 'sharpless.csv'
-              Url  = 'https://raw.githubusercontent.com/dennispayne/XISF-Shell-Extensions/9bc8d1e71a298ca68365c515ce1237d2a3a12e63/data/sharpless.csv'
-              Sha256 = '94e8f0bed41db343479fce9daafc2cb8e751d0099202b14ae86d8fbe6eb30134'
-            },
-            @{
-              Name = 'constellation_boundaries.csv'
-              Url  = 'https://raw.githubusercontent.com/dennispayne/XISF-Shell-Extensions/9bc8d1e71a298ca68365c515ce1237d2a3a12e63/data/constellation_boundaries.csv'
-              Sha256 = '3b77df84ca6b4c87e1a45a7a7fa8a93424b51f0f163e0fd8fcb19f53b0d5f5ce'
-            },
-            @{
-              Name = 'constellation_names.csv'
-              Url  = 'https://raw.githubusercontent.com/dennispayne/XISF-Shell-Extensions/9bc8d1e71a298ca68365c515ce1237d2a3a12e63/data/constellation_names.csv'
-              Sha256 = '2f6bc186ae95f3a7ffc4294cefc4a139653ac1668a079d5c9fcaf0ca818fcc81'
             }
           )
           foreach ($cat in $catalogs) {
@@ -107,21 +92,31 @@ jobs:
         run: |
           $catalogDir = Join-Path $env:LOCALAPPDATA 'XISFShellExtension\catalogs'
           New-Item -ItemType Directory -Path $catalogDir -Force | Out-Null
-          # constellations.csv and sharpless.csv live in data/ in this repo;
-          # copy directly from the checkout so tests always match the in-tree data.
-          $projectCatalogs = @(
-            @{ Name = 'constellations.csv'; Sha256 = 'e216ca80a2ae26b840dfbaf38f8b362602a2ddf9cc71a181e36f5d9a58a41cfb' },
-            @{ Name = 'sharpless.csv';      Sha256 = 'ce02fd84cf5ae7a0442c8cd236f124565063657516441255aa76abcaf10729ef' }
-          )
-          foreach ($cat in $projectCatalogs) {
-            $src  = Join-Path $env:GITHUB_WORKSPACE "data\$($cat.Name)"
-            $dest = Join-Path $catalogDir $cat.Name
+          # Parse expected SHA-256 values for project-hosted catalogs directly
+          # from CatalogSpec.h. This way, bumping a hash in CatalogSpec.h after
+          # editing data/*.csv is sufficient; no workflow edit required.
+          $specPath = Join-Path $env:GITHUB_WORKSPACE 'ShellExtensionHost\ShellExtensionHost\src\CatalogSpec.h'
+          if (-not (Test-Path $specPath)) { throw "CatalogSpec.h not found at $specPath" }
+          $spec = Get-Content $specPath -Raw
+          # Each CatalogSource literal: displayName, fileName, url (1+ string-literal continuations), expectedSha256, maxBytes.
+          $pattern = 'CatalogSource\s+\w+\s*\{\s*L"[^"]*"\s*,\s*L"([^"]+)"\s*,\s*((?:L"[^"]*"\s*)+)\s*,\s*L"([0-9a-fA-F]{64})"'
+          $projectMatches = @([regex]::Matches($spec, $pattern) |
+            Where-Object { $_.Groups[2].Value -match 'raw\.githubusercontent\.com/dennispayne/XISF-Shell-Extensions/' })
+          if ($projectMatches.Count -eq 0) {
+            throw "No project-hosted CatalogSource entries parsed from CatalogSpec.h - regex may need updating."
+          }
+          foreach ($m in $projectMatches) {
+            $fileName    = $m.Groups[1].Value
+            $expectedSha = $m.Groups[3].Value.ToLower()
+            $src  = Join-Path $env:GITHUB_WORKSPACE "data\$fileName"
+            $dest = Join-Path $catalogDir $fileName
+            if (-not (Test-Path $src)) { throw "Project data file not found: $src" }
             Copy-Item $src $dest -Force
             $hash = (Get-FileHash -Algorithm SHA256 $dest).Hash.ToLower()
-            if ($hash -ne $cat.Sha256) {
-              throw "SHA-256 mismatch for $($cat.Name): expected $($cat.Sha256), got $hash"
+            if ($hash -ne $expectedSha) {
+              throw "SHA-256 mismatch for $fileName : expected $expectedSha (from CatalogSpec.h), got $hash. Update data/$fileName or CatalogSpec.h."
             }
-            Write-Host "OK  $($cat.Name) ($hash)"
+            Write-Host "OK  $fileName ($hash)"
           }
 
       - name: Run unit tests
