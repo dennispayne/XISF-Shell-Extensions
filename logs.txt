@@ -1,0 +1,354 @@
+Build + Test (x64 Release)	Set up job	∩╗┐2026-05-03T05:01:43.9342235Z Current runner version: '2.334.0'
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9397448Z ##[group]Runner Image Provisioner
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9398586Z Hosted Compute Agent
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9399375Z Version: 20260213.493
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9400156Z Commit: 5c115507f6dd24b8de37d8bbe0bb4509d0cc0fa3
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9401141Z Build Date: 2026-02-13T00:28:41Z
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9402409Z Worker ID: {8dedff84-499e-4b65-a4c8-525aeee9ec6a}
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9403475Z Azure Region: centralus
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9404185Z ##[endgroup]
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9405966Z ##[group]Operating System
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9406880Z Microsoft Windows Server 2025
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9407627Z 10.0.26100
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9408258Z Datacenter
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9408831Z ##[endgroup]
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9409465Z ##[group]Runner Image
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9410127Z Image: windows-2025-vs2026
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9410916Z Version: 20260412.71.1
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9412542Z Included Software: https://github.com/actions/runner-images/blob/win25-vs2026/20260412.71/images/windows/Windows2025-VS2026-Readme.md
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9415825Z Image Release: https://github.com/actions/runner-images/releases/tag/win25-vs2026%2F20260412.71
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9417352Z ##[endgroup]
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9418808Z ##[group]GITHUB_TOKEN Permissions
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9421470Z Contents: read
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9422583Z Metadata: read
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9423250Z ##[endgroup]
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9425768Z Secret source: Actions
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9426649Z Prepare workflow directory
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:43.9976905Z Prepare all required actions
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:44.0028505Z Getting action download info
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:44.3948887Z Download action repository 'actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd' (SHA:de0fac2e4500dabe0009e67214ff5f5447ce83dd)
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:44.5363454Z Download action repository 'microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57' (SHA:30375c66a4eea26614e0d39710365f22f8b0af57)
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:44.7980475Z Download action repository 'actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7' (SHA:c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7)
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:45.2309434Z Download action repository 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' (SHA:043fb46d1a93c77aae656e7c1c64a875d1fc6a0a)
+Build + Test (x64 Release)	Set up job	2026-05-03T05:01:45.8455929Z Complete job name: Build + Test (x64 Release)
+Build + Test (x64 Release)	Checkout	∩╗┐2026-05-03T05:01:45.9974217Z ##[group]Run actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:45.9975926Z with:
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:45.9976561Z   fetch-depth: 0
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:45.9977345Z   repository: dennispayne/XISF-Shell-Extensions
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:45.9978547Z   token: ***
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:45.9979186Z   ssh-strict: true
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:45.9979863Z   ssh-user: git
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:45.9980564Z   persist-credentials: true
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:45.9981318Z   clean: true
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:45.9982013Z   sparse-checkout-cone-mode: true
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:45.9982865Z   fetch-tags: false
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:45.9983579Z   show-progress: true
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:45.9984266Z   lfs: false
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:45.9984894Z   submodules: false
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:45.9985589Z   set-safe-directory: true
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:45.9986536Z ##[endgroup]
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6265438Z Syncing repository: dennispayne/XISF-Shell-Extensions
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6269984Z ##[group]Getting Git version info
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6270863Z Working directory is 'D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions'
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6272231Z [command]"C:\Program Files\Git\bin\git.exe" version
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6272849Z git version 2.53.0.windows.2
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6274595Z ##[endgroup]
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6279841Z Temporarily overriding HOME='D:\a\_temp\00e75bf5-0f5e-4bcf-bec9-208852011b40' before making global git config changes
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6281044Z Adding repository directory to the temporary git global config as a safe directory
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6282317Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6289354Z Deleting the contents of 'D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions'
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6292988Z ##[group]Initializing the repository
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6293935Z [command]"C:\Program Files\Git\bin\git.exe" init D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6295018Z Initialized empty Git repository in D:/a/XISF-Shell-Extensions/XISF-Shell-Extensions/.git/
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6298037Z [command]"C:\Program Files\Git\bin\git.exe" remote add origin https://github.com/dennispayne/XISF-Shell-Extensions
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6299966Z ##[endgroup]
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6300779Z ##[group]Disabling automatic garbage collection
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6301502Z [command]"C:\Program Files\Git\bin\git.exe" config --local gc.auto 0
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6303994Z ##[endgroup]
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6304740Z ##[group]Setting up auth
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6305295Z Removing SSH command configuration
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6306237Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6308726Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6311133Z Removing HTTP extra header
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6312174Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6315023Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6317459Z Removing includeIf entries pointing to credentials config files
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6318517Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:48.6320563Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:49.1853898Z [command]"C:\Program Files\Git\bin\git.exe" config --file D:\a\_temp\git-credentials-8153cbb2-e9b1-4e61-91b2-c1ab91f98e5d.config http.https://github.com/.extraheader "AUTHORIZATION: basic ***"
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:49.2168891Z [command]"C:\Program Files\Git\bin\git.exe" config --local includeIf.gitdir:D:/a/XISF-Shell-Extensions/XISF-Shell-Extensions/.git.path D:\a\_temp\git-credentials-8153cbb2-e9b1-4e61-91b2-c1ab91f98e5d.config
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:49.2465568Z [command]"C:\Program Files\Git\bin\git.exe" config --local includeIf.gitdir:D:/a/XISF-Shell-Extensions/XISF-Shell-Extensions/.git/worktrees/*.path D:\a\_temp\git-credentials-8153cbb2-e9b1-4e61-91b2-c1ab91f98e5d.config
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:49.2800385Z [command]"C:\Program Files\Git\bin\git.exe" config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-8153cbb2-e9b1-4e61-91b2-c1ab91f98e5d.config
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:49.3091251Z [command]"C:\Program Files\Git\bin\git.exe" config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-8153cbb2-e9b1-4e61-91b2-c1ab91f98e5d.config
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:49.3394355Z ##[endgroup]
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:49.3395119Z ##[group]Fetching the repository
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:49.3432042Z [command]"C:\Program Files\Git\bin\git.exe" -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules origin +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/tags/* +beeb2f0c9b70da6bc858f38dd50be9ce743b6281:refs/remotes/pull/10/merge
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.2826797Z From https://github.com/dennispayne/XISF-Shell-Extensions
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.2828450Z  * [new branch]      copilot/add-sharpless-catalog-to-catalogspec -> origin/copilot/add-sharpless-catalog-to-catalogspec
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.2830536Z  * [new branch]      copilot/replace-compiled-constellation-data -> origin/copilot/replace-compiled-constellation-data
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.2863906Z  * [new branch]      feature/wix-installer                    -> origin/feature/wix-installer
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.2866809Z  * [new branch]      main                                     -> origin/main
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.2867794Z  * [new tag]         v0.1.0-rc.1                              -> v0.1.0-rc.1
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.2875149Z  * [new ref]         beeb2f0c9b70da6bc858f38dd50be9ce743b6281 -> pull/10/merge
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.3155891Z ##[endgroup]
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.3172741Z ##[group]Determining the checkout info
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.3185294Z ##[endgroup]
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.3189166Z [command]"C:\Program Files\Git\bin\git.exe" sparse-checkout disable
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.3587096Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset-all extensions.worktreeConfig
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.3907544Z ##[group]Checking out the ref
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.3908663Z [command]"C:\Program Files\Git\bin\git.exe" checkout --progress --force refs/remotes/pull/10/merge
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4728889Z Note: switching to 'refs/remotes/pull/10/merge'.
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4729585Z 
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4733413Z You are in 'detached HEAD' state. You can look around, make experimental
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4734957Z changes and commit them, and you can discard any commits you make in this
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4739719Z state without impacting any branches by switching back to a branch.
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4740464Z 
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4740973Z If you want to create a new branch to retain commits you create, you may
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4741935Z do so (now or later) by using -c with the switch command. Example:
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4742534Z 
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4742929Z   git switch -c <new-branch-name>
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4743398Z 
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4743752Z Or undo this operation with:
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4744272Z 
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4744600Z   git switch -
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4745001Z 
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4757537Z Turn off this advice by setting config variable advice.detachedHead to false
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4759503Z 
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4761038Z HEAD is now at beeb2f0 Merge b77d6650b9c4fce80c932a740f7a05852fcec38d into 8b390ac4b47fa4c299715995609b3c6de2464ca3
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.4877537Z ##[endgroup]
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.5245549Z [command]"C:\Program Files\Git\bin\git.exe" log -1 --format=%H
+Build + Test (x64 Release)	Checkout	2026-05-03T05:01:50.5515285Z beeb2f0c9b70da6bc858f38dd50be9ce743b6281
+Build + Test (x64 Release)	Setup MSBuild	∩╗┐2026-05-03T05:01:50.6180415Z ##[group]Run microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57
+Build + Test (x64 Release)	Setup MSBuild	2026-05-03T05:01:50.6181198Z with:
+Build + Test (x64 Release)	Setup MSBuild	2026-05-03T05:01:50.6181464Z   msbuild-architecture: x86
+Build + Test (x64 Release)	Setup MSBuild	2026-05-03T05:01:50.6181805Z ##[endgroup]
+Build + Test (x64 Release)	Setup MSBuild	2026-05-03T05:01:50.7883224Z [command]C:\ProgramData\Chocolatey\bin\vswhere.exe -products * -requires Microsoft.Component.MSBuild -property installationPath -latest
+Build + Test (x64 Release)	Setup MSBuild	2026-05-03T05:01:51.1339705Z C:\Program Files\Microsoft Visual Studio\18\Enterprise
+Build + Test (x64 Release)	Setup .NET SDK	∩╗┐2026-05-03T05:01:51.1854274Z ##[group]Run actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:01:51.1854731Z with:
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:01:51.1854897Z   dotnet-version: 8.0.x
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:01:51.1855093Z   cache: false
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:01:51.1855264Z ##[endgroup]
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:01:51.4922173Z [command]"C:\Program Files\PowerShell\7\pwsh.exe" -NoLogo -Sta -NoProfile -NonInteractive -ExecutionPolicy Unrestricted -Command & 'D:\a\_actions\actions\setup-dotnet\c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7\externals\install-dotnet.ps1' -SkipNonVersionedFiles -Runtime dotnet -Channel LTS
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:01:59.5133489Z dotnet-install: Downloaded file https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.7/dotnet-runtime-10.0.7-win-x64.zip size is 36882144 bytes.
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:01:59.5135289Z dotnet-install: Either downloaded or local package size can not be measured. One of them may be corrupted.
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:01:59.5148415Z dotnet-install: Extracting the archive.
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:02:01.1992070Z dotnet-install: Note that the script does not ensure your Windows version is supported during the installation.
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:02:01.1994503Z dotnet-install: To check the list of supported versions, go to https://learn.microsoft.com/dotnet/core/install/windows#supported-versions
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:02:01.2005418Z dotnet-install: Installed version is 10.0.7
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:02:01.2007781Z dotnet-install: Installation finished
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:02:01.5962310Z [command]"C:\Program Files\PowerShell\7\pwsh.exe" -NoLogo -Sta -NoProfile -NonInteractive -ExecutionPolicy Unrestricted -Command & 'D:\a\_actions\actions\setup-dotnet\c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7\externals\install-dotnet.ps1' -SkipNonVersionedFiles -Channel 8.0
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:02:10.5264677Z dotnet-install: Downloaded file https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.420/dotnet-sdk-8.0.420-win-x64.zip size is 285627496 bytes.
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:02:10.5269279Z dotnet-install: Either downloaded or local package size can not be measured. One of them may be corrupted.
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:02:10.5294376Z dotnet-install: Extracting the archive.
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:02:32.1629765Z dotnet-install: Note that the script does not ensure your Windows version is supported during the installation.
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:02:32.1631681Z dotnet-install: To check the list of supported versions, go to https://learn.microsoft.com/dotnet/core/install/windows#supported-versions
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:02:32.1632682Z dotnet-install: Installed version is 8.0.420
+Build + Test (x64 Release)	Setup .NET SDK	2026-05-03T05:02:32.1635974Z dotnet-install: Installation finished
+Build + Test (x64 Release)	Read version.json	∩╗┐2026-05-03T05:02:32.3003459Z ##[group]Run $v = (Get-Content version.json | ConvertFrom-Json).version
+Build + Test (x64 Release)	Read version.json	2026-05-03T05:02:32.3004051Z [36;1m$v = (Get-Content version.json | ConvertFrom-Json).version[0m
+Build + Test (x64 Release)	Read version.json	2026-05-03T05:02:32.3004484Z [36;1m"version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append[0m
+Build + Test (x64 Release)	Read version.json	2026-05-03T05:02:32.3073879Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+Build + Test (x64 Release)	Read version.json	2026-05-03T05:02:32.3074224Z env:
+Build + Test (x64 Release)	Read version.json	2026-05-03T05:02:32.3074475Z   DOTNET_ROOT: C:\Program Files\dotnet
+Build + Test (x64 Release)	Read version.json	2026-05-03T05:02:32.3074846Z ##[endgroup]
+Build + Test (x64 Release)	Build solution	∩╗┐2026-05-03T05:02:33.1867199Z ##[group]Run msbuild Win11-XISF-Shell-Extensions.sln `
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:33.1867695Z [36;1mmsbuild Win11-XISF-Shell-Extensions.sln `[0m
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:33.1867972Z [36;1m  /restore `[0m
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:33.1868188Z [36;1m  /p:Configuration=Release `[0m
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:33.1868440Z [36;1m  /p:Platform=x64 `[0m
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:33.1868676Z [36;1m  /p:RestoreLockedMode=true `[0m
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:33.1868917Z [36;1m  /p:XISFVersion=0.1.0 `[0m
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:33.1869149Z [36;1m  /p:XISFBuildNumber=62 `[0m
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:33.1869375Z [36;1m  /m /v:minimal /nologo[0m
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:33.1933004Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:33.1933330Z env:
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:33.1933504Z   DOTNET_ROOT: C:\Program Files\dotnet
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:33.1934002Z ##[endgroup]
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:37.5185911Z 
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:47.3930880Z   Determining projects to restore...
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:49.0569517Z   Restored D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\PropertyHandler\XISFPropertyHandler\XISFPropertyHandler.vcxproj (in 1.1 sec).
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:49.0571125Z   Restored D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\PreviewHandler\XISFPreviewHandler\XISFPreviewHandler.vcxproj (in 1.09 sec).
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:49.0738186Z   Restored D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\ShellExtensionHost\ShellExtensionHost\ShellExtensionHost.vcxproj (in 11 ms).
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:49.2303710Z   Restored D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\Installer\XISFInstaller\XISFInstaller.wixproj (in 168 ms).
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:49.2416449Z   Restored D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\Filter\XISFFilter\XISFFilter.vcxproj (in 0.7 ms).
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:56.2005665Z   Restored D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\Installer\XISFInstallerTests\XISFInstallerTests.csproj (in 7.12 sec).
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:56.2008032Z   Restored D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\Documentation.Tests\DocumentationTests.csproj (in 6.95 sec).
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:56.9842914Z   ShellExtensionHostTests.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:56.9844315Z   ComputedProperties.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:02:56.9845093Z   ShellExtensionHost.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:03.2142620Z   ConstellationDB.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:03.5559045Z   Sha256.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:04.5826591Z   CatalogInstaller.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:04.7414618Z ##[error]D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\ShellExtensionHost\ShellExtensionHost\src\ShellExtensionHost.cpp(1667,14): error C2196: case value '1030' already used [D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\ShellExtensionHost\ShellExtensionHost\ShellExtensionHost.vcxproj]
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:04.7825038Z ##[error]D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\ShellExtensionHost\ShellExtensionHost\src\ShellExtensionHost.cpp(1668,14): error C2196: case value '1031' already used [D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\ShellExtensionHost\ShellExtensionHost\ShellExtensionHost.vcxproj]
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:04.8159125Z ##[error]D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\ShellExtensionHost\ShellExtensionHost\src\ShellExtensionHost.cpp(1683,14): error C2196: case value '1034' already used [D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\ShellExtensionHost\ShellExtensionHost\ShellExtensionHost.vcxproj]
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:04.8421140Z ##[error]D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\ShellExtensionHost\ShellExtensionHost\src\ShellExtensionHost.cpp(1693,14): error C2196: case value '1036' already used [D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\ShellExtensionHost\ShellExtensionHost\ShellExtensionHost.vcxproj]
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:06.1295307Z   Paths.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:06.2072934Z   dllmain.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:06.9943279Z   HostSettings.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:07.8723859Z   ClassFactory.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:08.5040585Z   HostSettings.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:08.8542825Z   Paths.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:10.4089045Z   CatalogInstaller.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:10.7710190Z   DSOCatalog.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:11.1423496Z   Sha256.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:13.5095658Z   XISFPropertyHandlerTests.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:14.1344265Z   HandlerSettings.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:14.3697700Z      Creating library D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\ShellExtensionHostTests.lib and object D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\ShellExtensionHostTests.exp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:14.3783789Z   Generating code
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:14.7985944Z   PixelStatistics.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:14.8321977Z   Previous IPDB not found, fall back to full compilation.
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:17.8923907Z   All 918 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:17.9065104Z   Finished generating code
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:18.6917253Z   ShellExtensionHostTests.vcxproj -> D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\ShellExtensionHostTests.dll
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:18.7655114Z C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(2621,5): warning : Remote deployment might be slow/inefficient. Could not find a part of the path 'D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\ShellExtensionHost\ShellExtensionHostTests\x64\Release\ShellExtensionHostTests.dll.recipe'. [D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\ShellExtensionHost\ShellExtensionHostTests\ShellExtensionHostTests.vcxproj]
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:18.9226687Z   PropertyStore.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:19.0725129Z   dllmain.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:21.0266196Z   XISFParser.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:21.7276882Z   HandlerSettings.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:22.5147898Z   DSOAliasDB.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:22.6699701Z   ThumbnailProvider.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:23.6226548Z   DSOAliasDB.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:25.0011828Z   PropertySheetHandler.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:26.0502999Z   ComputedProperties.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:28.3611309Z   PreviewHandler.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:28.6772350Z   XISFParser.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:29.6506169Z   PixelStatistics.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:31.2675033Z   XISFParser.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:32.5467810Z   PropertyStore.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:33.3101331Z      Creating library D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\XISFPropertyHandler.lib and object D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\XISFPropertyHandler.exp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:33.3458283Z   Generating code
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:33.4665947Z   Previous IPDB not found, fall back to full compilation.
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:43.9997691Z      Creating library D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\XISFPreviewHandler.lib and object D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\XISFPreviewHandler.exp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:44.0416407Z   Generating code
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:44.1226391Z   Previous IPDB not found, fall back to full compilation.
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:44.1875443Z   DSOCatalog.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:44.7216794Z   All 1497 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:44.7309569Z   Finished generating code
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:44.8873688Z   All 2318 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:44.9218352Z   Finished generating code
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:45.5279917Z   XISFPreviewHandler.vcxproj -> D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\XISFPreviewHandler.dll
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:45.5430772Z   XISFPropertyHandler.vcxproj -> D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\XISFPropertyHandler.dll
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:45.5492532Z C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(2621,5): warning : Remote deployment might be slow/inefficient. Could not find a part of the path 'D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\PropertyHandler\XISFPropertyHandler\x64\Release\XISFPropertyHandler.dll.recipe'. [D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\PropertyHandler\XISFPropertyHandler\XISFPropertyHandler.vcxproj]
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:45.5528612Z C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(2621,5): warning : Remote deployment might be slow/inefficient. Could not find a part of the path 'D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\PreviewHandler\XISFPreviewHandler\x64\Release\XISFPreviewHandler.dll.recipe'. [D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\PreviewHandler\XISFPreviewHandler\XISFPreviewHandler.vcxproj]
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:45.7267995Z   XISFPreviewHandlerTests.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:46.0201973Z   ConstellationDB.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:47.6705213Z   PropertySheetHandler.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:48.2537276Z   InitializePerf.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:48.8522216Z   XISFParser.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:51.4404291Z   PreviewHandler.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:51.9078393Z   XISFParser.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:53.9586406Z      Creating library D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\XISFPropertyHandlerTests.lib and object D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\XISFPropertyHandlerTests.exp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:53.9918201Z   Generating code
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:54.0247074Z   Previous IPDB not found, fall back to full compilation.
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:54.9026345Z   ThumbnailProvider.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:03:55.5357797Z   DSOAliasDB.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:00.3746509Z   ComputedProperties.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:05.9787031Z   All 3191 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:06.0618393Z   Finished generating code
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:06.4670603Z   PixelStatistics.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:07.0794184Z   XISFPropertyHandlerTests.vcxproj -> D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\XISFPropertyHandlerTests.dll
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:07.0915806Z C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(2621,5): warning : Remote deployment might be slow/inefficient. Could not find a part of the path 'D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\PropertyHandler\XISFPropertyHandlerTests\x64\Release\XISFPropertyHandlerTests.dll.recipe'. [D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\PropertyHandler\XISFPropertyHandlerTests\XISFPropertyHandlerTests.vcxproj]
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:07.2288501Z      Creating library D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\XISFPreviewHandlerTests.lib and object D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\XISFPreviewHandlerTests.exp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:07.2379897Z   Generating code
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:07.3766374Z   Previous IPDB not found, fall back to full compilation.
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:07.3860343Z   dllmain.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:11.9156962Z   PropertyStore.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:12.3777373Z   ClassFactory.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:14.3149731Z   All 2083 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:14.3481449Z   Finished generating code
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:15.1370570Z   XISFPreviewHandlerTests.vcxproj -> D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\XISFPreviewHandlerTests.dll
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:15.1704140Z C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(2621,5): warning : Remote deployment might be slow/inefficient. Could not find a part of the path 'D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\PreviewHandler\XISFPreviewHandlerTests\x64\Release\XISFPreviewHandlerTests.dll.recipe'. [D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\PreviewHandler\XISFPreviewHandlerTests\XISFPreviewHandlerTests.vcxproj]
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:15.1730484Z   HandlerSettings.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:15.3639118Z   XISFFilterTests.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:16.0399019Z   XISFFilter.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:20.9898191Z   HandlerSettings.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:20.9898612Z   DSOCatalog.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:20.9899147Z   XISFParser.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:20.9899419Z   ConstellationDB.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:20.9899713Z   XISFFilter.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:23.2003631Z   ConcurrencyStress.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:23.5577196Z      Creating library D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\XISFFilter.lib and object D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\XISFFilter.exp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:23.5916221Z   Generating code
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:23.6024846Z   Previous IPDB not found, fall back to full compilation.
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:24.0015764Z   XISFParser.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:27.1460885Z   All 1043 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:27.1632784Z   Finished generating code
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:27.7122923Z   XISFFilter.vcxproj -> D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\XISFFilter.dll
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:27.7442500Z C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(2621,5): warning : Remote deployment might be slow/inefficient. Could not find a part of the path 'D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\Filter\XISFFilter\x64\Release\XISFFilter.dll.recipe'. [D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\Filter\XISFFilter\XISFFilter.vcxproj]
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:28.8590073Z      Creating library D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\XISFFilterTests.lib and object D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\XISFFilterTests.exp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:28.9062550Z   Generating code
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:28.9144054Z   Previous IPDB not found, fall back to full compilation.
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:29.4682934Z   MemoryLeakTest.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:29.7649400Z ##[error]D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\Installer\XISFInstaller\Package.wxs(58): error WIX0103: Cannot find the File file 'D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\Installer\XISFInstaller\..\..\x64\Release\XISFShellExtensionHost.exe'. The following paths were checked: D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\Installer\XISFInstaller\..\..\x64\Release\XISFShellExtensionHost.exe [D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\Installer\XISFInstaller\XISFInstaller.wixproj]
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:33.3026440Z   All 1481 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:33.3599478Z   Finished generating code
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:33.5565456Z   ParserPerf.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:33.8554957Z   XISFFilterTests.vcxproj -> D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\XISFFilterTests.dll
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:33.8993715Z C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(2621,5): warning : Remote deployment might be slow/inefficient. Could not find a part of the path 'D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\Filter\XISFFilterTests\x64\Release\XISFFilterTests.dll.recipe'. [D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\Filter\XISFFilterTests\XISFFilterTests.vcxproj]
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:37.4253788Z   PropertyStorePerf.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:43.0020741Z   ThumbnailPerf.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:45.9455255Z   DocumentationTests -> D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\Documentation.Tests\bin\Release\net8.0\DocumentationTests.dll
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:45.9881203Z   XISFInstallerTests -> D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\Installer\XISFInstallerTests\bin\Release\net8.0-windows\XISFInstallerTests.dll
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:47.6397809Z   ThumbnailProvider.cpp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:51.5244525Z      Creating library D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\PerformanceTests.lib and object D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\PerformanceTests.exp
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:51.5292437Z   Generating code
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:51.6868012Z   Previous IPDB not found, fall back to full compilation.
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:59.4713110Z   All 3173 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:59.4995482Z   Finished generating code
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:59.9045473Z   PerformanceTests.vcxproj -> D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\x64\Release\PerformanceTests.dll
+Build + Test (x64 Release)	Build solution	2026-05-03T05:04:59.9274084Z C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(2621,5): warning : Remote deployment might be slow/inefficient. Could not find a part of the path 'D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\PerformanceTests\x64\Release\PerformanceTests\PerformanceTests.dll.recipe'. [D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions\PerformanceTests\PerformanceTests.vcxproj]
+Build + Test (x64 Release)	Build solution	2026-05-03T05:05:00.2173031Z ##[error]Process completed with exit code 1.
+Build + Test (x64 Release)	Upload test results	∩╗┐2026-05-03T05:05:00.2438459Z ##[group]Run actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+Build + Test (x64 Release)	Upload test results	2026-05-03T05:05:00.2438968Z with:
+Build + Test (x64 Release)	Upload test results	2026-05-03T05:05:00.2439207Z   name: test-results
+Build + Test (x64 Release)	Upload test results	2026-05-03T05:05:00.2439449Z   path: TestResults/**/*.trx
+Build + Test (x64 Release)	Upload test results	2026-05-03T05:05:00.2439731Z   if-no-files-found: warn
+Build + Test (x64 Release)	Upload test results	2026-05-03T05:05:00.2439971Z   compression-level: 6
+Build + Test (x64 Release)	Upload test results	2026-05-03T05:05:00.2440211Z   overwrite: false
+Build + Test (x64 Release)	Upload test results	2026-05-03T05:05:00.2440430Z   include-hidden-files: false
+Build + Test (x64 Release)	Upload test results	2026-05-03T05:05:00.2440707Z   archive: true
+Build + Test (x64 Release)	Upload test results	2026-05-03T05:05:00.2440920Z env:
+Build + Test (x64 Release)	Upload test results	2026-05-03T05:05:00.2441166Z   DOTNET_ROOT: C:\Program Files\dotnet
+Build + Test (x64 Release)	Upload test results	2026-05-03T05:05:00.2441465Z ##[endgroup]
+Build + Test (x64 Release)	Upload test results	2026-05-03T05:05:00.7126126Z ##[warning]No files were found with the provided path: TestResults/**/*.trx. No artifacts will be uploaded.
+Build + Test (x64 Release)	Post Checkout	∩╗┐2026-05-03T05:05:00.7694619Z Post job cleanup.
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:01.1758921Z [command]"C:\Program Files\Git\bin\git.exe" version
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:01.2709378Z git version 2.53.0.windows.2
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:01.2864855Z Temporarily overriding HOME='D:\a\_temp\96675087-2e32-4cce-82df-e9f10eacb6c7' before making global git config changes
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:01.2882954Z Adding repository directory to the temporary git global config as a safe directory
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:01.2884506Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\XISF-Shell-Extensions\XISF-Shell-Extensions
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:01.3360068Z Removing SSH command configuration
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:01.3375532Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:01.3746343Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:01.9689810Z Removing HTTP extra header
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:01.9702188Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.0028082Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.5659337Z Removing includeIf entries pointing to credentials config files
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.5672799Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.5946519Z includeif.gitdir:D:/a/XISF-Shell-Extensions/XISF-Shell-Extensions/.git.path
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.5947651Z includeif.gitdir:D:/a/XISF-Shell-Extensions/XISF-Shell-Extensions/.git/worktrees/*.path
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.5949213Z includeif.gitdir:/github/workspace/.git.path
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.5950131Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.5991718Z [command]"C:\Program Files\Git\bin\git.exe" config --local --get-all includeif.gitdir:D:/a/XISF-Shell-Extensions/XISF-Shell-Extensions/.git.path
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.6253122Z D:\a\_temp\git-credentials-8153cbb2-e9b1-4e61-91b2-c1ab91f98e5d.config
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.6298712Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset includeif.gitdir:D:/a/XISF-Shell-Extensions/XISF-Shell-Extensions/.git.path D:\a\_temp\git-credentials-8153cbb2-e9b1-4e61-91b2-c1ab91f98e5d.config
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.6603026Z [command]"C:\Program Files\Git\bin\git.exe" config --local --get-all includeif.gitdir:D:/a/XISF-Shell-Extensions/XISF-Shell-Extensions/.git/worktrees/*.path
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.6865213Z D:\a\_temp\git-credentials-8153cbb2-e9b1-4e61-91b2-c1ab91f98e5d.config
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.6909327Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset includeif.gitdir:D:/a/XISF-Shell-Extensions/XISF-Shell-Extensions/.git/worktrees/*.path D:\a\_temp\git-credentials-8153cbb2-e9b1-4e61-91b2-c1ab91f98e5d.config
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.7214901Z [command]"C:\Program Files\Git\bin\git.exe" config --local --get-all includeif.gitdir:/github/workspace/.git.path
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.7476608Z /github/runner_temp/git-credentials-8153cbb2-e9b1-4e61-91b2-c1ab91f98e5d.config
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.7517962Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset includeif.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-8153cbb2-e9b1-4e61-91b2-c1ab91f98e5d.config
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.7819612Z [command]"C:\Program Files\Git\bin\git.exe" config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.8118564Z /github/runner_temp/git-credentials-8153cbb2-e9b1-4e61-91b2-c1ab91f98e5d.config
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.8193065Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-8153cbb2-e9b1-4e61-91b2-c1ab91f98e5d.config
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:02.8534332Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+Build + Test (x64 Release)	Post Checkout	2026-05-03T05:05:03.3967642Z Removing credentials config 'D:\a\_temp\git-credentials-8153cbb2-e9b1-4e61-91b2-c1ab91f98e5d.config'
+Build + Test (x64 Release)	Complete job	∩╗┐2026-05-03T05:05:03.4170681Z Cleaning up orphan processes
+Build + Test (x64 Release)	Complete job	2026-05-03T05:05:03.4370906Z Terminate orphan process: pid (2648) (MSBuild)
+Build + Test (x64 Release)	Complete job	2026-05-03T05:05:03.4444296Z Terminate orphan process: pid (7544) (conhost)
+Build + Test (x64 Release)	Complete job	2026-05-03T05:05:03.4582297Z Terminate orphan process: pid (1044) (vctip)
+Build + Test (x64 Release)	Complete job	2026-05-03T05:05:03.4732245Z Terminate orphan process: pid (764) (mspdbsrv)
+Build + Test (x64 Release)	Complete job	2026-05-03T05:05:03.4906156Z Terminate orphan process: pid (7100) (VBCSCompiler)
+Build + Test (x64 Release)	Complete job	2026-05-03T05:05:03.4999800Z Terminate orphan process: pid (7316) (conhost)

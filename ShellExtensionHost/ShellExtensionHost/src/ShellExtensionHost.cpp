@@ -69,8 +69,7 @@ COLORREF g_filterIconColor = RGB(180, 32, 32);
 COLORREF g_ngcIconColor = RGB(180, 32, 32);
 COLORREF g_addIconColor = RGB(180, 32, 32);
 COLORREF g_shpIconColor = RGB(180, 32, 32);
-COLORREF g_cbnIconColor = RGB(180, 32, 32);
-COLORREF g_cnmIconColor = RGB(180, 32, 32);
+COLORREF g_cstIconColor = RGB(180, 32, 32);
 
 // Tooltip text storage — keeps strings alive for the tooltip control
 std::unordered_map<int, std::wstring> g_tooltipStrings;
@@ -82,10 +81,8 @@ std::wstring g_tipAddGitHub;
 std::wstring g_tipAddLocal;
 std::wstring g_tipShpGitHub;
 std::wstring g_tipShpLocal;
-std::wstring g_tipCbnGitHub;
-std::wstring g_tipCbnLocal;
-std::wstring g_tipCnmGitHub;
-std::wstring g_tipCnmLocal;
+std::wstring g_tipCstGitHub;
+std::wstring g_tipCstLocal;
 std::wstring g_tracePath;
 bool g_traceRunning = false;
 std::atomic<bool> g_traceExportInProgress{false};
@@ -795,8 +792,7 @@ void SetStatusLabelColorById(int id, COLORREF color)
     else if (id == IDC_STATIC_NGC_MATCH) g_ngcIconColor = color;
     else if (id == IDC_STATIC_ADD_MATCH) g_addIconColor = color;
     else if (id == IDC_STATIC_SHP_MATCH) g_shpIconColor = color;
-    else if (id == IDC_STATIC_CBN_MATCH) g_cbnIconColor = color;
-    else if (id == IDC_STATIC_CNM_MATCH) g_cnmIconColor = color;
+    else if (id == IDC_STATIC_CST_MATCH) g_cstIconColor = color;
 }
 
 void SetStatusIconTextAndColor(int id, const wchar_t* icon, COLORREF color)
@@ -925,8 +921,7 @@ void UpdateCatalogActionButtons()
     setRow(IDC_BTN_FETCH_NGC, IDC_BTN_REMOVE_NGC, catalogspec::kNGC);
     setRow(IDC_BTN_FETCH_ADD, IDC_BTN_REMOVE_ADD, catalogspec::kAddendum);
     setRow(IDC_BTN_FETCH_SHP, IDC_BTN_REMOVE_SHP, catalogspec::kSharpless);
-    setRow(IDC_BTN_FETCH_CBN, IDC_BTN_REMOVE_CBN, catalogspec::kConstellationBoundaries);
-    setRow(IDC_BTN_FETCH_CNM, IDC_BTN_REMOVE_CNM, catalogspec::kConstellationNames);
+    setRow(IDC_BTN_FETCH_CST, IDC_BTN_REMOVE_CST, catalogspec::kConstellations);
 }
 
 std::wstring BuildCommitLinkText()
@@ -980,9 +975,7 @@ std::wstring CatalogLocalVersion(const installer::Presence& p)
     return L"?";
 }
 
-void RefreshPresenceRow(int githubLabelId, int localLabelId, int matchLabelId,
-                        std::wstring& tipGitHubStorage, std::wstring& tipLocalStorage,
-                        const catalogspec::CatalogSource& src)
+void RefreshPresenceRow(int githubLabelId, int localLabelId, int matchLabelId, const catalogspec::CatalogSource& src)
 {
     const auto ghFull = std::wstring(src.expectedSha256);
     SetDlgItemTextW(g_hDlg, githubLabelId, CatalogPinnedVersion(src).c_str());
@@ -992,8 +985,19 @@ void RefreshPresenceRow(int githubLabelId, int localLabelId, int matchLabelId,
     SetDlgItemTextW(g_hDlg, localLabelId, local.c_str());
 
     std::wstring localFull = p.computedHash.empty() ? L"" : p.computedHash;
-    SetHashCellTooltip(githubLabelId, tipGitHubStorage, ghFull);
-    SetHashCellTooltip(localLabelId, tipLocalStorage, localFull.empty() ? L"(missing)" : localFull);
+    if (githubLabelId == IDC_STATIC_NGC_GITHUB) {
+        SetHashCellTooltip(IDC_STATIC_NGC_GITHUB, g_tipNgcGitHub, ghFull);
+        SetHashCellTooltip(IDC_STATIC_NGC_LOCAL, g_tipNgcLocal, localFull.empty() ? L"(missing)" : localFull);
+    } else if (githubLabelId == IDC_STATIC_ADD_GITHUB) {
+        SetHashCellTooltip(IDC_STATIC_ADD_GITHUB, g_tipAddGitHub, ghFull);
+        SetHashCellTooltip(IDC_STATIC_ADD_LOCAL, g_tipAddLocal, localFull.empty() ? L"(missing)" : localFull);
+    } else if (githubLabelId == IDC_STATIC_SHP_GITHUB) {
+        SetHashCellTooltip(IDC_STATIC_SHP_GITHUB, g_tipShpGitHub, ghFull);
+        SetHashCellTooltip(IDC_STATIC_SHP_LOCAL, g_tipShpLocal, localFull.empty() ? L"(missing)" : localFull);
+    } else {
+        SetHashCellTooltip(IDC_STATIC_CST_GITHUB, g_tipCstGitHub, ghFull);
+        SetHashCellTooltip(IDC_STATIC_CST_LOCAL, g_tipCstLocal, localFull.empty() ? L"(missing)" : localFull);
+    }
 
     if (p.state == installer::PresenceState::PresentVerified) {
         SetStatusIconTextAndColor(matchLabelId, L"✓", g_iconOkColor);
@@ -1010,16 +1014,10 @@ void RefreshPresenceRow(int githubLabelId, int localLabelId, int matchLabelId,
 void RefreshAllPresence()
 {
     EnsureHashTooltipHost();
-    RefreshPresenceRow(IDC_STATIC_NGC_GITHUB, IDC_STATIC_NGC_LOCAL, IDC_STATIC_NGC_MATCH,
-                       g_tipNgcGitHub, g_tipNgcLocal, catalogspec::kNGC);
-    RefreshPresenceRow(IDC_STATIC_ADD_GITHUB, IDC_STATIC_ADD_LOCAL, IDC_STATIC_ADD_MATCH,
-                       g_tipAddGitHub, g_tipAddLocal, catalogspec::kAddendum);
-    RefreshPresenceRow(IDC_STATIC_SHP_GITHUB, IDC_STATIC_SHP_LOCAL, IDC_STATIC_SHP_MATCH,
-                       g_tipShpGitHub, g_tipShpLocal, catalogspec::kSharpless);
-    RefreshPresenceRow(IDC_STATIC_CBN_GITHUB, IDC_STATIC_CBN_LOCAL, IDC_STATIC_CBN_MATCH,
-                       g_tipCbnGitHub, g_tipCbnLocal, catalogspec::kConstellationBoundaries);
-    RefreshPresenceRow(IDC_STATIC_CNM_GITHUB, IDC_STATIC_CNM_LOCAL, IDC_STATIC_CNM_MATCH,
-                       g_tipCnmGitHub, g_tipCnmLocal, catalogspec::kConstellationNames);
+    RefreshPresenceRow(IDC_STATIC_NGC_GITHUB, IDC_STATIC_NGC_LOCAL, IDC_STATIC_NGC_MATCH, catalogspec::kNGC);
+    RefreshPresenceRow(IDC_STATIC_ADD_GITHUB, IDC_STATIC_ADD_LOCAL, IDC_STATIC_ADD_MATCH, catalogspec::kAddendum);
+    RefreshPresenceRow(IDC_STATIC_SHP_GITHUB, IDC_STATIC_SHP_LOCAL, IDC_STATIC_SHP_MATCH, catalogspec::kSharpless);
+    RefreshPresenceRow(IDC_STATIC_CST_GITHUB, IDC_STATIC_CST_LOCAL, IDC_STATIC_CST_MATCH, catalogspec::kConstellations);
 }
 
 void SetProgressText(const std::wstring& s)
@@ -1031,14 +1029,12 @@ void SetBusy(bool busy)
 {
     EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_FETCH_NGC), !busy);
     EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_FETCH_ADD), !busy);
-    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_FETCH_SHP), !busy);
-    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_FETCH_CBN), !busy);
-    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_FETCH_CNM), !busy);
     EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_REMOVE_NGC), !busy);
     EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_REMOVE_ADD), !busy);
+    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_FETCH_SHP), !busy);
     EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_REMOVE_SHP), !busy);
-    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_REMOVE_CBN), !busy);
-    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_REMOVE_CNM), !busy);
+    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_FETCH_CST), !busy);
+    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_REMOVE_CST), !busy);
     EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_IMPORT_FILE),  !busy);
     g_opInProgress = busy;
 }
@@ -1108,23 +1104,17 @@ void OnFetchOnline()
 
 int ChooseCatalogIndexForImport()
 {
+    // Build a message showing all catalogs with their indices
     int r = MessageBoxW(g_hDlg,
         L"Which catalog file are you importing?\r\n\r\n"
-        L"Yes = NGC.csv\r\nNo = addendum.csv\r\nCancel = choose more...\r\n\r\n"
+        L"Yes = NGC.csv\r\nNo = addendum.csv\r\nCancel = abort\r\n\r\n"
+        L"To import sharpless.csv or constellations.csv, use 'Open Catalog Folder' "
+        L"and place the file there manually, then use Install/Update to verify it.\r\n\r\n"
         L"The file's SHA-256 will be verified against the pinned value. "
         L"Files that don't match are rejected.",
         L"Select Catalog", MB_YESNOCANCEL | MB_ICONQUESTION);
     if (r == IDYES) return 0;
     if (r == IDNO)  return 1;
-    // Extended choice for project-hosted files
-    int r2 = MessageBoxW(g_hDlg,
-        L"Select a project-hosted catalog file:\r\n\r\n"
-        L"Yes = sharpless.csv\r\nNo = constellation_boundaries.csv\r\n"
-        L"Cancel = constellation_names.csv",
-        L"Select Catalog (project files)", MB_YESNOCANCEL | MB_ICONQUESTION);
-    if (r2 == IDYES)    return 2;
-    if (r2 == IDNO)     return 3;
-    if (r2 == IDCANCEL) return 4;
     return -1;
 }
 
@@ -1240,11 +1230,10 @@ void OnCopyExpectedHashes()
     text += catalogspec::kOpenNGCCommit;
     text += L"\r\nDate: ";
     text += catalogspec::kOpenNGCCommitDate;
-    text += L"\r\n\r\n";
-    text += L"Project data pinned commit: ";
-    text += catalogspec::kProjectDataCommit;
+    text += L"\r\n\r\nProject data commit: ";
+    text += catalogspec::kXISFDataCommit;
     text += L"\r\nDate: ";
-    text += catalogspec::kProjectDataCommitDate;
+    text += catalogspec::kXISFDataCommitDate;
     text += L"\r\n\r\n";
     for (auto* src : catalogspec::kAllCatalogs) {
         text += src->fileName; text += L"  sha256 = ";

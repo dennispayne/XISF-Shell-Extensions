@@ -26,6 +26,7 @@ static std::shared_ptr<DSOCatalog> s_dsoCatalog;
 static std::vector<std::string> s_catalogPriority;
 static double s_matchToleranceDeg = 0.5;
 static auto s_catalogOnceFlag = std::make_shared<std::once_flag>();
+static auto s_constellOnceFlag = std::make_shared<std::once_flag>();
 
 static std::string ComputeRAHour(double raDegrees)
 {
@@ -175,6 +176,29 @@ static void EnsureCatalogLoaded()
 }
 
 // ---------------------------------------------------------------------------
+// Constellation data loading (Standard tier and above)
+// ---------------------------------------------------------------------------
+
+static void EnsureConstellationLoaded()
+{
+    std::call_once(*s_constellOnceFlag, []() {
+        PWSTR pszBase = nullptr;
+        if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &pszBase)) || !pszBase)
+            return;
+        std::wstring wpath = std::wstring(pszBase) + L"\\XISFShellExtension\\catalogs\\constellations.csv";
+        CoTaskMemFree(pszBase);
+        int len = WideCharToMultiByte(CP_UTF8, 0, wpath.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        if (len <= 0) return;
+        std::string path(static_cast<size_t>(len - 1), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, wpath.c_str(), -1, path.data(), len, nullptr, nullptr);
+        bool ok = ConstellationDB::LoadFromCSV(path);
+        WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_CATALOG,
+            L"ConstellationDBLoaded Source=%ls OK=%u",
+            ok ? L"localappdata-csv" : L"none", ok ? 1u : 0u);
+    });
+}
+
+// ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
 
@@ -201,12 +225,15 @@ std::vector<ComputedPropertyEntry> PopulateComputedProperties(
         AddString(result, PKEY_XISF_DecBand, ComputeDecBand(computedDec));
     }
 
-    // Constellation
+    // Constellation — requires runtime-loaded constellations.csv
     std::string constellation;
-    if (hasComputedCoords) {
+    if (hasComputedCoords && IsConstellationEnabled(inputs.tier)) {
+        EnsureConstellationLoaded();
         constellation = ConstellationDB::Identify(computedRA, computedDec);
         if (!constellation.empty()) {
-            AddString(result, PKEY_XISF_Constellation, ConstellationDB::FullName(constellation));
+            std::string fullName = ConstellationDB::FullName(constellation);
+            AddString(result, PKEY_XISF_Constellation,
+                      fullName.empty() ? constellation : fullName);
         }
     }
 
@@ -312,7 +339,10 @@ std::vector<ComputedPropertyEntry> PopulateComputedProperties(
     std::vector<std::string> keywords;
     if (!inputs.filterName.empty()) keywords.push_back(inputs.filterName);
     if (!inputs.imageType.empty()) keywords.push_back(inputs.imageType);
-    if (!constellation.empty()) keywords.push_back(ConstellationDB::FullName(constellation));
+    if (!constellation.empty()) {
+        std::string full = ConstellationDB::FullName(constellation);
+        keywords.push_back(full.empty() ? constellation : full);
+    }
 
     if (IsDSOSearchEnabled(inputs.tier) && s_dsoCatalog) {
         if (!inputs.objectName.empty()) {

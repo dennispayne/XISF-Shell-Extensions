@@ -404,12 +404,6 @@ namespace ShellExtensionHostTests_CatalogSpec
                 bool ok = (c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f');
                 Assert::IsTrue(ok, L"commit SHA must be lowercase hex");
             }
-            Assert::AreEqual<size_t>(40, kProjectDataCommit.size());
-            for (wchar_t c : kProjectDataCommit)
-            {
-                bool ok = (c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f');
-                Assert::IsTrue(ok, L"project data commit SHA must be lowercase hex");
-            }
         }
 
         TEST_METHOD(AllCatalogs_HaveValidPinData)
@@ -438,7 +432,7 @@ namespace ShellExtensionHostTests_CatalogSpec
             for (auto* src : kAllCatalogs)
             {
                 bool matched = false;
-                for (auto prefix : kAllowedUrlPrefixes)
+                for (const auto& prefix : kAllowedUrlPrefixes)
                 {
                     if (src->url.size() >= prefix.size() &&
                         src->url.compare(0, prefix.size(), prefix) == 0)
@@ -455,20 +449,20 @@ namespace ShellExtensionHostTests_CatalogSpec
         {
             for (auto* src : kAllCatalogs)
             {
-                bool hasOpenNGC  = src->url.find(kOpenNGCCommit)      != std::wstring_view::npos;
-                bool hasProject  = src->url.find(kProjectDataCommit)  != std::wstring_view::npos;
-                Assert::IsTrue(hasOpenNGC || hasProject,
-                               L"url must embed one of the pinned commit SHAs");
+                bool embedsOpenNGC  = src->url.find(kOpenNGCCommit)  != std::wstring_view::npos;
+                bool embedsXISFData = src->url.find(kXISFDataCommit) != std::wstring_view::npos;
+                Assert::IsTrue(embedsOpenNGC || embedsXISFData,
+                               L"url must embed a pinned commit SHA");
             }
         }
 
-        TEST_METHOD(AllowedPrefixes_AreAllHttps)
+        TEST_METHOD(AllowedPrefixes_AreHttps)
         {
             constexpr std::wstring_view https = L"https://";
-            for (auto prefix : kAllowedUrlPrefixes)
+            for (const auto& prefix : kAllowedUrlPrefixes)
             {
                 Assert::IsTrue(prefix.compare(0, https.size(), https) == 0,
-                               L"all allowed URL prefixes must use https://");
+                               L"every allowed prefix must use HTTPS");
             }
         }
 

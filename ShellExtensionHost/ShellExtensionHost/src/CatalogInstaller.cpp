@@ -252,7 +252,7 @@ Report InstallFromPinnedUrl(const catalogspec::CatalogSource& src,
     // Allow-list check: URL must begin with one of the compiled-in prefixes.
     {
         bool allowed = false;
-        for (auto prefix : catalogspec::kAllowedUrlPrefixes) {
+        for (const auto& prefix : catalogspec::kAllowedUrlPrefixes) {
             if (src.url.size() >= prefix.size() &&
                 std::wstring_view(src.url.data(), prefix.size()) == prefix) {
                 allowed = true;
