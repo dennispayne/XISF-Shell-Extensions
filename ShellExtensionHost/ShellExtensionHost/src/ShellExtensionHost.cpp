@@ -1460,8 +1460,7 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         if (id == IDC_STATIC_PROPERTY_STATUS || id == IDC_STATIC_PREVIEW_STATUS ||
             id == IDC_STATIC_FILTER_STATUS ||
             id == IDC_STATIC_NGC_MATCH || id == IDC_STATIC_ADD_MATCH ||
-            id == IDC_STATIC_SHP_MATCH || id == IDC_STATIC_CBN_MATCH ||
-            id == IDC_STATIC_CNM_MATCH) {
+            id == IDC_STATIC_SHP_MATCH || id == IDC_STATIC_CST_MATCH) {
             COLORREF color = g_iconBadColor;
             if (id == IDC_STATIC_PROPERTY_STATUS) color = g_propertyIconColor;
             else if (id == IDC_STATIC_PREVIEW_STATUS) color = g_previewIconColor;
@@ -1469,8 +1468,7 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             else if (id == IDC_STATIC_NGC_MATCH) color = g_ngcIconColor;
             else if (id == IDC_STATIC_ADD_MATCH) color = g_addIconColor;
             else if (id == IDC_STATIC_SHP_MATCH) color = g_shpIconColor;
-            else if (id == IDC_STATIC_CBN_MATCH) color = g_cbnIconColor;
-            else if (id == IDC_STATIC_CNM_MATCH) color = g_cnmIconColor;
+            else if (id == IDC_STATIC_CST_MATCH) color = g_cstIconColor;
             SetTextColor(hdc, color);
             SetBkColor(hdc, GetSysColor(COLOR_BTNFACE));
             SetBkMode(hdc, OPAQUE);
