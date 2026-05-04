@@ -84,3 +84,8 @@ TestResults/
 
 # Downloaded catalog data (optional local data files)
 PropertyHandler/XISFPropertyHandler/data/
+
+# Leftover troubleshooting / CI-trigger artifacts (do not re-commit)
+/build.log
+/logs.txt
+/build-trigger*.txt
