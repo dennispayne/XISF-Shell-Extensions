@@ -361,7 +361,7 @@ vstest.console.exe `
 # Run with coverage
 vstest.console.exe `
   x64\Release\XISFPropertyHandlerTests.dll `
-  /CodeCoverageSettings:CodeCoverage.runsettings `
+  /Settings:CodeCoverage.runsettings `
   /ResultsDirectory:TestResults
 ```
 

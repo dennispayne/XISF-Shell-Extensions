@@ -33,8 +33,12 @@
               <Include>
                 <ModulePath>.*XISFPropertyHandlerTests\.dll$</ModulePath>
                 <ModulePath>.*XISFPreviewHandlerTests\.dll$</ModulePath>
+                <ModulePath>.*XISFFilterTests\.dll$</ModulePath>
+                <ModulePath>.*ShellExtensionHostTests\.dll$</ModulePath>
                 <ModulePath>.*XISFPropertyHandler\.dll$</ModulePath>
                 <ModulePath>.*XISFPreviewHandler\.dll$</ModulePath>
+                <ModulePath>.*XISFFilter\.dll$</ModulePath>
+                <ModulePath>.*ShellExtensionHost\.dll$</ModulePath>
               </Include>
               <Exclude>
                 <ModulePath>.*CPPUnitTestFramework.*</ModulePath>
@@ -51,6 +55,8 @@
               <Include>
                 <Source>.*\\PropertyHandler\\XISFPropertyHandler\\src\\.*</Source>
                 <Source>.*\\PreviewHandler\\XISFPreviewHandler\\src\\.*</Source>
+                <Source>.*\\Filter\\XISFFilter\\src\\.*</Source>
+                <Source>.*\\ShellExtensionHost\\ShellExtensionHost\\src\\.*</Source>
               </Include>
               <Exclude>
                 <!-- COM registration / factory boilerplate — not unit-testable -->

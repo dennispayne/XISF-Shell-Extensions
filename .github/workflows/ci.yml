@@ -64,6 +64,16 @@ jobs:
           Split-Path $vstest | Out-File -FilePath $env:GITHUB_PATH -Append
           Write-Host "VSTest: $vstest"
 
+      - name: Setup coverage tools
+        shell: pwsh
+        run: |
+          # Pinned: dotnet-coverage merges native .coverage files to Cobertura;
+          # ReportGenerator builds the markdown summary + HTML report.
+          dotnet tool install --global dotnet-coverage --version 18.6.2
+          dotnet tool install --global dotnet-reportgenerator-globaltool --version 5.5.9
+          # De-risk the runner image: explicitly add the global tools dir to PATH.
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append
+
       - name: Download OpenNGC catalogs (third-party, pinned)
         shell: pwsh
         run: |
@@ -131,7 +141,7 @@ jobs:
             'x64\Release\XISFPreviewHandlerTests.dll'
           ) | Where-Object { Test-Path $_ }
           if ($tests.Count -eq 0) { throw "No test DLLs found." }
-          vstest.console.exe $tests --Platform:x64 --Logger:trx --ResultsDirectory:TestResults
+          vstest.console.exe $tests --Platform:x64 --Logger:trx --ResultsDirectory:TestResults /Settings:CodeCoverage.runsettings
 
       - name: Run performance tests (synthetic only)
         shell: pwsh
@@ -151,7 +161,7 @@ jobs:
             'x64\Release\XISFFilterTests.dll'
           ) | Where-Object { Test-Path $_ }
           if ($extra.Count -gt 0) {
-            vstest.console.exe $extra --Platform:x64 --Logger:trx --ResultsDirectory:TestResults\Extra
+            vstest.console.exe $extra --Platform:x64 --Logger:trx --ResultsDirectory:TestResults\Extra /Settings:CodeCoverage.runsettings
           }
 
       - name: Upload test results
@@ -160,6 +170,48 @@ jobs:
         with:
           name: test-results
           path: TestResults/**/*.trx
+          if-no-files-found: warn
+
+      - name: Generate coverage report
+        if: always()
+        shell: pwsh
+        run: |
+          # Native MS Code Coverage emits .coverage files under TestResults\<guid>\.
+          # Find them, then merge to a single Cobertura XML for ReportGenerator.
+          $coverage = Get-ChildItem -Path TestResults -Recurse -Filter *.coverage `
+                       -ErrorAction SilentlyContinue
+          if (-not $coverage -or $coverage.Count -eq 0) {
+            Write-Warning "No .coverage files found under TestResults — skipping coverage report."
+            return
+          }
+          Write-Host "Merging $($coverage.Count) .coverage file(s)..."
+          $inputs = $coverage | ForEach-Object { $_.FullName }
+          dotnet-coverage merge -o coverage.cobertura.xml -f cobertura @inputs
+          if (-not (Test-Path coverage.cobertura.xml)) {
+            Write-Warning "dotnet-coverage merge produced no output — skipping report."
+            return
+          }
+          reportgenerator `
+            -reports:coverage.cobertura.xml `
+            -targetdir:CoverageReport `
+            "-reporttypes:Html;MarkdownSummaryGithub;TextSummary"
+          if (Test-Path CoverageReport\SummaryGithub.md) {
+            "## Code Coverage" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            Get-Content CoverageReport\SummaryGithub.md | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+          if (Test-Path CoverageReport\Summary.txt) {
+            Write-Host "----- Coverage summary -----"
+            Get-Content CoverageReport\Summary.txt | Write-Host
+          }
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: coverage-html
+          path: |
+            CoverageReport/**
+            coverage.cobertura.xml
           if-no-files-found: warn
 
       - name: Build MSI installer

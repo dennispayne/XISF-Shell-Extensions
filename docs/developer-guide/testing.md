@@ -243,7 +243,7 @@ vstest.console.exe x64\Release\XISFPropertyHandlerTests.dll `
 **Run with code coverage:**
 ```powershell
 vstest.console.exe x64\Release\XISFPropertyHandlerTests.dll `
-  /CodeCoverageSettings:CodeCoverage.runsettings `
+  /Settings:CodeCoverage.runsettings `
   /ResultsDirectory:TestResults
 
 # View coverage report
@@ -288,7 +288,7 @@ msbuild PropertyHandler\XISFPropertyHandlerTests\XISFPropertyHandlerTests.vcxpro
 
 # Run with coverage
 vstest.console.exe x64\Release\XISFPropertyHandlerTests.dll `
-  /CodeCoverageSettings:CodeCoverage.runsettings `
+  /Settings:CodeCoverage.runsettings `
   /ResultsDirectory:TestResults
 
 # Analyze results (Visual Studio)
