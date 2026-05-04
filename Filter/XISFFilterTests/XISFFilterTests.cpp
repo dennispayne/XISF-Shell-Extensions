@@ -249,6 +249,91 @@ public:
         Assert::IsTrue(ChunksContain(chunks, L"geometry"), L"Should contain geometry");
         Assert::IsTrue(ChunksContain(chunks, L"4656:3520:1"), L"Should contain geometry value");
     }
+
+    TEST_METHOD(XmlEntitiesInValue_AreDecoded)
+    {
+        // Verifies DecodeXMLEntities is applied to attribute values during
+        // parsing so search hits work for real-world FITS keywords that
+        // contain XML-reserved characters.
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <FITSKeyword name="NOTE" value="&lt;test&gt;" comment="&amp; marks"/>
+</xisf>)";
+        auto result = xisf::XISFParser::ParseXMLString(xml);
+        Assert::IsTrue(result.ok(), L"Parse should succeed");
+
+        auto chunks = result.metadata.GetSearchableTextChunks();
+        Assert::IsTrue(ChunksContain(chunks, L"<test>"),
+            L"&lt;test&gt; should decode to <test>");
+        Assert::IsTrue(ChunksContain(chunks, L"& marks"),
+            L"&amp; marks should decode to & marks");
+    }
+
+    TEST_METHOD(EmptyQuotedAttributeValue_ProducesNoChunk)
+    {
+        // GetSearchableTextChunks skips chunks whose body is entirely empty.
+        // A FITSKeyword with empty name/value/comment must therefore produce
+        // no chunk (and there is no Image element to add attribute chunks).
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <FITSKeyword name="" value=""/>
+</xisf>)";
+        auto result = xisf::XISFParser::ParseXMLString(xml);
+        Assert::IsTrue(result.ok(), L"Parse should succeed");
+
+        auto chunks = result.metadata.GetSearchableTextChunks();
+        Assert::IsTrue(chunks.empty(),
+            L"FITSKeyword with all-empty attributes should produce no chunk");
+    }
+
+    TEST_METHOD(MalformedXML_UnclosedTag_DoesNotCrash)
+    {
+        // The lenient regex-style parser does not validate XML structure.
+        // Goal: confirm it returns gracefully (no throw, ok() is true) and
+        // produces no chunks for an <Image> with no attributes.
+        const std::string xml = R"(<xisf version="1.0"><Image>)";
+
+        bool threw = false;
+        std::vector<std::wstring> chunks;
+        bool parsedOk = false;
+        try {
+            auto result = xisf::XISFParser::ParseXMLString(xml);
+            parsedOk = result.ok();
+            chunks = result.metadata.GetSearchableTextChunks();
+        }
+        catch (...) {
+            threw = true;
+        }
+
+        Assert::IsFalse(threw, L"Parser must not throw on malformed XML");
+        Assert::IsTrue(parsedOk,
+            L"Lenient parser reports ok() even for incomplete XML");
+        Assert::IsTrue(chunks.empty(),
+            L"<Image> with no attributes yields no chunks");
+    }
+
+    TEST_METHOD(MultiImage_FirstImageAttributesUsed)
+    {
+        // ExtractMetadataFromXML assigns imageAttributes from
+        // imageElements[0] only — the first <Image>'s attrs win.
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="100:100:1" sampleFormat="UInt16" colorSpace="Gray"/>
+  <Image geometry="200:200:1" sampleFormat="Float32" colorSpace="RGB"/>
+</xisf>)";
+        auto result = xisf::XISFParser::ParseXMLString(xml);
+        Assert::IsTrue(result.ok(), L"Parse should succeed");
+
+        auto chunks = result.metadata.GetSearchableTextChunks();
+        Assert::IsTrue(ChunksContain(chunks, L"Gray"),
+            L"First image colorSpace should appear");
+        Assert::IsTrue(ChunksContain(chunks, L"UInt16"),
+            L"First image sampleFormat should appear");
+        Assert::IsFalse(ChunksContain(chunks, L"RGB"),
+            L"Second image colorSpace must NOT appear (only first Image used)");
+        Assert::IsFalse(ChunksContain(chunks, L"Float32"),
+            L"Second image sampleFormat must NOT appear");
+    }
 };
 
 // ===========================================================================
@@ -435,6 +520,133 @@ public:
         Assert::AreEqual(S_OK, hr, L"IPersistFile::Load should succeed");
 
         pPF->Release();
+        pFilter->Release();
+    }
+
+    TEST_METHOD(GetChunk_BeforeInit_ReturnsEndOfChunks)
+    {
+        // CXISFFilter::GetChunk gates on m_initialized; a fresh filter that
+        // has never been Init'd must report end-of-chunks immediately.
+        CXISFFilter* pFilter = new CXISFFilter();
+
+        STAT_CHUNK stat = {};
+        HRESULT hr = pFilter->GetChunk(&stat);
+        Assert::AreEqual(static_cast<HRESULT>(FILTER_E_END_OF_CHUNKS), hr,
+            L"GetChunk before Init must return FILTER_E_END_OF_CHUNKS");
+
+        pFilter->Release();
+    }
+
+    TEST_METHOD(GetText_NullBuffer_ReturnsEInvalidarg)
+    {
+        // GetText validates both pointer arguments; a null awcBuffer must
+        // be rejected with E_INVALIDARG even when pcwcBuffer is valid.
+        std::wstring path = BuildTempXISF(kXmlWithFITSKeywords);
+        IStream* pStream = CreateStreamFromFile(path);
+        Assert::IsNotNull(pStream);
+
+        CXISFFilter* pFilter = new CXISFFilter();
+        pFilter->Load(pStream);
+        pFilter->Init(0, 0, nullptr, nullptr);
+
+        STAT_CHUNK stat = {};
+        HRESULT hr = pFilter->GetChunk(&stat);
+        Assert::AreEqual(S_OK, hr);
+
+        ULONG size = 256;
+        hr = pFilter->GetText(&size, nullptr);
+        Assert::AreEqual(static_cast<HRESULT>(E_INVALIDARG), hr,
+            L"GetText with null buffer must return E_INVALIDARG");
+
+        pFilter->Release();
+        pStream->Release();
+    }
+
+    TEST_METHOD(RepeatedInit_ResetsChunkIndex)
+    {
+        // Init resets m_currentChunk/m_currentOffset/m_initialized — a
+        // second Init after fully draining the first pass should let us
+        // iterate chunks from idChunk=1 again.
+        std::wstring path = BuildTempXISF(kXmlWithFITSKeywords);
+        IStream* pStream = CreateStreamFromFile(path);
+        Assert::IsNotNull(pStream);
+
+        CXISFFilter* pFilter = new CXISFFilter();
+        pFilter->Load(pStream);
+        pFilter->Init(0, 0, nullptr, nullptr);
+
+        // Drain pass 1 — exhaust chunks and their text.
+        STAT_CHUNK stat = {};
+        HRESULT hr = S_OK;
+        int firstPassCount = 0;
+        while ((hr = pFilter->GetChunk(&stat)) == S_OK && firstPassCount < 1000) {
+            firstPassCount++;
+            WCHAR buf[256];
+            ULONG sz;
+            while (true) {
+                sz = ARRAYSIZE(buf);
+                HRESULT thr = pFilter->GetText(&sz, buf);
+                if (thr == FILTER_E_NO_MORE_TEXT || thr == FILTER_S_LAST_TEXT)
+                    break;
+            }
+        }
+        Assert::AreEqual(static_cast<HRESULT>(FILTER_E_END_OF_CHUNKS), hr,
+            L"First pass should exhaust chunks");
+        Assert::IsTrue(firstPassCount > 0, L"Should have produced at least one chunk");
+
+        // Re-Init — chunk index must reset.
+        hr = pFilter->Init(0, 0, nullptr, nullptr);
+        Assert::AreEqual(S_OK, hr, L"Second Init should succeed");
+
+        STAT_CHUNK stat2 = {};
+        hr = pFilter->GetChunk(&stat2);
+        Assert::AreEqual(S_OK, hr, L"GetChunk after re-Init should return S_OK");
+        Assert::AreEqual(static_cast<ULONG>(1), stat2.idChunk,
+            L"Chunk ID should reset to 1 after re-Init");
+
+        pFilter->Release();
+        pStream->Release();
+    }
+
+    TEST_METHOD(GetClassID_NullPointer_ReturnsEPointer)
+    {
+        // XISFFilter.cpp returns E_POINTER (not E_INVALIDARG) for a null
+        // CLSID out-parameter — see GetClassID implementation.
+        CXISFFilter* pFilter = new CXISFFilter();
+        HRESULT hr = pFilter->GetClassID(nullptr);
+        Assert::AreEqual(static_cast<HRESULT>(E_POINTER), hr,
+            L"GetClassID(nullptr) must return E_POINTER");
+        pFilter->Release();
+    }
+
+    TEST_METHOD(IsDirty_AlwaysReturnsSFalse)
+    {
+        // Read-only filter contract: IPersistStream::IsDirty unconditionally
+        // returns S_FALSE; we never mutate persisted state.
+        CXISFFilter* pFilter = new CXISFFilter();
+        IPersistStream* pPS = nullptr;
+        HRESULT hr = pFilter->QueryInterface(IID_IPersistStream,
+                                              reinterpret_cast<void**>(&pPS));
+        Assert::AreEqual(S_OK, hr);
+        Assert::IsNotNull(pPS);
+
+        Assert::AreEqual(S_FALSE, pPS->IsDirty(),
+            L"IsDirty should always return S_FALSE for a read-only filter");
+
+        pPS->Release();
+        pFilter->Release();
+    }
+
+    TEST_METHOD(BindRegion_NotImplemented)
+    {
+        // BindRegion is reserved by the IFilter contract for future use;
+        // CXISFFilter explicitly returns E_NOTIMPL.
+        CXISFFilter* pFilter = new CXISFFilter();
+        FILTERREGION region = {};
+        void* pUnk = nullptr;
+        HRESULT hr = pFilter->BindRegion(region, IID_IUnknown, &pUnk);
+        Assert::AreEqual(static_cast<HRESULT>(E_NOTIMPL), hr,
+            L"BindRegion should return E_NOTIMPL");
         pFilter->Release();
     }
 };

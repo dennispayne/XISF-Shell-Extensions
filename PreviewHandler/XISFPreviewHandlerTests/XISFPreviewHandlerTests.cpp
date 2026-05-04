@@ -399,6 +399,37 @@ public:
         pStream->Release();
         p->Release();
     }
+
+    TEST_METHOD(PreviewHandler_SetWindow_ReparentTwice_DoesNotLeakHandle)
+    {
+        // Explorer occasionally reparents preview hosts during dock changes.
+        // SetWindow must accept a second call with a different HWND without
+        // crashing; the handler should overwrite m_hwndParent (no leak of the
+        // first handle, no rejection on rebind).  Both calls must return S_OK.
+        auto* p = new CPreviewHandler();
+        RECT rc = { 0, 0, 100, 100 };
+
+        HRESULT hr1 = p->SetWindow(reinterpret_cast<HWND>(0x1), &rc);
+        Assert::AreEqual(S_OK, hr1, L"First SetWindow must succeed");
+
+        HWND hwnd2 = reinterpret_cast<HWND>(0x2);
+        RECT rc2 = { 5, 5, 200, 150 };
+        HRESULT hr2 = p->SetWindow(hwnd2, &rc2);
+        Assert::AreEqual(S_OK, hr2, L"Second SetWindow (reparent) must succeed");
+
+        // After reparent, DoPreview must still observe the (fake) parent and
+        // proceed past the missing-parent guard.  With a fake HWND, window
+        // creation will fail, but the handler must not crash.
+        IStream* pStream = CreateXISFStream(kMinimalXML);
+        p->Initialize(pStream, STGM_READ);
+        HRESULT hr3 = p->DoPreview();
+        // Either succeeds via placeholder bitmap, or fails at CreatePreviewWindow
+        Assert::IsTrue(SUCCEEDED(hr3) || hr3 == E_FAIL,
+            L"DoPreview after reparent must not crash");
+
+        pStream->Release();
+        p->Release();
+    }
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -579,6 +610,26 @@ public:
         xisf::ParseResult r = xisf::XISFParser::ParseXMLString(kAstroXML);
         Assert::IsTrue(r.ok());
         Assert::AreEqual(std::string("1200"), r.metadata.getFITSValue("SITEELEV"));
+    }
+
+    TEST_METHOD(Parser_FITSKeyword_EmbeddedSingleQuote_Preserved)
+    {
+        // Astrophoto keywords frequently contain single quotes (observer names
+        // like "O'Neill", site names like "St. John's"). The parser uses
+        // double-quoted attribute values, so a literal apostrophe inside the
+        // value must round-trip verbatim — neither stripped nor escaped.
+        const char* xml =
+            R"(<?xml version="1.0" encoding="UTF-8"?>)"
+            R"(<xisf version="1.0"><Image>)"
+            R"(<FITSKeyword name="OBSERVER" value="O'Neill" comment="Observer name"/>)"
+            R"(<FITSKeyword name="SITENAME" value="St. John's Observatory" comment="Site"/>)"
+            R"(</Image></xisf>)";
+        xisf::ParseResult r = xisf::XISFParser::ParseXMLString(xml);
+        Assert::IsTrue(r.ok());
+        Assert::AreEqual(std::string("O'Neill"), r.metadata.getFITSValue("OBSERVER"),
+            L"Apostrophe inside double-quoted value must be preserved verbatim");
+        Assert::AreEqual(std::string("St. John's Observatory"),
+                         r.metadata.getFITSValue("SITENAME"));
     }
 };
 
@@ -804,6 +855,31 @@ public:
             p->Release();
         }
         Assert::AreEqual(before, g_cDllRef);
+    }
+
+    TEST_METHOD(PreviewHandler_HeaderLengthExceedsKMaxHeaderBytes_RejectedCleanly)
+    {
+        // The off-by-one boundary in PreviewHandler.cpp (line 162) is:
+        //   if (headerLength == 0 || headerLength > kMaxHeaderBytes) return E_FAIL;
+        // Exactly kMaxHeaderBytes must be accepted; kMaxHeaderBytes + 1 must fail.
+        // We craft a 16-byte preamble that claims a header one byte over the limit.
+        // The check happens before the header read, so we need only a tiny stream.
+        std::vector<BYTE> buf(16, 0);
+        std::memcpy(buf.data(), "XISF0100", 8);
+        const uint32_t headerLen = xisf::XISFParser::kMaxHeaderBytes + 1;
+        std::memcpy(buf.data() + 8, &headerLen, sizeof(uint32_t));
+        // bytes 12..15 (reserved) stay zero
+
+        auto* p = new CPreviewHandler();
+        IStream* pStream = SHCreateMemStream(buf.data(), static_cast<UINT>(buf.size()));
+        Assert::IsNotNull(pStream);
+
+        HRESULT hr = p->Initialize(pStream, STGM_READ);
+        Assert::IsTrue(FAILED(hr),
+            L"Header length > kMaxHeaderBytes must be rejected (off-by-one guard)");
+
+        pStream->Release();
+        p->Release();
     }
 };
 
@@ -1255,6 +1331,7 @@ public:
         size_t bps = 2; // default UInt16
         if (std::string(sampleFmt) == "UInt8") bps = 1;
         else if (std::string(sampleFmt) == "Float32") bps = 4;
+        else if (std::string(sampleFmt) == "Float64") bps = 8;
         size_t pixelBytes = channelPixels * channels * bps;
         const uint32_t pixelOffset = 2048;
 
@@ -1296,10 +1373,14 @@ public:
                     uint16_t val = static_cast<uint16_t>(((i + ch * 1000) * 65535) / channelPixels);
                     buf.push_back(static_cast<BYTE>(val & 0xFF));
                     buf.push_back(static_cast<BYTE>((val >> 8) & 0xFF));
-                } else { // Float32
+                } else if (bps == 4) { // Float32
                     float val = static_cast<float>(i + ch * 100) / channelPixels;
                     auto* fb = reinterpret_cast<const BYTE*>(&val);
                     buf.insert(buf.end(), fb, fb + 4);
+                } else { // Float64
+                    double val = static_cast<double>(i + ch * 100) / channelPixels;
+                    auto* fb = reinterpret_cast<const BYTE*>(&val);
+                    buf.insert(buf.end(), fb, fb + 8);
                 }
             }
         }
@@ -1413,6 +1494,198 @@ public:
         pStream->Release();
         p->Release();
     }
+
+    // ----- Float64 pixel pipeline (previously zero coverage) -----
+
+    TEST_METHOD(Float64_GrayscaleImage_ProducesValidBitmap)
+    {
+        // Float64 mono path (ThumbnailProvider.cpp ~line 669-680).
+        // Verifies bps=8 sizing, double->float conversion, and stretch are correct.
+        auto* p = new CThumbnailProvider();
+        IStream* pStream = CreatePixelStreamRGB(16, 16, 1, "Gray", "Float64");
+        Assert::AreEqual(S_OK, p->Initialize(pStream, STGM_READ));
+
+        HBITMAP hbmp = nullptr;
+        WTS_ALPHATYPE alpha = WTSAT_UNKNOWN;
+        HRESULT hr = p->GetThumbnail(64, &hbmp, &alpha);
+        Assert::AreEqual(S_OK, hr, L"Float64 mono path must succeed");
+        Assert::IsNotNull(hbmp, L"Float64 mono path must produce a bitmap");
+
+        BITMAP bm{};
+        GetObject(hbmp, sizeof(bm), &bm);
+        Assert::AreEqual(64L, bm.bmWidth);
+
+        DeleteObject(hbmp);
+        pStream->Release();
+        p->Release();
+    }
+
+    TEST_METHOD(Float64_RGBImage_ProducesColorBitmap)
+    {
+        // Float64 RGB path: same loop as mono but exercises 3-channel iteration.
+        auto* p = new CThumbnailProvider();
+        IStream* pStream = CreatePixelStreamRGB(16, 16, 3, "RGB", "Float64");
+        Assert::AreEqual(S_OK, p->Initialize(pStream, STGM_READ));
+
+        HBITMAP hbmp = nullptr;
+        WTS_ALPHATYPE alpha;
+        HRESULT hr = p->GetThumbnail(48, &hbmp, &alpha);
+        Assert::AreEqual(S_OK, hr, L"Float64 RGB path must succeed");
+        Assert::IsNotNull(hbmp, L"Float64 RGB path must produce a bitmap");
+
+        DeleteObject(hbmp);
+        pStream->Release();
+        p->Release();
+    }
+
+    TEST_METHOD(ExtremeAspectRatio_NarrowImage_DoesNotCrash)
+    {
+        // 1x1024 grayscale UInt16 — verifies aspect-ratio math (thumbW=1) and
+        // that no integer overflow or zero-division occurs in colMap/rowMap.
+        auto* p = new CThumbnailProvider();
+        IStream* pStream = CreatePixelStream16(1, 1024);
+        Assert::AreEqual(S_OK, p->Initialize(pStream, STGM_READ));
+
+        HBITMAP hbmp = nullptr;
+        WTS_ALPHATYPE alpha;
+        HRESULT hr = p->GetThumbnail(64, &hbmp, &alpha);
+        Assert::AreEqual(S_OK, hr, L"Extreme aspect ratio should still decode");
+        Assert::IsNotNull(hbmp, L"Should produce a (very narrow) bitmap");
+
+        BITMAP bm{};
+        GetObject(hbmp, sizeof(bm), &bm);
+        // Source is taller than wide → thumbH=cx=64, thumbW = 1/1024*64 = 0 → clamped to 1
+        Assert::IsTrue(bm.bmWidth >= 1, L"Thumbnail width must be at least 1");
+        Assert::AreEqual(64L, bm.bmHeight, L"Tall image: thumbH should equal cx");
+
+        DeleteObject(hbmp);
+        pStream->Release();
+        p->Release();
+    }
+
+    TEST_METHOD(UniformPixelValues_StretchHandlesEqualMinMax)
+    {
+        // Image where every pixel has the same value: percentile lo == hi.
+        // Production fallback (ThumbnailProvider.cpp line 701-702) sets
+        // hi = lo + 1e-6f to avoid division by zero. Bitmap must still be valid.
+        const UINT W = 16, H = 16;
+        const size_t pixelBytes = static_cast<size_t>(W) * H * 2;
+        const uint32_t pixelOffset = 2048;
+
+        char loc[64];
+        snprintf(loc, sizeof(loc), "attachment:%u:%zu", pixelOffset, pixelBytes);
+        std::string xml =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+            "<xisf version=\"1.0\">"
+            "<Image geometry=\"16:16:1\" sampleFormat=\"UInt16\" colorSpace=\"Gray\" "
+            "location=\"" + std::string(loc) + "\">"
+            "</Image></xisf>";
+
+        std::vector<BYTE> buf;
+        const char sig[] = "XISF0100";
+        buf.insert(buf.end(), sig, sig + 8);
+        uint32_t xmlLen = static_cast<uint32_t>(xml.size());
+        auto* pb = reinterpret_cast<const BYTE*>(&xmlLen);
+        buf.insert(buf.end(), pb, pb + 4);
+        uint32_t reserved = 0;
+        pb = reinterpret_cast<const BYTE*>(&reserved);
+        buf.insert(buf.end(), pb, pb + 4);
+        buf.insert(buf.end(), xml.begin(), xml.end());
+        buf.resize(pixelOffset, 0);
+        // Every pixel has the identical value 12345 → stretch lo == hi
+        for (size_t i = 0; i < static_cast<size_t>(W) * H; ++i) {
+            buf.push_back(static_cast<BYTE>(12345 & 0xFF));
+            buf.push_back(static_cast<BYTE>((12345 >> 8) & 0xFF));
+        }
+
+        auto* p = new CThumbnailProvider();
+        IStream* pStream = SHCreateMemStream(buf.data(), static_cast<UINT>(buf.size()));
+        Assert::AreEqual(S_OK, p->Initialize(pStream, STGM_READ));
+
+        HBITMAP hbmp = nullptr;
+        WTS_ALPHATYPE alpha;
+        HRESULT hr = p->GetThumbnail(64, &hbmp, &alpha);
+        Assert::AreEqual(S_OK, hr, L"Uniform-value image must decode without div-by-zero");
+        Assert::IsNotNull(hbmp, L"Stretch fallback must still yield a valid bitmap");
+
+        DeleteObject(hbmp);
+        pStream->Release();
+        p->Release();
+    }
+
+    TEST_METHOD(MultiImage_LargestSelected)
+    {
+        // Two <Image> elements: smaller mono (8x8x1) at offset 4096 and
+        // larger RGB (32x32x3) at offset 8192. ThumbnailProvider.cpp ~line 370-376
+        // selects the largest attachSize. We confirm by checking the histogram's
+        // channelCount: 3 means the RGB (larger) image was picked; 1 would mean
+        // the mono (smaller) image was incorrectly chosen.
+        const uint32_t offsetA = 4096;  // small mono
+        const uint32_t offsetB = 8192;  // large RGB
+        const size_t bytesA = 8 * 8 * 1 * 2;     // 128
+        const size_t bytesB = 32 * 32 * 3 * 2;   // 6144
+
+        char locA[64], locB[64];
+        snprintf(locA, sizeof(locA), "attachment:%u:%zu", offsetA, bytesA);
+        snprintf(locB, sizeof(locB), "attachment:%u:%zu", offsetB, bytesB);
+
+        std::string xml =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+            "<xisf version=\"1.0\">"
+            "<Image geometry=\"8:8:1\" sampleFormat=\"UInt16\" colorSpace=\"Gray\" "
+            "location=\"" + std::string(locA) + "\"/>"
+            "<Image geometry=\"32:32:3\" sampleFormat=\"UInt16\" colorSpace=\"RGB\" "
+            "location=\"" + std::string(locB) + "\"/>"
+            "</xisf>";
+
+        std::vector<BYTE> buf;
+        const char sig[] = "XISF0100";
+        buf.insert(buf.end(), sig, sig + 8);
+        uint32_t xmlLen = static_cast<uint32_t>(xml.size());
+        auto* pb = reinterpret_cast<const BYTE*>(&xmlLen);
+        buf.insert(buf.end(), pb, pb + 4);
+        uint32_t reserved = 0;
+        pb = reinterpret_cast<const BYTE*>(&reserved);
+        buf.insert(buf.end(), pb, pb + 4);
+        buf.insert(buf.end(), xml.begin(), xml.end());
+
+        // Image A pixels at offsetA — gradient
+        buf.resize(offsetA, 0);
+        for (size_t i = 0; i < 8 * 8; ++i) {
+            uint16_t v = static_cast<uint16_t>(i * 100);
+            buf.push_back(static_cast<BYTE>(v & 0xFF));
+            buf.push_back(static_cast<BYTE>((v >> 8) & 0xFF));
+        }
+        // Image B pixels at offsetB — gradient across all 3 channels
+        buf.resize(offsetB, 0);
+        for (UINT ch = 0; ch < 3; ++ch) {
+            for (size_t i = 0; i < 32 * 32; ++i) {
+                uint16_t v = static_cast<uint16_t>(((i + ch * 200) * 65535) / (32 * 32));
+                buf.push_back(static_cast<BYTE>(v & 0xFF));
+                buf.push_back(static_cast<BYTE>((v >> 8) & 0xFF));
+            }
+        }
+
+        auto* p = new CThumbnailProvider();
+        IStream* pStream = SHCreateMemStream(buf.data(), static_cast<UINT>(buf.size()));
+        Assert::AreEqual(S_OK, p->Initialize(pStream, STGM_READ));
+
+        HBITMAP hbmp = nullptr;
+        WTS_ALPHATYPE alpha;
+        HRESULT hr = p->GetThumbnail(64, &hbmp, &alpha);
+        Assert::AreEqual(S_OK, hr);
+        Assert::IsNotNull(hbmp);
+
+        const auto& hist = p->GetHistogram();
+        Assert::IsTrue(hist.valid, L"Histogram must be valid after successful decode");
+        Assert::AreEqual(3u, hist.channelCount,
+            L"Larger RGB image should be selected (channelCount=3); "
+            L"mono image (channelCount=1) would indicate wrong selection");
+
+        DeleteObject(hbmp);
+        pStream->Release();
+        p->Release();
+    }
 };
 
 TEST_CLASS(PreviewHandlerTests_AdditionalPaths)
@@ -1492,6 +1765,28 @@ public:
         auto* p = new CThumbnailProvider();
         HRESULT hr = p->QueryInterface(IID_IUnknown, nullptr);
         Assert::AreEqual(E_POINTER, hr);
+        p->Release();
+    }
+
+    TEST_METHOD(SetRect_BeforeSetWindow_AcceptsBothCalls)
+    {
+        // Real Explorer call-order is sometimes SetRect → SetWindow during
+        // initial layout. SetRect with no window must succeed and cache the
+        // rect; the subsequent SetWindow must succeed and accept its own rect.
+        auto* p = new CPreviewHandler();
+        RECT rcEarly = { 5, 10, 100, 200 };
+        HRESULT hr1 = p->SetRect(&rcEarly);
+        Assert::AreEqual(S_OK, hr1, L"SetRect before SetWindow must succeed");
+
+        RECT rcLater = { 0, 0, 300, 400 };
+        HRESULT hr2 = p->SetWindow(reinterpret_cast<HWND>(0x1), &rcLater);
+        Assert::AreEqual(S_OK, hr2, L"SetWindow after cached SetRect must succeed");
+
+        // A second SetRect after window binding must also succeed.
+        RECT rcThird = { 10, 20, 250, 300 };
+        HRESULT hr3 = p->SetRect(&rcThird);
+        Assert::AreEqual(S_OK, hr3, L"SetRect after SetWindow must succeed");
+
         p->Release();
     }
 };
@@ -1901,6 +2196,45 @@ public:
 
         Assert::IsTrue(cap.containsMessagePrefix(L"HistogramCompleted"),
                        L"HistogramCompleted telemetry event should be emitted");
+
+        if (hbmp) DeleteObject(hbmp);
+        pStream->Release();
+        tp->Release();
+    }
+
+    TEST_METHOD(Histogram_AllPixelsInOneBin_HasCorrectPeak)
+    {
+        // For a uniform-value image, the auto-stretch fallback (lo==hi guard,
+        // ThumbnailProvider.cpp ~701) maps every pixel to byte 0, so the entire
+        // pixel population must land in bin[0][0] — no spreading across bins.
+        // The bin total must equal the thumbnail pixel count (no over-/undercounting).
+        const UINT thumbCx = 64;
+        auto* tp = new CThumbnailProvider();
+        IStream* pStream = CreateUniformPixelStream(32, 32, 17000);
+        Assert::AreEqual(S_OK, tp->Initialize(pStream, STGM_READ));
+
+        HBITMAP hbmp = nullptr;
+        WTS_ALPHATYPE alpha;
+        Assert::AreEqual(S_OK, tp->GetThumbnail(thumbCx, &hbmp, &alpha));
+
+        const auto& hist = tp->GetHistogram();
+        Assert::IsTrue(hist.valid, L"Histogram must be valid after successful decode");
+        Assert::AreEqual(1u, hist.channelCount, L"Grayscale histogram has 1 channel");
+
+        // Sum all bins; the only nonzero bin should be bin[0][0].
+        uint32_t totalBins = 0;
+        uint32_t nonZeroOtherBins = 0;
+        for (int b = 0; b < 256; ++b) {
+            totalBins += hist.bins[0][b];
+            if (b != 0) nonZeroOtherBins += hist.bins[0][b];
+        }
+        Assert::AreEqual(0u, nonZeroOtherBins,
+            L"Uniform pixels with stretch fallback must collapse to a single bin");
+        Assert::IsTrue(hist.bins[0][0] > 0,
+            L"Bin 0 must hold the entire pixel population for uniform input");
+        // Total count equals the thumbnail's pixel count (square thumbnail since W==H)
+        Assert::AreEqual(static_cast<uint32_t>(thumbCx) * thumbCx, totalBins,
+            L"Histogram total count must equal thumbnail pixel count");
 
         if (hbmp) DeleteObject(hbmp);
         pStream->Release();

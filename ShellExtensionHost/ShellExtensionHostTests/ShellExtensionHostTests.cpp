@@ -176,6 +176,39 @@ namespace ShellExtensionHostTests_Sha256
             HRESULT hr = xisf::HashFile(L"C:\\this-path-does-not-exist-xisf-123.bin", d, sz);
             Assert::IsTrue(FAILED(hr));
         }
+
+        TEST_METHOD(Init_CalledTwice_ReturnsUnexpected)
+        {
+            // Guard: Init() must reject re-initialization without intervening
+            // Finalize, otherwise the previously-allocated CNG handles leak.
+            xisf::Sha256Hasher h;
+            Assert::IsTrue(SUCCEEDED(h.Init()));
+            HRESULT hr = h.Init();
+            Assert::AreEqual<HRESULT>(E_UNEXPECTED, hr,
+                L"Second Init() before Finalize must return E_UNEXPECTED");
+        }
+
+        TEST_METHOD(Update_BeforeInit_ReturnsUnexpected)
+        {
+            // Calling Update before Init must not crash and must report misuse.
+            xisf::Sha256Hasher h;
+            const char* msg = "abc";
+            HRESULT hr = h.Update(msg, 3);
+            Assert::AreEqual<HRESULT>(E_UNEXPECTED, hr,
+                L"Update() before Init() must return E_UNEXPECTED");
+        }
+
+        TEST_METHOD(Update_OversizeLength_ReturnsInvalidArg)
+        {
+            // BCryptHashData takes ULONG; the wrapper rejects len > INT32_MAX
+            // before invoking the OS API. We never dereference the pointer
+            // because the size check comes first, so nullptr is safe.
+            xisf::Sha256Hasher h;
+            Assert::IsTrue(SUCCEEDED(h.Init()));
+            HRESULT hr = h.Update(nullptr, static_cast<std::size_t>(0x80000000ull));
+            Assert::AreEqual<HRESULT>(E_INVALIDARG, hr,
+                L"Update() with len > 0x7FFFFFFF must return E_INVALIDARG");
+        }
     };
 }
 
@@ -241,6 +274,8 @@ namespace ShellExtensionHostTests_HostSettings
         {
             m_prevProp    = ReadDword(L"PropertyEnabled",  m_hadProp);
             m_prevPreview = ReadDword(L"PreviewEnabled",   m_hadPreview);
+            m_prevFilter  = ReadDword(L"FilterEnabled",    m_hadFilter);
+            m_prevTier    = ReadDword(L"FeatureTier",      m_hadTier);
         }
         ~HkcuGuard()
         {
@@ -248,6 +283,10 @@ namespace ShellExtensionHostTests_HostSettings
             else              DeleteValue(L"PropertyEnabled");
             if (m_hadPreview) WriteDword(L"PreviewEnabled",  m_prevPreview);
             else              DeleteValue(L"PreviewEnabled");
+            if (m_hadFilter)  WriteDword(L"FilterEnabled",   m_prevFilter);
+            else              DeleteValue(L"FilterEnabled");
+            if (m_hadTier)    WriteDword(L"FeatureTier",     m_prevTier);
+            else              DeleteValue(L"FeatureTier");
         }
 
         static DWORD ReadDword(const wchar_t* name, bool& present)
@@ -293,8 +332,8 @@ namespace ShellExtensionHostTests_HostSettings
         }
 
     private:
-        bool  m_hadProp = false, m_hadPreview = false;
-        DWORD m_prevProp = 0, m_prevPreview = 0;
+        bool  m_hadProp = false, m_hadPreview = false, m_hadFilter = false, m_hadTier = false;
+        DWORD m_prevProp = 0, m_prevPreview = 0, m_prevFilter = 0, m_prevTier = 0;
     };
 
     TEST_CLASS(HostSettingsTests)
@@ -382,6 +421,55 @@ namespace ShellExtensionHostTests_HostSettings
             HkcuGuard::WriteDword(L"PreviewEnabled", 1);
             Assert::IsTrue(xisf::hostsettings::IsPreviewEnabled(),
                 L"Preview handler activation must be enabled when PreviewEnabled=1");
+        }
+
+        TEST_METHOD(FilterToggle_DefaultAbsent_IsEnabled)
+        {
+            // Filter activation default mirrors property/preview: opt-out, not opt-in.
+            HkcuGuard g;
+            HkcuGuard::DeleteValue(L"FilterEnabled");
+            Assert::IsTrue(xisf::hostsettings::IsFilterEnabled(),
+                L"Filter handler activation must default to enabled when key is absent");
+        }
+
+        TEST_METHOD(FilterToggle_SetFalse_IsPersistedAndRead)
+        {
+            HkcuGuard g;
+            xisf::hostsettings::SetFilterEnabled(false);
+            Assert::IsFalse(xisf::hostsettings::IsFilterEnabled(),
+                L"SetFilterEnabled(false) must round-trip through HKCU");
+        }
+
+        TEST_METHOD(FilterToggle_SetTrue_AfterFalse_RestoresEnabled)
+        {
+            HkcuGuard g;
+            xisf::hostsettings::SetFilterEnabled(false);
+            xisf::hostsettings::SetFilterEnabled(true);
+            Assert::IsTrue(xisf::hostsettings::IsFilterEnabled(),
+                L"Re-enabling after disable must be observable on next read");
+        }
+
+        TEST_METHOD(GetFeatureTier_DefaultAbsent_IsFull)
+        {
+            // Documented default: when the value is missing the tier is Full,
+            // i.e. the user gets the complete experience until they opt down.
+            HkcuGuard g;
+            HkcuGuard::DeleteValue(L"FeatureTier");
+            Assert::IsTrue(xisf::hostsettings::GetFeatureTier()
+                           == xisf::hostsettings::FeatureTier::Full,
+                L"GetFeatureTier() must default to Full when value is absent");
+        }
+
+        TEST_METHOD(GetFeatureTier_OutOfRangeValue_ClampsToFull)
+        {
+            // Garbage in the registry (e.g. from a future build that defines
+            // additional tiers, or hand-edited keys) must not produce a bogus
+            // enum value -- the reader clamps to Full.
+            HkcuGuard g;
+            HkcuGuard::WriteDword(L"FeatureTier", 999);
+            Assert::IsTrue(xisf::hostsettings::GetFeatureTier()
+                           == xisf::hostsettings::FeatureTier::Full,
+                L"Out-of-range FeatureTier values must clamp to Full");
         }
     };
 }
@@ -727,6 +815,46 @@ namespace ShellExtensionHostTests_HandlerDllPath
 
             auto resolved = xisf::hostpaths::ResolveHandlerDllPath(root.wstring(), false, L"Release");
             Assert::AreEqual(expected.wstring(), resolved);
+        }
+
+        TEST_METHOD(ResolveFilterHandler_PrefersSolutionLevelOutput)
+        {
+            // Mirror of ResolvePropertyPrefersSolutionLevelOutput but for the
+            // Filter handler -- ensures the Filter branch of the candidate list
+            // (introduced when HandlerType::Filter was added) returns the
+            // solution-level x64\<cfg>\XISFFilter.dll first.
+            TempRootGuard tmp;
+            fs::path root(tmp.Root());
+            auto expected = root / L"x64" / L"Debug" / L"XISFFilter.dll";
+            WriteEmptyFile(expected);
+
+            auto resolved = xisf::hostpaths::ResolveHandlerDllPath(
+                root.wstring(),
+                xisf::hostpaths::HandlerType::Filter,
+                L"Debug");
+            Assert::AreEqual(expected.wstring(), resolved);
+        }
+
+        TEST_METHOD(ResolveHandler_EmptyConfiguration_ReturnsEmpty)
+        {
+            // The resolver bails out early if the caller supplies an empty
+            // configuration string (or null) -- we should get an empty
+            // path rather than e.g. \"x64\\\\XISFPropertyHandler.dll\" with a
+            // blank middle segment.
+            TempRootGuard tmp;
+            auto withEmpty = xisf::hostpaths::ResolveHandlerDllPath(
+                tmp.Root(),
+                xisf::hostpaths::HandlerType::Property,
+                L"");
+            Assert::IsTrue(withEmpty.empty(),
+                L"Empty configuration must yield an empty resolved path");
+
+            auto withNull = xisf::hostpaths::ResolveHandlerDllPath(
+                tmp.Root(),
+                xisf::hostpaths::HandlerType::Property,
+                nullptr);
+            Assert::IsTrue(withNull.empty(),
+                L"Null configuration must yield an empty resolved path");
         }
     };
 }

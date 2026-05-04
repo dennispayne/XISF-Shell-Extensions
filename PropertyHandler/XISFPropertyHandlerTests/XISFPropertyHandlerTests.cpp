@@ -16,6 +16,7 @@
 #include <propvarutil.h>
 #include <shlwapi.h>
 #include <cmath>
+#include <limits>
 #include <string>
 #include <vector>
 #include <fstream>
@@ -645,6 +646,116 @@ public:
         auto r = xisf::XISFParser::ParseXMLString(xml);
         Assert::IsTrue(r.ok());
         Assert::AreEqual(size_t(1000), r.metadata.fitsKeywords.size());
+    }
+
+    // --- New robustness tests --------------------------------------------
+
+    TEST_METHOD(Parser_DuplicateFITSKeyword_FirstWins) {
+        // Two FITS keywords with the same name but different values. The vector
+        // stores both, but the lookup index is built via emplace (no replace),
+        // so getFITSValue() returns the first occurrence.
+        const std::string xml = R"(<?xml version="1.0"?>
+<xisf version="1.0">
+  <Image geometry="1:1:1" sampleFormat="UInt16" colorSpace="Gray" location="attachment:0:0">
+    <FITSKeyword name="EXPTIME" value="300.0" comment="first"/>
+    <FITSKeyword name="EXPTIME" value="600.0" comment="second"/>
+  </Image>
+</xisf>)";
+        auto r = xisf::XISFParser::ParseXMLString(xml);
+        Assert::IsTrue(r.ok());
+        Assert::AreEqual(size_t(2), r.metadata.fitsKeywords.size(),
+                         L"Both duplicate FITS keywords are kept in the vector");
+        Assert::IsTrue(r.metadata.getFITSValue("EXPTIME") == "300.0",
+                       L"First-occurrence value wins via the lookup index");
+    }
+
+    TEST_METHOD(Parser_MultiImage_FirstImageAttributesUsed) {
+        // imageAttributes stores the FIRST <Image> element's attributes.
+        // Lock in this behavior so changes are deliberate.
+        const std::string xml = R"(<?xml version="1.0"?>
+<xisf version="1.0">
+  <Image geometry="50:50:1" sampleFormat="UInt8" colorSpace="Gray" location="attachment:0:0">
+  </Image>
+  <Image geometry="200:200:3" sampleFormat="Float32" colorSpace="RGB" location="attachment:5000:0">
+  </Image>
+</xisf>)";
+        auto r = xisf::XISFParser::ParseXMLString(xml);
+        Assert::IsTrue(r.ok());
+        Assert::AreEqual(uint32_t(2), r.metadata.imageCount);
+        auto gIt = r.metadata.imageAttributes.find("geometry");
+        Assert::IsTrue(gIt != r.metadata.imageAttributes.end(),
+                       L"imageAttributes must include geometry");
+        Assert::IsTrue(gIt->second == "50:50:1",
+                       L"First image's geometry is what's stored in imageAttributes");
+        auto sfIt = r.metadata.imageAttributes.find("sampleFormat");
+        Assert::IsTrue(sfIt != r.metadata.imageAttributes.end());
+        Assert::IsTrue(sfIt->second == "UInt8",
+                       L"First image's sampleFormat is what's stored");
+    }
+
+    TEST_METHOD(Parser_FITSKeywordWithEmbeddedSingleQuote_PreservesValue) {
+        // Double-quoted attribute value containing a literal apostrophe.
+        // The parser uses the opening quote char to find the matching close,
+        // so an embedded single-quote inside a double-quoted attribute is
+        // preserved verbatim. Outer single-quote stripping does not apply
+        // because the value is not wrapped in single quotes.
+        const std::string xml = R"(<?xml version="1.0"?>
+<xisf version="1.0">
+  <Image geometry="1:1:1" sampleFormat="UInt16" colorSpace="Gray" location="attachment:0:0">
+    <FITSKeyword name="OBJECT" value="O'Neill" comment="apostrophe"/>
+  </Image>
+</xisf>)";
+        auto r = xisf::XISFParser::ParseXMLString(xml);
+        Assert::IsTrue(r.ok());
+        Assert::IsTrue(r.metadata.getFITSValue("OBJECT") == "O'Neill",
+                       L"Embedded apostrophe inside double-quoted attribute is preserved");
+    }
+
+    TEST_METHOD(Parser_AttributeValueWithXMLEntities_Decoded) {
+        // The parser must decode the standard XML entities (&apos;, &amp;)
+        // in attribute values.
+        const std::string xml = R"(<?xml version="1.0"?>
+<xisf version="1.0">
+  <Image geometry="1:1:1" sampleFormat="UInt16" colorSpace="Gray" location="attachment:0:0">
+    <FITSKeyword name="OBJECT" value="Bode&apos;s &amp; Cigar" comment="entity decode"/>
+  </Image>
+</xisf>)";
+        auto r = xisf::XISFParser::ParseXMLString(xml);
+        Assert::IsTrue(r.ok());
+        Assert::IsTrue(r.metadata.getFITSValue("OBJECT") == "Bode's & Cigar",
+                       L"&apos; and &amp; entities must decode in attribute values");
+    }
+
+    TEST_METHOD(Parser_EmptyImageElement_NoCrash) {
+        // Self-closed <Image/> with no attributes and no inner FITS keywords:
+        // parser must not crash; image is counted; FITS list empty.
+        const std::string xml = R"(<?xml version="1.0"?>
+<xisf version="1.0">
+  <Image/>
+</xisf>)";
+        auto r = xisf::XISFParser::ParseXMLString(xml);
+        Assert::IsTrue(r.ok());
+        Assert::AreEqual(uint32_t(1), r.metadata.imageCount,
+                         L"Self-closed <Image/> still counted");
+        Assert::IsTrue(r.metadata.fitsKeywords.empty(),
+                       L"No FITS keywords inside an empty Image element");
+        Assert::IsTrue(r.metadata.properties.empty(),
+                       L"No XISF properties inside an empty Image element");
+    }
+
+    TEST_METHOD(ParseRA_InvalidFormat_Rejected) {
+        double deg = 0.0;
+        Assert::IsFalse(xisf::DSOCatalog::ParseRA("not a coord", deg),
+                        L"Garbage string is rejected");
+        Assert::IsFalse(xisf::DSOCatalog::ParseRA("", deg),
+                        L"Empty string is rejected");
+        Assert::IsFalse(xisf::DSOCatalog::ParseRA("5h35m", deg),
+                        L"Wrong format (h/m suffixes, no colons) is rejected");
+        // Sanity: a valid HH:MM:SS coord still parses.
+        Assert::IsTrue(xisf::DSOCatalog::ParseRA("05:35:17.3", deg),
+                       L"Valid HH:MM:SS still parses");
+        Assert::IsTrue(deg > 83.0 && deg < 85.0,
+                       L"05:35:17.3 -> ~83.8 degrees");
     }
 };
 
@@ -2658,6 +2769,157 @@ public:
         Assert::IsTrue(foundMean, L"Mean key should be in property list");
         Assert::IsTrue(foundClipLow, L"ClippingLow key should be in property list");
         Assert::IsTrue(foundClipHigh, L"ClippingHigh key should be in property list");
+
+        ps->Release(); pi->Release(); s->Release(); handler->Release();
+    }
+
+    // --- New edge-case tests ---------------------------------------------
+
+    TEST_METHOD(Float32_AllNaN_NoCrashAndDeterministic) {
+        // All-NaN Float32 buffer. The clamp path is std::max(0, std::min(1, val)).
+        // Per IEEE-754 + MSVC's std::min/std::max semantics, comparisons against
+        // NaN are false, so std::min(1.0f, NaN) -> 1.0f and std::max(0.0f, 1.0f)
+        // -> 1.0f. Net effect: NaNs collapse to 1.0 — no crash, no NaN escape.
+        const UINT w = 4, h = 1, ch = 1;
+        size_t pixelBytes = w * h * ch * 4;
+        std::vector<uint8_t> pixels(pixelBytes, 0);
+        float nanVal = std::nanf("");
+        float vals[] = { nanVal, nanVal, nanVal, nanVal };
+        memcpy(pixels.data(), vals, pixelBytes);
+        std::string xml = BuildPixelXml(w, h, ch, "Float32", pixelBytes);
+        IStream* s = CreateXISFStreamWithPixels(xml, pixels);
+        auto* handler = new CXISFPropertyHandler();
+        IInitializeWithStream* pi = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&pi));
+        HRESULT hr = pi->Initialize(s, STGM_READ);
+        Assert::AreEqual(S_OK, hr, L"NaN pixels must not crash Initialize");
+        IPropertyStore* ps = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&ps));
+
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_Median, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt, L"Median must be VT_R8 even with NaN input");
+        Assert::IsFalse(std::isnan(pv.dblVal), L"Median must not propagate NaN");
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_Mean, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt);
+        Assert::IsFalse(std::isnan(pv.dblVal), L"Mean must not propagate NaN");
+        PropVariantClear(&pv);
+
+        ps->Release(); pi->Release(); s->Release(); handler->Release();
+    }
+
+    TEST_METHOD(Float32_AllInfinity_NoCrashAndDeterministic) {
+        // All-+Infinity Float32 buffer. Same clamp semantics as the NaN case
+        // collapse +Inf to 1.0 deterministically.
+        const UINT w = 4, h = 1, ch = 1;
+        size_t pixelBytes = w * h * ch * 4;
+        std::vector<uint8_t> pixels(pixelBytes, 0);
+        float infVal = std::numeric_limits<float>::infinity();
+        float vals[] = { infVal, infVal, infVal, infVal };
+        memcpy(pixels.data(), vals, pixelBytes);
+        std::string xml = BuildPixelXml(w, h, ch, "Float32", pixelBytes);
+        IStream* s = CreateXISFStreamWithPixels(xml, pixels);
+        auto* handler = new CXISFPropertyHandler();
+        IInitializeWithStream* pi = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&pi));
+        HRESULT hr = pi->Initialize(s, STGM_READ);
+        Assert::AreEqual(S_OK, hr, L"Infinity pixels must not crash Initialize");
+        IPropertyStore* ps = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&ps));
+
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_Median, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt);
+        Assert::IsFalse(std::isinf(pv.dblVal), L"Median must not be infinite (clamped)");
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_Mean, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt);
+        Assert::IsFalse(std::isinf(pv.dblVal), L"Mean must not be infinite (clamped)");
+        PropVariantClear(&pv);
+
+        ps->Release(); pi->Release(); s->Release(); handler->Release();
+    }
+
+    TEST_METHOD(EmptyImage_ZeroWidth_StatsAreEmpty) {
+        // Image with width=0: ComputePixelStats bails out (imgW==0) leaving the
+        // pixel-stat placeholders as VT_EMPTY. Initialize must still succeed.
+        const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+  <Image geometry="0:100:1" sampleFormat="UInt16" colorSpace="Gray" location="attachment:128:200">
+  </Image>
+</xisf>)";
+        IStream* s = CreateXISFStream(xml);
+        auto* handler = new CXISFPropertyHandler();
+        IInitializeWithStream* pi = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&pi));
+        HRESULT hr = pi->Initialize(s, STGM_READ);
+        Assert::AreEqual(S_OK, hr, L"Zero-width image must not fail Initialize");
+        IPropertyStore* ps = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&ps));
+
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_Median, &pv);
+        Assert::AreEqual(USHORT(VT_EMPTY), pv.vt, L"Zero-width image yields no median");
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_Mean, &pv);
+        Assert::AreEqual(USHORT(VT_EMPTY), pv.vt, L"Zero-width image yields no mean");
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_ClippingLow, &pv);
+        Assert::AreEqual(USHORT(VT_EMPTY), pv.vt);
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_ClippingHigh, &pv);
+        Assert::AreEqual(USHORT(VT_EMPTY), pv.vt);
+        PropVariantClear(&pv);
+
+        ps->Release(); pi->Release(); s->Release(); handler->Release();
+    }
+
+    TEST_METHOD(SinglePixel_Image_StatsConsistent) {
+        // 1x1 mono UInt16 image. Single pixel at 0x8000 (~0.5 normalized).
+        // For a single sample, median == mean == sample value, and a midrange
+        // pixel triggers neither low nor high clipping.
+        const UINT w = 1, h = 1, ch = 1;
+        size_t pixelBytes = w * h * ch * 2;
+        std::vector<uint8_t> pixels(pixelBytes, 0);
+        pixels[0] = 0x00; pixels[1] = 0x80; // 0x8000 little-endian = 32768
+        std::string xml = BuildPixelXml(w, h, ch, "UInt16", pixelBytes);
+        IStream* s = CreateXISFStreamWithPixels(xml, pixels);
+        auto* handler = new CXISFPropertyHandler();
+        IInitializeWithStream* pi = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&pi));
+        HRESULT hr = pi->Initialize(s, STGM_READ);
+        Assert::AreEqual(S_OK, hr);
+        IPropertyStore* ps = nullptr;
+        handler->QueryInterface(IID_PPV_ARGS(&ps));
+
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_Median, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt);
+        double median = pv.dblVal;
+        Assert::IsTrue(median > 0.49 && median < 0.51,
+                       L"Single 0x8000 pixel normalizes to ~0.5");
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_Mean, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt);
+        Assert::AreEqual(median, pv.dblVal, L"For a single pixel, median == mean");
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_ClippingLow, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt);
+        Assert::AreEqual(0.0, pv.dblVal, L"Midrange single pixel: 0% low clipping");
+        PropVariantClear(&pv);
+
+        ps->GetValue(PKEY_XISF_ClippingHigh, &pv);
+        Assert::AreEqual(USHORT(VT_R8), pv.vt);
+        Assert::AreEqual(0.0, pv.dblVal, L"Midrange single pixel: 0% high clipping");
+        PropVariantClear(&pv);
 
         ps->Release(); pi->Release(); s->Release(); handler->Release();
     }
