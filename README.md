@@ -1,7 +1,6 @@
 # XISF Shell Extensions
 
 [![CI](https://github.com/dennispayne/XISF-Shell-Extensions/actions/workflows/ci.yml/badge.svg)](https://github.com/dennispayne/XISF-Shell-Extensions/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/dennispayne/XISF-Shell-Extensions/badges/coverage.json)](https://github.com/dennispayne/XISF-Shell-Extensions/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Native Windows shell extensions for [XISF](https://pixinsight.com/xisf/) — the
