@@ -1,5 +1,6 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
   <!--
     XISF Shell Extensions MSI installer.
@@ -28,11 +29,7 @@
     <MediaTemplate EmbedCab="yes" />
 
     <!-- ── UI & Logging ── -->
-    <UI Id="WixUI_InstallDir">
-      <UIRef Id="WixUI_InstallDir" />
-    </UI>
-    <UIRef Id="WixUI_Common" />
-    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
 
     <!-- ── Install directory ── -->
     <StandardDirectory Id="ProgramFiles64Folder">
