@@ -8,6 +8,12 @@
         "resolved": "3.9.50",
         "contentHash": "HtOgGF6jZ+WYbXnCUCYPT8Y2d6mIJo9ozjK/FINTRsXdm4Zgv9GehUMa7EFoGQkqrMcDJNOIDwCmENnvXg4UbA=="
       },
+      "WixToolset.UI.wixext": {
+        "type": "Direct",
+        "requested": "[5.0.2, )",
+        "resolved": "5.0.2",
+        "contentHash": "BP2IonPN5/0csF1esRb1A834aknY+wO421hXOP+Ix730YxQvSXgk6kV9uFnVHlrVMXxunXpuqEf2qqOQuvWoQw=="
+      },
       "WixToolset.Util.wixext": {
         "type": "Direct",
         "requested": "[5.0.2, )",

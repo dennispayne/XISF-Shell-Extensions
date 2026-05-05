@@ -27,6 +27,13 @@
 
     <MediaTemplate EmbedCab="yes" />
 
+    <!-- ── UI & Logging ── -->
+    <UI Id="WixUI_InstallDir">
+      <UIRef Id="WixUI_InstallDir" />
+    </UI>
+    <UIRef Id="WixUI_Common" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+
     <!-- ── Install directory ── -->
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="XISF Shell Extensions">
@@ -110,6 +117,11 @@
          NOTE: regsvr32 CAs are an MSI anti-pattern. They survive here as a
          pragmatic shim while the registry authoring is migrated into WiX
          components (see docs/installer.md for the migration plan).
+         
+         CHANGED in v0.2+:
+         - Removed /s flag from regsvr32 to show errors instead of silencing them.
+         - Added logging via > [INSTALLFOLDER]regsvr32.log for troubleshooting.
+         - Failures in registration CAs now properly abort install (Return="check").
          ════════════════════════════════════════════════════════════════════ -->
 
     <!-- Stop the Windows Search service before touching files so it releases
@@ -126,38 +138,38 @@
     <CustomAction Id="CA_StartWSearch" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="ignore" Impersonate="no" />
 
-    <!-- Register: property handler -->
-    <SetProperty Id="CA_RegisterProperty" Value="&quot;[System64Folder]regsvr32.exe&quot; /s &quot;[INSTALLFOLDER]XISFPropertyHandler.dll&quot;"
+    <!-- Register: property handler. Log output to help troubleshoot 1603 errors. -->
+    <SetProperty Id="CA_RegisterProperty" Value="&quot;[System64Folder]regsvr32.exe&quot; &quot;[INSTALLFOLDER]XISFPropertyHandler.dll&quot; &gt;&gt;&quot;[INSTALLFOLDER]regsvr32.log&quot;"
                  Before="CA_RegisterProperty" Sequence="execute" Condition="NOT REMOVE" />
     <CustomAction Id="CA_RegisterProperty" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="check" Impersonate="no" />
 
-    <!-- Register: preview handler -->
-    <SetProperty Id="CA_RegisterPreview" Value="&quot;[System64Folder]regsvr32.exe&quot; /s &quot;[INSTALLFOLDER]XISFPreviewHandler.dll&quot;"
+    <!-- Register: preview handler. Log output to help troubleshoot 1603 errors. -->
+    <SetProperty Id="CA_RegisterPreview" Value="&quot;[System64Folder]regsvr32.exe&quot; &quot;[INSTALLFOLDER]XISFPreviewHandler.dll&quot; &gt;&gt;&quot;[INSTALLFOLDER]regsvr32.log&quot;"
                  Before="CA_RegisterPreview" Sequence="execute" Condition="NOT REMOVE" />
     <CustomAction Id="CA_RegisterPreview" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="check" Impersonate="no" />
 
-    <!-- Register: search filter -->
-    <SetProperty Id="CA_RegisterFilter" Value="&quot;[System64Folder]regsvr32.exe&quot; /s &quot;[INSTALLFOLDER]XISFFilter.dll&quot;"
+    <!-- Register: search filter. Log output to help troubleshoot 1603 errors. -->
+    <SetProperty Id="CA_RegisterFilter" Value="&quot;[System64Folder]regsvr32.exe&quot; &quot;[INSTALLFOLDER]XISFFilter.dll&quot; &gt;&gt;&quot;[INSTALLFOLDER]regsvr32.log&quot;"
                  Before="CA_RegisterFilter" Sequence="execute" Condition="NOT REMOVE" />
     <CustomAction Id="CA_RegisterFilter" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="check" Impersonate="no" />
 
     <!-- Unregister: property handler -->
-    <SetProperty Id="CA_UnregisterProperty" Value="&quot;[System64Folder]regsvr32.exe&quot; /u /s &quot;[INSTALLFOLDER]XISFPropertyHandler.dll&quot;"
+    <SetProperty Id="CA_UnregisterProperty" Value="&quot;[System64Folder]regsvr32.exe&quot; /u &quot;[INSTALLFOLDER]XISFPropertyHandler.dll&quot;"
                  Before="CA_UnregisterProperty" Sequence="execute" Condition="REMOVE" />
     <CustomAction Id="CA_UnregisterProperty" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="ignore" Impersonate="no" />
 
     <!-- Unregister: preview handler -->
-    <SetProperty Id="CA_UnregisterPreview" Value="&quot;[System64Folder]regsvr32.exe&quot; /u /s &quot;[INSTALLFOLDER]XISFPreviewHandler.dll&quot;"
+    <SetProperty Id="CA_UnregisterPreview" Value="&quot;[System64Folder]regsvr32.exe&quot; /u &quot;[INSTALLFOLDER]XISFPreviewHandler.dll&quot;"
                  Before="CA_UnregisterPreview" Sequence="execute" Condition="REMOVE" />
     <CustomAction Id="CA_UnregisterPreview" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="ignore" Impersonate="no" />
 
     <!-- Unregister: search filter -->
-    <SetProperty Id="CA_UnregisterFilter" Value="&quot;[System64Folder]regsvr32.exe&quot; /u /s &quot;[INSTALLFOLDER]XISFFilter.dll&quot;"
+    <SetProperty Id="CA_UnregisterFilter" Value="&quot;[System64Folder]regsvr32.exe&quot; /u &quot;[INSTALLFOLDER]XISFFilter.dll&quot;"
                  Before="CA_UnregisterFilter" Sequence="execute" Condition="REMOVE" />
     <CustomAction Id="CA_UnregisterFilter" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="ignore" Impersonate="no" />
