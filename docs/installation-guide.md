@@ -42,21 +42,44 @@ The MSI (Microsoft Installer) is the easiest and most reliable way to install XI
 
 ### Step 2: Run the Installer
 
+#### Interactive Mode (Recommended)
+
 1. **Right-click** the downloaded `.msi` file
 2. Select **"Run as administrator"**
    - [Screenshot: "Run as administrator" context menu]
-3. Click **"Install"** when the installer window appears
+3. The **XISF Shell Extensions Setup Wizard** will appear
+4. Review the welcome screen and click **"Next"**
    - [Screenshot: Installer welcome dialog]
+5. Choose the installation folder (default: `C:\Program Files\XISF Shell Extensions`) and click **"Next"**
+6. Click **"Install"** on the confirmation screen
+7. Watch the progress bar as files are installed and COM components are registered
+
+#### Silent Mode (Automated Deployments)
+
+For automated or unattended installations, run the installer from PowerShell or Command Prompt with `/quiet`:
+
+```powershell
+# As administrator in PowerShell:
+msiexec /i "XISF.ShellExtensions_<version>_x64.msi" /quiet /norestart
+```
+
+Or using `Start-Process`:
+
+```powershell
+Start-Process msiexec.exe -ArgumentList '/i', '"C:\Path\to\XISF.ShellExtensions_x64.msi"', '/quiet', '/norestart' -Wait
+```
 
 ### Step 3: Wait for Installation
 
 The installer will:
 - Copy shell handler files to `C:\Program Files\XISF Shell Extensions\`
-- Register COM components with Windows
+- Register COM components with Windows (progress shown in interactive mode)
 - Install the XISF Shell Extension Settings app
 - Add items to the Start menu
 
 This typically takes 30-60 seconds.
+
+> **Note:** If installation fails (error code 1603), check `C:\Program Files\XISF Shell Extensions\regsvr32.log` for COM registration errors.
 
 ### Step 4: Restart Windows Explorer
 
@@ -207,6 +230,40 @@ After uninstalling:
 All XISF Shell Extensions features will be removed from Windows Explorer.
 
 ## Troubleshooting
+
+### Installation Fails with Error Code 1603
+
+**Symptom:** MSI installation fails with "Fatal error during installation"
+
+**Causes:** This generic error usually means a custom action (COM registration) failed.
+
+**Solutions:**
+1. Check the registration log for details:
+   - Navigate to `C:\Program Files\XISF Shell Extensions\`
+   - Look for `regsvr32.log` (created during installation if registration fails)
+   - The log will show which DLL failed and why (e.g., missing dependencies, permission denied)
+
+2. Common causes and fixes:
+   - **Missing Visual C++ Runtime:** Install [Visual C++ Redistributable for Visual Studio 2022](https://support.microsoft.com/en-us/help/2977003)
+   - **Antivirus blocking:** Temporarily disable antivirus and retry
+   - **In-use DLL:** Restart your computer and retry
+   - **Insufficient permissions:** Ensure you're running as administrator
+
+3. Enable verbose logging to see detailed error messages:
+   ```powershell
+   $logPath = "C:\temp\XISF_Install.log"
+   msiexec /i "XISF.ShellExtensions_<version>_x64.msi" /L*V $logPath
+   # Then check $logPath for detailed error information
+   ```
+
+4. If registration still fails, manually register the DLLs:
+   ```powershell
+   # Run as Administrator
+   cd "C:\Program Files\XISF Shell Extensions\"
+   regsvr32 XISFPropertyHandler.dll
+   regsvr32 XISFPreviewHandler.dll
+   regsvr32 XISFFilter.dll
+   ```
 
 ### Handlers Not Appearing After Installation
 
