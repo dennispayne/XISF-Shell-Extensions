@@ -76,7 +76,11 @@ CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
 install_manifest.txt
+# Loose XISF dumps anywhere in the tree are noise we don't want; the
+# vetted fixtures under Installer/XISFInstallerTests/fixtures/ are the
+# only exception (negation rule below) and are stored via Git LFS.
 *.xisf
+!Installer/XISFInstallerTests/fixtures/*.xisf
 sandbox/
 
 # Test results / coverage

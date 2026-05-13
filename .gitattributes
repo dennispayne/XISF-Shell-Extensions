@@ -42,3 +42,10 @@ data/*.csv text eol=lf
 *.dll binary
 *.exe binary
 *.msi binary
+
+# Real XISF test fixtures (Installer/XISFInstallerTests/fixtures/) are
+# full-frame mono camera dumps (~50 MB each) used by the
+# HandlerFunctionalTests suite. Stored in Git LFS so the main checkout
+# stays small for contributors who don't run the InstallerIntegration
+# category. Run `git lfs install` once before cloning if you want them.
+Installer/XISFInstallerTests/fixtures/*.xisf filter=lfs diff=lfs merge=lfs -text
