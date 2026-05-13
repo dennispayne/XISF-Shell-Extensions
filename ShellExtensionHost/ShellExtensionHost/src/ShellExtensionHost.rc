@@ -3,6 +3,8 @@
 #include <commctrl.h>
 #include "HostResources.h"
 
+IDI_SETTINGS_APP ICON "XISFSettingsApp.ico"
+
 #ifdef RC_INVOKED
 #ifndef XISF_VERSION_COMMA
 #define XISF_VERSION_COMMA 0,1,0,0
@@ -27,17 +29,26 @@ BEGIN
     PUSHBUTTON      "…",
                     IDC_BTN_TOGGLE_PROPERTY, 102, 44, 55, 14
     LTEXT           "",                 IDC_STATIC_PROPERTY_STATUS, 162, 47, 10, 10
-    LTEXT           "",                 IDC_STATIC_PROPERTY_VER,    175, 47, 305, 10
-    LTEXT           "Preview / Thumbnail",           -1,                 20, 65, 78, 10
+    LTEXT           "",                 IDC_STATIC_PROPERTY_VER,    175, 47, 270, 10
+    CONTROL         "", IDC_LINK_PROPERTY_DOC, WC_LINK,
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 448, 47, 32, 10
+    LTEXT           "",                 IDC_STATIC_PROPERTY_PATH,   175, 57,  305, 8
+    LTEXT           "Preview / Thumbnail",           -1,                 20, 71, 78, 10
     PUSHBUTTON      "…",
-                    IDC_BTN_TOGGLE_PREVIEW,  102, 62, 55, 14
-    LTEXT           "",                 IDC_STATIC_PREVIEW_STATUS, 162, 65, 10, 10
-    LTEXT           "",                 IDC_STATIC_PREVIEW_VER,    175, 65, 305, 10
-    LTEXT           "Search Filter",                 -1,                 20, 83, 78, 10
+                    IDC_BTN_TOGGLE_PREVIEW,  102, 68, 55, 14
+    LTEXT           "",                 IDC_STATIC_PREVIEW_STATUS, 162, 71, 10, 10
+    LTEXT           "",                 IDC_STATIC_PREVIEW_VER,    175, 71, 270, 10
+    CONTROL         "", IDC_LINK_PREVIEW_DOC, WC_LINK,
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 448, 71, 32, 10
+    LTEXT           "",                 IDC_STATIC_PREVIEW_PATH,    175, 81,  305, 8
+    LTEXT           "Search Filter",                 -1,                 20, 95, 78, 10
     PUSHBUTTON      "…",
-                    IDC_BTN_TOGGLE_FILTER,   102, 80, 55, 14
-    LTEXT           "",                 IDC_STATIC_FILTER_STATUS,  162, 83, 10, 10
-    LTEXT           "",                 IDC_STATIC_FILTER_VER,     175, 83, 305, 10
+                    IDC_BTN_TOGGLE_FILTER,   102, 92, 55, 14
+    LTEXT           "",                 IDC_STATIC_FILTER_STATUS,  162, 95, 10, 10
+    LTEXT           "",                 IDC_STATIC_FILTER_VER,     175, 95, 270, 10
+    CONTROL         "", IDC_LINK_FILTER_DOC, WC_LINK,
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 448, 95, 32, 10
+    LTEXT           "",                 IDC_STATIC_FILTER_PATH,    175, 105, 305, 8
 
     GROUPBOX        "Property Handler Settings",    -1,                 10, 126, 480, 60
     LTEXT           "Feature Tier:",    IDC_STATIC_TIER_LABEL,     20, 143, 50, 10
@@ -46,58 +57,23 @@ BEGIN
     PUSHBUTTON      "Show tiers...",
                     IDC_BTN_SHOW_TIERS, 160, 141, 70, 14
     AUTOCHECKBOX    "Mirror to System.Photo properties",
-                    IDC_CHK_PROJECTION, 20, 163, 155, 10
+                    IDC_CHK_PROJECTION, 20, 163, 220, 10
     PUSHBUTTON      "Show mapping...",
-                    IDC_BTN_SHOW_MAPPING, 160, 161, 70, 14
+                    IDC_BTN_SHOW_MAPPING, 250, 161, 90, 14
 
     GROUPBOX        "DSO Catalogs", IDC_STATIC_CATALOGS, 10, 192, 480, 164
-    CONTROL         "", IDC_LINK_OPENNGC_COMMIT, WC_LINK,
-                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 20, 204, 270, 12
     PUSHBUTTON      "Copy Hashes",
                     IDC_BTN_COPY_EXPECTED_HASHES, 294, 202, 90, 14
     CONTROL         "", IDC_LINK_HASH_HELP, WC_LINK,
                     WS_CHILD | WS_VISIBLE | WS_TABSTOP, 388, 204, 92, 12
 
-    LTEXT           "Catalog",          -1, 20, 220, 55, 10
-    LTEXT           "GitHub",           -1, 82, 220, 130, 10
-    LTEXT           "Local",            -1, 218, 220, 130, 10
-    LTEXT           "",                 -1, 352, 220, 10, 10
-
-    LTEXT           "NGC.csv",          IDC_STATIC_NGC_LABEL, 20, 234, 60, 10
-    LTEXT           "-",                IDC_STATIC_NGC_GITHUB, 82, 234, 130, 10
-    LTEXT           "-",                IDC_STATIC_NGC_LOCAL, 218, 234, 130, 10
-    LTEXT           "?",                IDC_STATIC_NGC_MATCH, 352, 234, 10, 10
-    PUSHBUTTON      "Install",
-                    IDC_BTN_FETCH_NGC, 370, 232, 52, 14
+    CONTROL         "", IDC_LIST_CATALOGS, WC_LISTVIEW,
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
+                    20, 220, 340, 80
+    PUSHBUTTON      "Install / Update",
+                    IDC_BTN_CATALOG_INSTALL, 370, 220, 110, 14
     PUSHBUTTON      "Remove",
-                    IDC_BTN_REMOVE_NGC, 428, 232, 52, 14
-
-    LTEXT           "addendum.csv",     IDC_STATIC_ADD_LABEL, 20, 252, 60, 10
-    LTEXT           "-",                IDC_STATIC_ADD_GITHUB, 82, 252, 130, 10
-    LTEXT           "-",                IDC_STATIC_ADD_LOCAL, 218, 252, 130, 10
-    LTEXT           "?",                IDC_STATIC_ADD_MATCH, 352, 252, 10, 10
-    PUSHBUTTON      "Install",
-                    IDC_BTN_FETCH_ADD, 370, 250, 52, 14
-    PUSHBUTTON      "Remove",
-                    IDC_BTN_REMOVE_ADD, 428, 250, 52, 14
-
-    LTEXT           "sharpless.csv",    IDC_STATIC_SHP_LABEL, 20, 270, 60, 10
-    LTEXT           "-",                IDC_STATIC_SHP_GITHUB, 82, 270, 130, 10
-    LTEXT           "-",                IDC_STATIC_SHP_LOCAL, 218, 270, 130, 10
-    LTEXT           "?",                IDC_STATIC_SHP_MATCH, 352, 270, 10, 10
-    PUSHBUTTON      "Install",
-                    IDC_BTN_FETCH_SHP, 370, 268, 52, 14
-    PUSHBUTTON      "Remove",
-                    IDC_BTN_REMOVE_SHP, 428, 268, 52, 14
-
-    LTEXT           "constellations.csv", IDC_STATIC_CST_LABEL, 20, 288, 60, 10
-    LTEXT           "-",                IDC_STATIC_CST_GITHUB, 82, 288, 130, 10
-    LTEXT           "-",                IDC_STATIC_CST_LOCAL, 218, 288, 130, 10
-    LTEXT           "?",                IDC_STATIC_CST_MATCH, 352, 288, 10, 10
-    PUSHBUTTON      "Install",
-                    IDC_BTN_FETCH_CST, 370, 286, 52, 14
-    PUSHBUTTON      "Remove",
-                    IDC_BTN_REMOVE_CST, 428, 286, 52, 14
+                    IDC_BTN_CATALOG_REMOVE, 370, 238, 110, 14
 
     PUSHBUTTON      "Import from File...",
                     IDC_BTN_IMPORT_FILE,  20, 306, 100, 14
@@ -107,19 +83,21 @@ BEGIN
     GROUPBOX        "Status", -1, 10, 362, 480, 52
     CONTROL         "", IDC_PROGRESS, PROGRESS_CLASSA,
                     WS_CHILD | WS_VISIBLE,   20, 374, 460, 10
-    LTEXT           "",                 IDC_STATIC_PROGRESS_TEXT, 20, 388, 340, 14
-    RTEXT           "",                 IDC_STATIC_PENDING_TEXT, 370, 388, 110, 14
+    LTEXT           "",                 IDC_STATIC_PROGRESS_TEXT, 20, 388, 460, 20
+    RTEXT           "",                 IDC_STATIC_PENDING_TEXT, 300, 398, 180, 10
 
     AUTOCHECKBOX    "Restart Explorer If Needed",
                     IDC_CHK_RESTART_EXPLORER, 20, 420, 155, 10
     PUSHBUTTON      "Advanced",
                     IDC_BTN_ADVANCED,       20, 441, 60, 14
+    CONTROL         "", IDC_LINK_ADVANCED_DOC, WC_LINK,
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 86, 444, 130, 10
     PUSHBUTTON      "Apply",
                     IDC_BTN_APPLY,          356, 444, 60, 14
     DEFPUSHBUTTON   "Close",            IDOK,               422, 444,  60, 14
 END
 
-IDD_ADVANCED DIALOGEX 0, 0, 360, 246
+IDD_ADVANCED DIALOGEX 0, 0, 360, 260
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Advanced"
 FONT 9, "Segoe UI", 400, 0, 0x1
@@ -129,9 +107,11 @@ BEGIN
     PUSHBUTTON      "Restart Explorer",  IDC_BTN_RESTART_EXPLORER, 126, 24, 90, 14
     PUSHBUTTON      "Flush Thumbnails",  IDC_BTN_FLUSH_THUMBCACHE, 222, 24, 100, 14
 
-    LTEXT           "Logman ETW trace session.", -1, 10, 60, 340, 10
+    LTEXT           "Logman ETW trace session.", -1, 10, 60, 220, 10
+    CONTROL         "", IDC_LINK_ETW_DOC, WC_LINK,
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 235, 60, 115, 10
 
-    GROUPBOX        "Trace matrix", -1, 10, 74, 340, 72
+    GROUPBOX        "Trace matrix", -1, 10, 74, 340, 86
     LTEXT           "Item",                 -1, 20, 86, 42, 10
     LTEXT           "Error",                -1, 90, 86, 30, 10
     LTEXT           "Warn",                 -1, 138, 86, 28, 10
@@ -150,15 +130,21 @@ BEGIN
     AUTOCHECKBOX    "", IDC_CHK_TRACE_PREV_INFO,    184, 114, 10, 10
     AUTOCHECKBOX    "", IDC_CHK_TRACE_PREV_VERBOSE, 234, 114, 10, 10
 
-    PUSHBUTTON      "Start Trace",      IDC_BTN_TRACE_START,      10, 152, 80, 14
-    PUSHBUTTON      "Stop Trace",       IDC_BTN_TRACE_STOP,       96, 152, 80, 14
-    PUSHBUTTON      "Open ETL",         IDC_BTN_TRACE_OPEN_ETL,  182, 152, 80, 14
-    PUSHBUTTON      "Export XML",       IDC_BTN_TRACE_EXPORT_XML,268, 152, 80, 14
+    LTEXT           "Filter",               -1, 20, 128, 50, 10
+    AUTOCHECKBOX    "", IDC_CHK_TRACE_FILT_ERROR,   96, 128, 10, 10
+    AUTOCHECKBOX    "", IDC_CHK_TRACE_FILT_WARN,    142, 128, 10, 10
+    AUTOCHECKBOX    "", IDC_CHK_TRACE_FILT_INFO,    184, 128, 10, 10
+    AUTOCHECKBOX    "", IDC_CHK_TRACE_FILT_VERBOSE, 234, 128, 10, 10
 
-    LTEXT           "",                 IDC_STATIC_TRACE_PATH,   10, 176, 340, 24, SS_NOTIFY
-    LTEXT           "",                 IDC_STATIC_TRACE_STATUS, 10, 204, 270, 24
+    PUSHBUTTON      "Start Trace",      IDC_BTN_TRACE_START,      10, 166, 80, 14
+    PUSHBUTTON      "Stop Trace",       IDC_BTN_TRACE_STOP,       96, 166, 80, 14
+    PUSHBUTTON      "Open ETL",         IDC_BTN_TRACE_OPEN_ETL,  182, 166, 80, 14
+    PUSHBUTTON      "Export XML",       IDC_BTN_TRACE_EXPORT_XML,268, 166, 80, 14
 
-    DEFPUSHBUTTON   "Close",           IDOK,                 290, 224, 60, 14
+    LTEXT           "",                 IDC_STATIC_TRACE_PATH,   10, 190, 340, 24, SS_NOTIFY
+    LTEXT           "",                 IDC_STATIC_TRACE_STATUS, 10, 218, 270, 24
+
+    DEFPUSHBUTTON   "Close",           IDOK,                 290, 238, 60, 14
 END
 
 IDD_MAPPING DIALOGEX 0, 0, 280, 120
@@ -256,6 +242,8 @@ BEGIN
                     -1, 10, 186, 280, 10
     LTEXT           "Default tier is Full for backward compatibility.",
                     -1, 10, 198, 280, 10
+    CONTROL         "", IDC_LINK_TIERS_DOC, WC_LINK,
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 10, 212, 210, 12
     DEFPUSHBUTTON   "Close",              IDOK, 230, 212, 60, 14
 END
 #pragma code_page(1252)
@@ -294,4 +282,3 @@ BEGIN
     END
 END
 #endif
-

@@ -29,12 +29,6 @@
          second VERSIONINFO would cause CVT1100 "duplicate resource" linker
          errors. -->
     <GenerateAssemblyVersionInfo Condition="'$(GenerateAssemblyVersionInfo)' == ''">false</GenerateAssemblyVersionInfo>
-
-    <!-- NB.GV (when installed) imports its props before ours and predefines
-         GetBuildVersion. The Sdk for native projects doesn't auto-import NB.GV;
-         the project must reference the Nerdbank.GitVersioning package. We
-         detect NB.GV by its own marker property. -->
-    <_XISFVersionDependsOn Condition="'$(NerdbankGitVersioningTasksPath)' != ''">GetBuildVersion</_XISFVersionDependsOn>
   </PropertyGroup>
 
   <!--
@@ -43,20 +37,21 @@
     GetBuildVersion target, so we have to read those after that target has run
     and *before* ResourceCompile / ClCompile consume preprocessor metadata.
 
-    GetBuildVersion is a no-op (not defined) when NB.GV isn't installed; the
-    legacy XISFVersion / XISFBuildNumber path then takes over.
-  -->
-  <!--
-    The version stamp must be applied after NB.GV's GetBuildVersion target has
-    populated $(BuildVersion), but before ResourceCompile / ClCompile read the
-    PreprocessorDefinitions metadata. We invoke GetBuildVersion through
-    DependsOnTargets when NB.GV is installed (detected via $(NBGV_GitCommitId)
-    being defined by NB.GV's own props). Otherwise we skip the dependency and
-    rely on the legacy XISFVersion / XISFBuildNumber fallback.
+    Important: NB.GV's props (which set $(NerdbankGitVersioningTasksPath)) are
+    auto-imported by NuGet AFTER Microsoft.Cpp.targets in native vcxproj
+    builds, which is AFTER this file is imported. So we cannot test for NB.GV
+    at property-evaluation time. DependsOnTargets is resolved at target-graph
+    build time (after all imports complete), so by then GetBuildVersion is
+    defined and properties it sets propagate back to this target's scope.
+
+    Every native project in this solution has Nerdbank.GitVersioning as a
+    PackageReference, so GetBuildVersion always exists at graph-build time.
+    The legacy XISFVersion / XISFBuildNumber path remains as a fallback in
+    case BuildVersion is somehow empty (e.g. detached HEAD in CI).
   -->
   <Target Name="XISFStampVersion"
           BeforeTargets="ResourceCompile;ClCompile"
-          DependsOnTargets="$(_XISFVersionDependsOn)">
+          DependsOnTargets="GetBuildVersion">
 
     <PropertyGroup>
       <!-- Prefer NB.GV's 4-part BuildVersion; fall back to the legacy CI inputs. -->
@@ -79,7 +74,7 @@
       </ResourceCompile>
     </ItemGroup>
 
-    <Message Importance="low"
+    <Message Importance="normal"
              Text="$(MSBuildProjectName): XISF_VERSION_TEXT=$(XISFFullVersion) (BuildVersion=$(BuildVersion))" />
   </Target>
 </Project>

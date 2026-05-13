@@ -11,6 +11,7 @@
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <propsys.h>
+#include <searchapi.h>
 #include <string>
 #include <vector>
 #include <thread>
@@ -20,8 +21,10 @@
 #include <commctrl.h>
 #include <filesystem>
 #include <unordered_map>
-#include <vector>
 #include <tlhelp32.h>
+#include <algorithm>
+#include <fstream>
+#include <cwctype>
 
 #include "HostResources.h"
 #include "HostSettings.h"
@@ -66,28 +69,39 @@ COLORREF g_iconBadColor = RGB(180, 32, 32);
 COLORREF g_propertyIconColor = RGB(180, 32, 32);
 COLORREF g_previewIconColor = RGB(180, 32, 32);
 COLORREF g_filterIconColor = RGB(180, 32, 32);
-COLORREF g_ngcIconColor = RGB(180, 32, 32);
-COLORREF g_addIconColor = RGB(180, 32, 32);
-COLORREF g_shpIconColor = RGB(180, 32, 32);
-COLORREF g_cstIconColor = RGB(180, 32, 32);
 
 // Tooltip text storage — keeps strings alive for the tooltip control
 std::unordered_map<int, std::wstring> g_tooltipStrings;
 
-HWND g_tipHashes = nullptr;
-std::wstring g_tipNgcGitHub;
-std::wstring g_tipNgcLocal;
-std::wstring g_tipAddGitHub;
-std::wstring g_tipAddLocal;
-std::wstring g_tipShpGitHub;
-std::wstring g_tipShpLocal;
-std::wstring g_tipCstGitHub;
-std::wstring g_tipCstLocal;
 std::wstring g_tracePath;
 bool g_traceRunning = false;
 std::atomic<bool> g_traceExportInProgress{false};
 std::wstring g_activeTracePath;
 std::wstring g_lastStoppedTracePath;
+
+struct CatalogRowModel {
+    bool builtIn = false;
+    int builtInIndex = -1;
+    installer::PresenceState presence = installer::PresenceState::Missing;
+    std::wstring fileName;
+    std::wstring sourceLink;
+    std::wstring sourceHashDisplay;
+    std::wstring localHashDisplay;
+    std::wstring statusGlyph;
+};
+
+std::vector<CatalogRowModel> g_catalogRows;
+std::unordered_map<std::wstring, std::wstring> g_importedSourceByFile;
+
+enum class InstallMode {
+    PinnedBuiltIn,
+    FileImportUnverified,
+};
+
+InstallMode g_activeInstallMode = InstallMode::PinnedBuiltIn;
+std::wstring g_activeTargetFileName;
+std::wstring g_activeImportSourcePath;
+std::wstring g_activeExpectedHash;
 
 struct TraceExportResult {
     bool success = false;
@@ -182,6 +196,10 @@ void RefreshAllPresence();
 void AddTooltips();
 void SetTooltip(int id, const wchar_t* text);
 void OnRegisterHandlers();
+void OnFetchOnline(int idx);
+void OnLocalImport(HWND hDlg, std::wstring targetFileName, std::wstring path);
+void UpdateCatalogActionButtons();
+void RemoveImportedSourcePath(std::wstring_view fileName);
 bool TryReadRegisteredDllPath(const wchar_t* clsid, std::wstring& out);
 INT_PTR CALLBACK AdvancedDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -305,32 +323,6 @@ void UpdateToggleButtonState(int btnId, const wchar_t* clsid, bool enabled, bool
     } else {
         SetDlgItemTextW(g_hDlg, btnId, L"Register");
     }
-}
-
-void SetHashCellTooltip(int controlId, std::wstring& storage, const std::wstring& text)
-{
-    storage = text;
-    HWND hCtrl = GetDlgItem(g_hDlg, controlId);
-    if (!g_tipHashes || !hCtrl) return;
-
-    TOOLINFOW ti{};
-    ti.cbSize = sizeof(ti);
-    ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
-    ti.hwnd = g_hDlg;
-    ti.uId = reinterpret_cast<UINT_PTR>(hCtrl);
-    ti.lpszText = const_cast<LPWSTR>(storage.c_str());
-
-    SendMessageW(g_tipHashes, TTM_DELTOOLW, 0, reinterpret_cast<LPARAM>(&ti));
-    SendMessageW(g_tipHashes, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&ti));
-}
-
-void EnsureHashTooltipHost()
-{
-    if (g_tipHashes) return;
-    g_tipHashes = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr,
-        WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
-        CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-        g_hDlg, nullptr, GetModuleHandleW(nullptr), nullptr);
 }
 
 std::wstring GetExePath()
@@ -513,17 +505,97 @@ bool StartsWith(const std::wstring& s, const std::wstring& prefix)
     return s.size() >= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
 }
 
+// ────────────────────────────────────────────────────────────────────
+// Windows Search index scope management (optional MSI feature)
+//
+// Invoked by the MSI's --add-search-path / --remove-search-path CAs
+// when the user provides an XISF data root in the installer UI. The
+// XISFFilter handler we register is what makes .xisf indexable; this
+// merely tells the System Index *where* to look.
+//
+// All paths are best-effort: if Windows Search is unavailable (service
+// disabled, perms denied, COM not registered) we return 0 so the MSI
+// never rolls back over an indexing detail.
+// ────────────────────────────────────────────────────────────────────
+
+std::wstring PathToCrawlUrl(const std::wstring& raw)
+{
+    std::wstring p = raw;
+    auto isSpace = [](wchar_t c) { return std::iswspace(static_cast<wint_t>(c)) != 0; };
+    while (!p.empty() && isSpace(p.front())) p.erase(p.begin());
+    while (!p.empty() && isSpace(p.back()))  p.pop_back();
+    while (!p.empty() && (p.back() == L'\\' || p.back() == L'/'))
+        p.pop_back();
+    if (p.empty()) return {};
+    for (auto& c : p) if (c == L'\\') c = L'/';
+    return L"file:///" + p + L"/";
+}
+
+enum class SearchPathOp { Add, Remove };
+
+int RunSearchPathOp(SearchPathOp op, const std::wstring& pathIn)
+{
+    const std::wstring url = PathToCrawlUrl(pathIn);
+    if (url.empty()) return 0;
+
+    // Defined inline to avoid pulling in searchsdk.lib for a single GUID.
+    static const CLSID kClsidCSearchManager =
+        { 0x7D096C5F, 0xAC08, 0x4F1F, { 0xBE, 0xB7, 0x5C, 0x22, 0xC5, 0x17, 0xCE, 0x39 } };
+
+    const HRESULT hrCom    = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    const bool    needUninit = SUCCEEDED(hrCom);
+
+    ISearchManager* mgr = nullptr;
+    HRESULT hr = CoCreateInstance(kClsidCSearchManager, nullptr,
+                                  CLSCTX_LOCAL_SERVER,
+                                  IID_PPV_ARGS(&mgr));
+    if (SUCCEEDED(hr) && mgr) {
+        ISearchCatalogManager* cat = nullptr;
+        hr = mgr->GetCatalog(L"SystemIndex", &cat);
+        if (SUCCEEDED(hr) && cat) {
+            ISearchCrawlScopeManager* csm = nullptr;
+            hr = cat->GetCrawlScopeManager(&csm);
+            if (SUCCEEDED(hr) && csm) {
+                if (op == SearchPathOp::Add)
+                    csm->AddDefaultScopeRule(url.c_str(), TRUE, FF_INDEXCOMPLEXURLS);
+                else
+                    csm->RemoveScopeRule(url.c_str());
+                csm->SaveAll();
+                csm->Release();
+            }
+            cat->Release();
+        }
+        mgr->Release();
+    }
+
+    if (needUninit) CoUninitialize();
+    return 0;
+}
+
 // Headless mode: install all missing/mismatched catalogs silently.
 // Returns 0 if all catalogs are verified, 1 if any install failed.
 int RunSilentCatalogInstall()
 {
     int failures = 0;
-    for (const auto* src : catalogspec::kAllCatalogs) {
+    for (size_t i = 0; i < catalogspec::kAllCatalogs.size(); ++i) {
+        const auto* src = catalogspec::kAllCatalogs[i];
         auto p = installer::Probe(*src);
         if (p.state == installer::PresenceState::PresentVerified)
             continue;
-        auto rep = installer::InstallFromPinnedUrl(
-            *src, [](std::uint64_t, std::uint64_t, void*) -> bool { return true; }, nullptr);
+
+        installer::Report rep{};
+        if (i == 2 || i == 3) {
+            wchar_t modPath[MAX_PATH] = {};
+            GetModuleFileNameW(nullptr, modPath, MAX_PATH);
+            PathRemoveFileSpecW(modPath);
+            std::wstring seedPath = std::wstring(modPath) + L"\\" + std::wstring(src->fileName);
+            rep = installer::InstallFromLocalFileVerified(
+                *src, seedPath.c_str(),
+                [](std::uint64_t, std::uint64_t, void*) -> bool { return true; }, nullptr);
+        } else {
+            rep = installer::InstallFromPinnedUrl(
+                *src, [](std::uint64_t, std::uint64_t, void*) -> bool { return true; }, nullptr);
+        }
         if (rep.result != installer::Result::Ok)
             failures++;
     }
@@ -713,6 +785,9 @@ bool TryHandleCommandMode(LPWSTR rawCmdLine, int& exitCode)
     bool filt = false;
     bool silentInstall = false;
     bool registerMsix = false;
+    bool searchAdd = false;
+    bool searchRemove = false;
+    std::wstring searchPath;
     for (int i = 1; i < argc; ++i) {
         std::wstring a = argv[i];
         if (a == L"--register-direct") mode = true;
@@ -722,8 +797,23 @@ bool TryHandleCommandMode(LPWSTR rawCmdLine, int& exitCode)
         else if (a == L"--filter") filt = true;
         else if (a == L"--silent-install") silentInstall = true;
         else if (a == L"--register-msix") registerMsix = true;
+        else if (a == L"--add-search-path" && i + 1 < argc) {
+            searchAdd = true; searchPath = argv[++i];
+        }
+        else if (a == L"--remove-search-path" && i + 1 < argc) {
+            searchRemove = true; searchPath = argv[++i];
+        }
     }
     LocalFree(argv);
+
+    if (searchAdd) {
+        exitCode = RunSearchPathOp(SearchPathOp::Add, searchPath);
+        return true;
+    }
+    if (searchRemove) {
+        exitCode = RunSearchPathOp(SearchPathOp::Remove, searchPath);
+        return true;
+    }
 
     if (registerMsix) {
         exitCode = RunMsixRegistration();
@@ -754,12 +844,6 @@ std::wstring FormatBytes(std::uint64_t n)
     return buf;
 }
 
-std::wstring ShortHash(const std::wstring& hex)
-{
-    if (hex.size() < 12) return hex;
-    return hex.substr(0, 8) + L"\u2026" + hex.substr(hex.size() - 4);
-}
-
 const wchar_t* ResultName(installer::Result r)
 {
     using R = installer::Result;
@@ -777,6 +861,7 @@ const wchar_t* ResultName(installer::Result r)
         case R::HashInitFailed:        return L"SHA-256 init failed";
         case R::HashFailed:            return L"SHA-256 streaming failed";
         case R::HashMismatch:          return L"SHA-256 mismatch (rejected)";
+        case R::InvalidContent:        return L"content validation failed";
         case R::MoveFailed:            return L"atomic rename failed";
         case R::SourceOpenFailed:      return L"cannot open source file";
         case R::OperationCancelled:    return L"cancelled";
@@ -789,10 +874,6 @@ void SetStatusLabelColorById(int id, COLORREF color)
     if (id == IDC_STATIC_PROPERTY_STATUS) g_propertyIconColor = color;
     else if (id == IDC_STATIC_PREVIEW_STATUS) g_previewIconColor = color;
     else if (id == IDC_STATIC_FILTER_STATUS) g_filterIconColor = color;
-    else if (id == IDC_STATIC_NGC_MATCH) g_ngcIconColor = color;
-    else if (id == IDC_STATIC_ADD_MATCH) g_addIconColor = color;
-    else if (id == IDC_STATIC_SHP_MATCH) g_shpIconColor = color;
-    else if (id == IDC_STATIC_CST_MATCH) g_cstIconColor = color;
 }
 
 void SetStatusIconTextAndColor(int id, const wchar_t* icon, COLORREF color)
@@ -854,7 +935,7 @@ bool TryReadRegisteredDllPath(const wchar_t* clsid, std::wstring& out)
     return true;
 }
 
-void SetHandlerStatus(int iconId, int verId, int btnId,
+void SetHandlerStatus(int iconId, int verId, int pathId, int btnId,
                       const wchar_t* clsid, bool handlerEnabled, bool pendingRegister)
 {
     std::wstring dll;
@@ -864,6 +945,7 @@ void SetHandlerStatus(int iconId, int verId, int btnId,
     if (pendingRegister) {
         SetStatusIconTextAndColor(iconId, L"\u2026", g_iconWarnColor);
         SetDlgItemTextW(g_hDlg, verId, L"Will register on Apply");
+        SetDlgItemTextW(g_hDlg, pathId, L"");
     } else if (registered) {
         auto v = GetFileVersionString(dll);
         if (handlerEnabled) {
@@ -875,10 +957,13 @@ void SetHandlerStatus(int iconId, int verId, int btnId,
             std::wstring text = v.empty() ? L"Registered, disabled" : (L"v" + v + L" \u2014 disabled");
             SetDlgItemTextW(g_hDlg, verId, text.c_str());
         }
+        SetDlgItemTextW(g_hDlg, pathId, dll.c_str());
         SetTooltip(verId, dll.c_str());
+        SetTooltip(pathId, dll.c_str());
     } else {
         SetStatusIconTextAndColor(iconId, L"\u2717", g_iconBadColor);
         SetDlgItemTextW(g_hDlg, verId, L"Not registered");
+        SetDlgItemTextW(g_hDlg, pathId, L"");
     }
 
     UpdateToggleButtonState(btnId, clsid, handlerEnabled, pendingRegister);
@@ -886,11 +971,14 @@ void SetHandlerStatus(int iconId, int verId, int btnId,
 
 void RefreshHandlerStatuses()
 {
-    SetHandlerStatus(IDC_STATIC_PROPERTY_STATUS, IDC_STATIC_PROPERTY_VER, IDC_BTN_TOGGLE_PROPERTY,
+    SetHandlerStatus(IDC_STATIC_PROPERTY_STATUS, IDC_STATIC_PROPERTY_VER, IDC_STATIC_PROPERTY_PATH,
+        IDC_BTN_TOGGLE_PROPERTY,
         kPropertyClsid, g_pending.curPropertyEnabled, g_pending.registerProperty);
-    SetHandlerStatus(IDC_STATIC_PREVIEW_STATUS, IDC_STATIC_PREVIEW_VER, IDC_BTN_TOGGLE_PREVIEW,
+    SetHandlerStatus(IDC_STATIC_PREVIEW_STATUS, IDC_STATIC_PREVIEW_VER, IDC_STATIC_PREVIEW_PATH,
+        IDC_BTN_TOGGLE_PREVIEW,
         kPreviewClsid, g_pending.curPreviewEnabled, g_pending.registerPreview);
-    SetHandlerStatus(IDC_STATIC_FILTER_STATUS, IDC_STATIC_FILTER_VER, IDC_BTN_TOGGLE_FILTER,
+    SetHandlerStatus(IDC_STATIC_FILTER_STATUS, IDC_STATIC_FILTER_VER, IDC_STATIC_FILTER_PATH,
+        IDC_BTN_TOGGLE_FILTER,
         kFilterClsid, g_pending.curFilterEnabled, g_pending.registerFilter);
 
     // Show UAC shield on Apply when registration is pending
@@ -905,33 +993,11 @@ bool IsCatalogInstalled(const catalogspec::CatalogSource& src)
 
 bool IsCatalogUpToDate(const catalogspec::CatalogSource& src)
 {
-    return installer::Probe(src).state == installer::PresenceState::PresentVerified;
-}
-
-void UpdateCatalogActionButtons()
-{
-    auto setRow = [](int fetchId, int removeId, const catalogspec::CatalogSource& src) {
-        auto p = installer::Probe(src);
-        bool installed = p.state != installer::PresenceState::Missing;
-        bool upToDate = p.state == installer::PresenceState::PresentVerified;
-        SetDlgItemTextW(g_hDlg, fetchId, installed ? L"Update" : L"Install");
-        EnableWindow(GetDlgItem(g_hDlg, fetchId), upToDate ? FALSE : TRUE);
-        EnableWindow(GetDlgItem(g_hDlg, removeId), installed ? TRUE : FALSE);
-    };
-    setRow(IDC_BTN_FETCH_NGC, IDC_BTN_REMOVE_NGC, catalogspec::kNGC);
-    setRow(IDC_BTN_FETCH_ADD, IDC_BTN_REMOVE_ADD, catalogspec::kAddendum);
-    setRow(IDC_BTN_FETCH_SHP, IDC_BTN_REMOVE_SHP, catalogspec::kSharpless);
-    setRow(IDC_BTN_FETCH_CST, IDC_BTN_REMOVE_CST, catalogspec::kConstellations);
-}
-
-std::wstring BuildCommitLinkText()
-{
-    std::wstring s = L"<a href=\"https://github.com/mattiaverga/OpenNGC/tree/";
-    s += catalogspec::kOpenNGCCommit;
-    s += L"/database_files\">OpenNGC commit ";
-    s += catalogspec::kOpenNGCCommit;
-    s += L"</a>";
-    return s;
+    const auto state = installer::Probe(src).state;
+    if (_wcsicmp(src.sourceHashDisplay.data(), catalogspec::kSourceHashNA.data()) == 0) {
+        return state != installer::PresenceState::Missing;
+    }
+    return state == installer::PresenceState::PresentVerified;
 }
 
 bool RemoveCatalogFile(const catalogspec::CatalogSource& src)
@@ -953,6 +1019,7 @@ void OnRemoveCatalog(int idx)
         return;
 
     if (RemoveCatalogFile(src)) {
+        RemoveImportedSourcePath(src.fileName);
         SetProgressText(std::wstring(src.fileName) + L" removed.");
     } else {
         SetProgressText(std::wstring(L"Failed to remove ") + std::wstring(src.fileName) + L".");
@@ -963,61 +1030,249 @@ void OnRemoveCatalog(int idx)
     InvalidateRect(g_hDlg, nullptr, TRUE);
 }
 
+int GetSelectedCatalogRowIndex()
+{
+    HWND hList = GetDlgItem(g_hDlg, IDC_LIST_CATALOGS);
+    if (!hList) return -1;
+    return ListView_GetNextItem(hList, -1, LVNI_SELECTED);
+}
+
+void OnInstallSelectedCatalog()
+{
+    const int rowIndex = GetSelectedCatalogRowIndex();
+    if (rowIndex < 0 || rowIndex >= static_cast<int>(g_catalogRows.size())) return;
+    const auto& row = g_catalogRows[rowIndex];
+    if (!row.builtIn || row.builtInIndex < 0) {
+        SetProgressText(L"Install/Update is available only for pinned built-in catalogs.");
+        return;
+    }
+    OnFetchOnline(row.builtInIndex);
+}
+
+void OnRemoveSelectedCatalog()
+{
+    const int rowIndex = GetSelectedCatalogRowIndex();
+    if (rowIndex < 0 || rowIndex >= static_cast<int>(g_catalogRows.size())) return;
+    const auto& row = g_catalogRows[rowIndex];
+    if (row.builtIn && row.builtInIndex >= 0) {
+        OnRemoveCatalog(row.builtInIndex);
+        return;
+    }
+
+    std::wstring filePath = paths::CatalogFile(row.fileName.c_str());
+    std::wstring prompt = L"Remove local ";
+    prompt += row.fileName;
+    prompt += L"?";
+    if (MessageBoxW(g_hDlg, prompt.c_str(), L"Remove Catalog", MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+    if (DeleteFileW(filePath.c_str())) {
+        RemoveImportedSourcePath(row.fileName);
+        SetProgressText(row.fileName + L" removed.");
+    } else {
+        SetProgressText(L"Failed to remove " + row.fileName + L".");
+    }
+    RefreshAllPresence();
+}
+
 std::wstring CatalogPinnedVersion(const catalogspec::CatalogSource& src)
 {
-    return ShortHash(std::wstring(src.expectedSha256));
+    if (_wcsicmp(src.sourceHashDisplay.data(), catalogspec::kSourceHashNA.data()) == 0)
+        return std::wstring(catalogspec::kSourceHashNA);
+    return std::wstring(src.sourceHashDisplay);
 }
 
 std::wstring CatalogLocalVersion(const installer::Presence& p)
 {
     if (p.state == installer::PresenceState::Missing) return L"-";
-    if (!p.computedHash.empty()) return ShortHash(p.computedHash);
+    if (!p.computedHash.empty()) return p.computedHash;
     return L"?";
 }
 
-void RefreshPresenceRow(int githubLabelId, int localLabelId, int matchLabelId, const catalogspec::CatalogSource& src)
+std::wstring StatusGlyphForPresence(installer::PresenceState state)
 {
-    const auto ghFull = std::wstring(src.expectedSha256);
-    SetDlgItemTextW(g_hDlg, githubLabelId, CatalogPinnedVersion(src).c_str());
+    if (state == installer::PresenceState::PresentVerified) return L"✓";
+    if (state == installer::PresenceState::PresentMismatch) return L"⚠";
+    if (state == installer::PresenceState::PresentUnknown) return L"⚠";
+    return L"✗";
+}
 
-    auto p = installer::Probe(src);
-    auto local = CatalogLocalVersion(p);
-    SetDlgItemTextW(g_hDlg, localLabelId, local.c_str());
+bool IsBuiltInCatalogFileName(std::wstring_view fileName)
+{
+    return std::any_of(catalogspec::kAllCatalogs.begin(), catalogspec::kAllCatalogs.end(),
+        [fileName](const catalogspec::CatalogSource* src) {
+            return _wcsicmp(src->fileName.data(), std::wstring(fileName).c_str()) == 0;
+        });
+}
 
-    std::wstring localFull = p.computedHash.empty() ? L"" : p.computedHash;
-    if (githubLabelId == IDC_STATIC_NGC_GITHUB) {
-        SetHashCellTooltip(IDC_STATIC_NGC_GITHUB, g_tipNgcGitHub, ghFull);
-        SetHashCellTooltip(IDC_STATIC_NGC_LOCAL, g_tipNgcLocal, localFull.empty() ? L"(missing)" : localFull);
-    } else if (githubLabelId == IDC_STATIC_ADD_GITHUB) {
-        SetHashCellTooltip(IDC_STATIC_ADD_GITHUB, g_tipAddGitHub, ghFull);
-        SetHashCellTooltip(IDC_STATIC_ADD_LOCAL, g_tipAddLocal, localFull.empty() ? L"(missing)" : localFull);
-    } else if (githubLabelId == IDC_STATIC_SHP_GITHUB) {
-        SetHashCellTooltip(IDC_STATIC_SHP_GITHUB, g_tipShpGitHub, ghFull);
-        SetHashCellTooltip(IDC_STATIC_SHP_LOCAL, g_tipShpLocal, localFull.empty() ? L"(missing)" : localFull);
-    } else {
-        SetHashCellTooltip(IDC_STATIC_CST_GITHUB, g_tipCstGitHub, ghFull);
-        SetHashCellTooltip(IDC_STATIC_CST_LOCAL, g_tipCstLocal, localFull.empty() ? L"(missing)" : localFull);
+bool TryComputeFileHash(const std::wstring& fullPath, std::wstring& outHash)
+{
+    std::array<std::uint8_t, 32> digest{};
+    std::uint64_t size = 0;
+    if (FAILED(HashFile(fullPath.c_str(), digest, size))) return false;
+    outHash = ToHexLower(digest);
+    return true;
+}
+
+std::wstring NormalizeCatalogFileKey(std::wstring_view fileName)
+{
+    std::wstring key(fileName);
+    std::transform(key.begin(), key.end(), key.begin(),
+        [](wchar_t c) { return static_cast<wchar_t>(towlower(c)); });
+    return key;
+}
+
+void LoadImportedCatalogMetadata()
+{
+    g_importedSourceByFile.clear();
+    std::wstring metaPath = paths::CatalogMetadataFile();
+    if (metaPath.empty()) return;
+    std::wifstream in{ std::filesystem::path(metaPath) };
+    if (!in.is_open()) return;
+
+    std::wstring line;
+    while (std::getline(in, line)) {
+        const auto tab = line.find(L'\t');
+        if (tab == std::wstring::npos) continue;
+        std::wstring fileName = line.substr(0, tab);
+        std::wstring source = line.substr(tab + 1);
+        if (fileName.empty() || source.empty()) continue;
+        g_importedSourceByFile[NormalizeCatalogFileKey(fileName)] = source;
+    }
+}
+
+void SaveImportedCatalogMetadata()
+{
+    std::wstring metaPath = paths::CatalogMetadataFile();
+    if (metaPath.empty()) return;
+    std::wofstream out{ std::filesystem::path(metaPath), std::ios::trunc };
+    if (!out.is_open()) return;
+    for (const auto& [fileKey, sourcePath] : g_importedSourceByFile) {
+        out << fileKey << L'\t' << sourcePath << L"\n";
+    }
+}
+
+std::wstring GetImportedSourcePath(std::wstring_view fileName)
+{
+    const auto it = g_importedSourceByFile.find(NormalizeCatalogFileKey(fileName));
+    return (it == g_importedSourceByFile.end()) ? L"" : it->second;
+}
+
+void SetImportedSourcePath(std::wstring_view fileName, const std::wstring& sourcePath)
+{
+    g_importedSourceByFile[NormalizeCatalogFileKey(fileName)] = sourcePath;
+    SaveImportedCatalogMetadata();
+}
+
+void RemoveImportedSourcePath(std::wstring_view fileName)
+{
+    g_importedSourceByFile.erase(NormalizeCatalogFileKey(fileName));
+    SaveImportedCatalogMetadata();
+}
+
+void PopulateCatalogRows()
+{
+    LoadImportedCatalogMetadata();
+    g_catalogRows.clear();
+    for (size_t i = 0; i < catalogspec::kAllCatalogs.size(); ++i) {
+        const auto& src = *catalogspec::kAllCatalogs[i];
+        const auto p = installer::Probe(src);
+        CatalogRowModel row{};
+        row.builtIn = true;
+        row.builtInIndex = static_cast<int>(i);
+        row.presence = p.state;
+        row.fileName = std::wstring(src.fileName);
+        const auto importedSource = GetImportedSourcePath(row.fileName);
+        if (!importedSource.empty()) {
+            row.sourceLink = importedSource;
+            row.sourceHashDisplay = std::wstring(catalogspec::kSourceHashNA);
+        } else {
+            row.sourceLink = std::wstring(src.sourceUrl);
+            row.sourceHashDisplay = CatalogPinnedVersion(src);
+        }
+        row.localHashDisplay = CatalogLocalVersion(p);
+        row.statusGlyph = StatusGlyphForPresence(p.state);
+        g_catalogRows.push_back(std::move(row));
     }
 
-    if (p.state == installer::PresenceState::PresentVerified) {
-        SetStatusIconTextAndColor(matchLabelId, L"✓", g_iconOkColor);
-    } else if (p.state == installer::PresenceState::PresentMismatch) {
-        SetStatusIconTextAndColor(matchLabelId, L"⚠", g_iconWarnColor);
-    } else {
-        SetStatusIconTextAndColor(matchLabelId, L"✗", g_iconBadColor);
+    const std::wstring catalogDir = paths::CatalogDir();
+    if (catalogDir.empty()) return;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(catalogDir, ec)) {
+        if (ec || !entry.is_regular_file()) continue;
+        const auto fileName = entry.path().filename().wstring();
+        if (_wcsicmp(entry.path().extension().c_str(), L".csv") != 0) continue;
+        if (IsBuiltInCatalogFileName(fileName)) continue;
+
+        CatalogRowModel row{};
+        row.builtIn = false;
+        row.fileName = fileName;
+        const auto importedSource = GetImportedSourcePath(fileName);
+        row.sourceLink = importedSource.empty() ? entry.path().wstring() : importedSource;
+        row.sourceHashDisplay = std::wstring(catalogspec::kSourceHashNA);
+        std::wstring localHash;
+        row.localHashDisplay = TryComputeFileHash(entry.path().wstring(), localHash) ? localHash : L"?";
+        row.presence = installer::PresenceState::PresentVerified;
+        row.statusGlyph = StatusGlyphForPresence(row.presence);
+        g_catalogRows.push_back(std::move(row));
+    }
+}
+
+void UpdateCatalogActionButtons()
+{
+    HWND hList = GetDlgItem(g_hDlg, IDC_LIST_CATALOGS);
+    int selected = ListView_GetNextItem(hList, -1, LVNI_SELECTED);
+    if (selected < 0 || selected >= static_cast<int>(g_catalogRows.size())) {
+        SetDlgItemTextW(g_hDlg, IDC_BTN_CATALOG_INSTALL, L"Install / Update");
+        EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_CATALOG_INSTALL), FALSE);
+        EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_CATALOG_REMOVE), FALSE);
+        return;
     }
 
-    RedrawWindow(GetDlgItem(g_hDlg, matchLabelId), nullptr, nullptr,
-        RDW_INVALIDATE | RDW_UPDATENOW | RDW_ERASE);
+    const auto& row = g_catalogRows[selected];
+    if (row.builtIn) {
+        const auto& src = *catalogspec::kAllCatalogs[row.builtInIndex];
+        const bool installed = IsCatalogInstalled(src);
+        const bool upToDate = IsCatalogUpToDate(src);
+        SetDlgItemTextW(g_hDlg, IDC_BTN_CATALOG_INSTALL, installed ? L"Update" : L"Install");
+        EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_CATALOG_INSTALL), upToDate ? FALSE : TRUE);
+        EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_CATALOG_REMOVE), installed ? TRUE : FALSE);
+    } else {
+        SetDlgItemTextW(g_hDlg, IDC_BTN_CATALOG_INSTALL, L"N/A");
+        EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_CATALOG_INSTALL), FALSE);
+        EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_CATALOG_REMOVE), TRUE);
+    }
+}
+
+void RefreshCatalogListControl()
+{
+    HWND hList = GetDlgItem(g_hDlg, IDC_LIST_CATALOGS);
+    if (!hList) return;
+    PopulateCatalogRows();
+    ListView_DeleteAllItems(hList);
+
+    int rowIndex = 0;
+    for (const auto& row : g_catalogRows) {
+        LVITEMW item{};
+        item.mask = LVIF_TEXT;
+        item.iItem = rowIndex;
+        item.pszText = const_cast<LPWSTR>(row.fileName.c_str());
+        ListView_InsertItem(hList, &item);
+
+        ListView_SetItemText(hList, rowIndex, 1, const_cast<LPWSTR>(row.sourceLink.c_str()));
+        ListView_SetItemText(hList, rowIndex, 2, const_cast<LPWSTR>(row.sourceHashDisplay.c_str()));
+        ListView_SetItemText(hList, rowIndex, 3, const_cast<LPWSTR>(row.localHashDisplay.c_str()));
+        ListView_SetItemText(hList, rowIndex, 4, const_cast<LPWSTR>(row.statusGlyph.c_str()));
+        rowIndex++;
+    }
+
+    if (rowIndex > 0) {
+        ListView_SetItemState(hList, 0, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+    }
+    UpdateCatalogActionButtons();
 }
 
 void RefreshAllPresence()
 {
-    EnsureHashTooltipHost();
-    RefreshPresenceRow(IDC_STATIC_NGC_GITHUB, IDC_STATIC_NGC_LOCAL, IDC_STATIC_NGC_MATCH, catalogspec::kNGC);
-    RefreshPresenceRow(IDC_STATIC_ADD_GITHUB, IDC_STATIC_ADD_LOCAL, IDC_STATIC_ADD_MATCH, catalogspec::kAddendum);
-    RefreshPresenceRow(IDC_STATIC_SHP_GITHUB, IDC_STATIC_SHP_LOCAL, IDC_STATIC_SHP_MATCH, catalogspec::kSharpless);
-    RefreshPresenceRow(IDC_STATIC_CST_GITHUB, IDC_STATIC_CST_LOCAL, IDC_STATIC_CST_MATCH, catalogspec::kConstellations);
+    RefreshCatalogListControl();
 }
 
 void SetProgressText(const std::wstring& s)
@@ -1027,14 +1282,9 @@ void SetProgressText(const std::wstring& s)
 
 void SetBusy(bool busy)
 {
-    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_FETCH_NGC), !busy);
-    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_FETCH_ADD), !busy);
-    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_REMOVE_NGC), !busy);
-    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_REMOVE_ADD), !busy);
-    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_FETCH_SHP), !busy);
-    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_REMOVE_SHP), !busy);
-    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_FETCH_CST), !busy);
-    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_REMOVE_CST), !busy);
+    EnableWindow(GetDlgItem(g_hDlg, IDC_LIST_CATALOGS), !busy);
+    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_CATALOG_INSTALL), !busy);
+    EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_CATALOG_REMOVE), !busy);
     EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_IMPORT_FILE),  !busy);
     g_opInProgress = busy;
 }
@@ -1053,22 +1303,25 @@ void RunOnlineInstall(HWND hDlg, int idx)
 {
     WorkerContext ctx{ hDlg };
     const auto& src = *catalogspec::kAllCatalogs[idx];
-    auto rep = installer::InstallFromPinnedUrl(src, ProgressTrampoline, &ctx);
+    installer::Report rep = installer::InstallFromPinnedUrl(src, ProgressTrampoline, &ctx);
+
     auto* heap = new installer::Report(std::move(rep));
     PostMessageW(hDlg, WM_XISF_DONE,
                  static_cast<WPARAM>(idx),
                  reinterpret_cast<LPARAM>(heap));
 }
 
-void RunLocalImport(HWND hDlg, int idx, std::wstring path)
+void RunLocalImport(HWND hDlg, std::wstring targetFileName, std::wstring path)
 {
     WorkerContext ctx{ hDlg };
-    const auto& src = *catalogspec::kAllCatalogs[idx];
-    auto rep = installer::InstallFromLocalFileVerified(src, path.c_str(),
-                                                       ProgressTrampoline, &ctx);
+    constexpr std::uint64_t kImportMaxBytes = 64ull * 1024ull * 1024ull;
+    auto rep = installer::InstallFromLocalFileUnverified(targetFileName.c_str(),
+                                                          path.c_str(),
+                                                          kImportMaxBytes,
+                                                          ProgressTrampoline, &ctx);
     auto* heap = new installer::Report(std::move(rep));
     PostMessageW(hDlg, WM_XISF_DONE,
-                 static_cast<WPARAM>(idx),
+                 static_cast<WPARAM>(-1),
                  reinterpret_cast<LPARAM>(heap));
 }
 
@@ -1078,22 +1331,33 @@ void OnFetchOnline(int idx)
     g_cancelRequested = false;
     SetBusy(true);
     const auto& src = *catalogspec::kAllCatalogs[idx];
-    SetProgressText(std::wstring(L"Downloading ") + std::wstring(src.fileName) + L" from pinned GitHub URL…");
+    g_activeInstallMode = InstallMode::PinnedBuiltIn;
+    g_activeTargetFileName = std::wstring(src.fileName);
+    g_activeImportSourcePath.clear();
+    g_activeExpectedHash = std::wstring(src.expectedSha256);
+    SetProgressText(std::wstring(L"Installing ") + std::wstring(src.fileName) + L" from pinned source…");
     SendDlgItemMessageW(g_hDlg, IDC_PROGRESS, PBM_SETMARQUEE, TRUE, 30);
     SendDlgItemMessageW(g_hDlg, IDC_PROGRESS, PBM_SETPOS, 0, 0);
     std::thread([hDlg = g_hDlg, idx]() { RunOnlineInstall(hDlg, idx); }).detach();
 }
 
-void OnLocalImport(HWND hDlg, int idx, std::wstring path)
+void OnLocalImport(HWND hDlg, std::wstring targetFileName, std::wstring path)
 {
     if (g_opInProgress.exchange(true)) return;
     g_cancelRequested = false;
     SetBusy(true);
-    SetProgressText(L"Verifying local file\u2026");
+    SetProgressText(L"Importing local file…");
     SendDlgItemMessageW(g_hDlg, IDC_PROGRESS, PBM_SETMARQUEE, TRUE, 30);
 
-    std::thread([hDlg = g_hDlg, idx, path = std::move(path)]() mutable {
-        RunLocalImport(hDlg, idx, std::move(path));
+    g_activeInstallMode = InstallMode::FileImportUnverified;
+    g_activeTargetFileName = targetFileName;
+    g_activeImportSourcePath = path;
+    g_activeExpectedHash.clear();
+
+    std::thread([hDlg = g_hDlg,
+                 targetFileName = std::move(targetFileName),
+                 path = std::move(path)]() mutable {
+        RunLocalImport(hDlg, std::move(targetFileName), std::move(path));
     }).detach();
 }
 
@@ -1102,27 +1366,9 @@ void OnFetchOnline()
     OnFetchOnline(0);
 }
 
-int ChooseCatalogIndexForImport()
-{
-    // Build a message showing all catalogs with their indices
-    int r = MessageBoxW(g_hDlg,
-        L"Which catalog file are you importing?\r\n\r\n"
-        L"Yes = NGC.csv\r\nNo = addendum.csv\r\nCancel = abort\r\n\r\n"
-        L"To import sharpless.csv or constellations.csv, use 'Open Catalog Folder' "
-        L"and place the file there manually, then use Install/Update to verify it.\r\n\r\n"
-        L"The file's SHA-256 will be verified against the pinned value. "
-        L"Files that don't match are rejected.",
-        L"Select Catalog", MB_YESNOCANCEL | MB_ICONQUESTION);
-    if (r == IDYES) return 0;
-    if (r == IDNO)  return 1;
-    return -1;
-}
-
 void OnImportFile()
 {
-    if (g_opInProgress.exchange(true)) return;
-    int idx = ChooseCatalogIndexForImport();
-    if (idx < 0) { g_opInProgress = false; return; }
+    if (g_opInProgress.load()) return;
 
     wchar_t filePath[MAX_PATH] = L"";
     OPENFILENAMEW ofn{};
@@ -1131,18 +1377,19 @@ void OnImportFile()
     ofn.lpstrFile   = filePath;
     ofn.nMaxFile    = MAX_PATH;
     ofn.lpstrFilter = L"CSV files (*.csv)\0*.csv\0All files (*.*)\0*.*\0";
-    ofn.lpstrTitle  = L"Select local catalog file (must match pinned SHA-256)";
+    ofn.lpstrTitle  = L"Import catalog file";
     ofn.Flags       = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_EXPLORER;
 
-    if (!GetOpenFileNameW(&ofn)) { g_opInProgress = false; return; }
+    if (!GetOpenFileNameW(&ofn)) return;
 
-    g_cancelRequested = false;
-    SetBusy(true);
-    SetProgressText(L"Verifying local file\u2026");
-    SendDlgItemMessageW(g_hDlg, IDC_PROGRESS, PBM_SETMARQUEE, TRUE, 30);
+    std::filesystem::path src(filePath);
+    const std::wstring fileName = src.filename().wstring();
+    if (fileName.empty()) {
+        SetProgressText(L"Import failed: invalid file name.");
+        return;
+    }
 
-    std::wstring path = filePath;
-    std::thread([hDlg = g_hDlg, idx, path]() { RunLocalImport(hDlg, idx, path); }).detach();
+    OnLocalImport(g_hDlg, fileName, filePath);
 }
 
 void OnOpenCatalogDir()
@@ -1150,26 +1397,6 @@ void OnOpenCatalogDir()
     std::wstring dir = paths::CatalogDir();
     if (!dir.empty())
         ShellExecuteW(g_hDlg, L"open", dir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-}
-
-std::wstring OpenNGCSourceUrl()
-{
-    std::wstring url = L"https://github.com/mattiaverga/OpenNGC/tree/";
-    url += catalogspec::kOpenNGCCommit;
-    url += L"/database_files";
-    return url;
-}
-
-void OnBrowseOpenNGC()
-{
-    std::wstring url = OpenNGCSourceUrl();
-    auto rc = reinterpret_cast<INT_PTR>(
-        ShellExecuteW(g_hDlg, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
-    if (rc <= 32) {
-        SetProgressText(L"Failed to open the pinned OpenNGC source page.");
-        return;
-    }
-    SetProgressText(L"Opened the pinned OpenNGC source page on github.com.");
 }
 
 void OnRestartExplorer()
@@ -1230,14 +1457,11 @@ void OnCopyExpectedHashes()
     text += catalogspec::kOpenNGCCommit;
     text += L"\r\nDate: ";
     text += catalogspec::kOpenNGCCommitDate;
-    text += L"\r\n\r\nProject data commit: ";
-    text += catalogspec::kXISFDataCommit;
-    text += L"\r\nDate: ";
-    text += catalogspec::kXISFDataCommitDate;
     text += L"\r\n\r\n";
     for (auto* src : catalogspec::kAllCatalogs) {
-        text += src->fileName; text += L"  sha256 = ";
-        text += src->expectedSha256; text += L"\r\n";
+        text += src->fileName; text += L"  source-hash = ";
+        text += src->sourceHashDisplay; text += L"\r\n";
+        text += L"  pin-sha256 = "; text += src->expectedSha256; text += L"\r\n";
         text += L"  url = "; text += src->url; text += L"\r\n\r\n";
     }
 
@@ -1255,7 +1479,7 @@ void OnCopyExpectedHashes()
         }
     }
     CloseClipboard();
-    SetProgressText(L"Expected hashes copied to clipboard. Verify independently on github.com.");
+    SetProgressText(L"Expected hashes copied to clipboard.");
 }
 
 void SetTooltip(int id, const wchar_t* text)
@@ -1294,8 +1518,8 @@ void AddTooltips()
     makeTip(IDC_BTN_TOGGLE_FILTER, L"Toggle the Search Filter (Windows Search content indexing)\nClick for more info about handlers: Open Settings > Help");
 
     // Catalog management buttons
-    makeTip(IDC_BTN_FETCH_NGC, L"Download and install the NGC catalog from GitHub (with hash verification)\nClick for more info: See Help");
-    makeTip(IDC_BTN_FETCH_ADD, L"Download and install the Addendum catalog from GitHub (with hash verification)\nClick for more info: See Help");
+    makeTip(IDC_BTN_CATALOG_INSTALL, L"Install or update the selected pinned catalog with hash verification");
+    makeTip(IDC_BTN_CATALOG_REMOVE, L"Remove the selected catalog row from local storage");
     makeTip(IDC_BTN_IMPORT_FILE, L"Import a catalog from a local file\nClick for more info: See Help");
     makeTip(IDC_BTN_COPY_EXPECTED_HASHES, L"Copy expected SHA-256 hashes for verification\nClick for more info: See Help");
 
@@ -1347,17 +1571,30 @@ void OnDone(int idx, installer::Report* repPtr)
     SendDlgItemMessageW(g_hDlg, IDC_PROGRESS, PBM_SETMARQUEE, FALSE, 0);
     SendDlgItemMessageW(g_hDlg, IDC_PROGRESS, PBM_SETPOS, 0, 0);
 
-    const auto& src = *catalogspec::kAllCatalogs[idx];
-    std::wstring fileLabel(src.fileName);
+    std::wstring fileLabel = g_activeTargetFileName;
+    std::wstring expectedHash = g_activeExpectedHash;
+    if (idx >= 0 && idx < static_cast<int>(catalogspec::kAllCatalogs.size())) {
+        const auto& src = *catalogspec::kAllCatalogs[idx];
+        fileLabel = std::wstring(src.fileName);
+        expectedHash = std::wstring(src.expectedSha256);
+    }
+    if (fileLabel.empty()) fileLabel = L"catalog";
+
     std::wstring msg;
 
     if (rep->result == installer::Result::Ok) {
-        msg = fileLabel + L": installed (" + FormatBytes(rep->bytesTransferred) +
-              L", sha256 matches pin).";
+        if (g_activeInstallMode == InstallMode::FileImportUnverified) {
+            SetImportedSourcePath(fileLabel, g_activeImportSourcePath);
+            msg = fileLabel + L": imported (" + FormatBytes(rep->bytesTransferred) + L", source hash N/A).";
+        } else {
+            RemoveImportedSourcePath(fileLabel);
+            msg = fileLabel + L": installed (" + FormatBytes(rep->bytesTransferred) +
+                  L", sha256 matches pin).";
+        }
         RefreshAllPresence();
     } else if (rep->result == installer::Result::HashMismatch) {
         msg = fileLabel + L": REJECTED \u2014 SHA-256 mismatch.\r\n"
-              L"  expected " + std::wstring(src.expectedSha256) + L"\r\n"
+              L"  expected " + expectedHash + L"\r\n"
               L"  got      " + rep->computedHash + L"\r\n"
               L"The candidate file was deleted.";
     } else if (rep->result == installer::Result::HttpBadStatus) {
@@ -1392,11 +1629,17 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
     switch (msg) {
     case WM_INITDIALOG: {
         g_hDlg = hDlg;
+        if (HICON hAppIcon = static_cast<HICON>(LoadImageW(GetModuleHandleW(nullptr),
+                MAKEINTRESOURCEW(IDI_SETTINGS_APP), IMAGE_ICON, 32, 32, LR_DEFAULTCOLOR))) {
+            SendMessageW(hDlg, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(hAppIcon));
+        }
+        if (HICON hAppIconSmall = static_cast<HICON>(LoadImageW(GetModuleHandleW(nullptr),
+                MAKEINTRESOURCEW(IDI_SETTINGS_APP), IMAGE_ICON, 16, 16, LR_DEFAULTCOLOR))) {
+            SendMessageW(hDlg, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(hAppIconSmall));
+        }
 
         g_pending.Snapshot();
 
-        std::wstring linkText = BuildCommitLinkText();
-        SetDlgItemTextW(hDlg, IDC_LINK_OPENNGC_COMMIT, linkText.c_str());
         SendDlgItemMessageW(hDlg, IDC_BTN_ADVANCED, BCM_SETSHIELD, 0, TRUE);
         SendDlgItemMessageW(hDlg, IDC_BTN_RESTART_EXPLORER, BCM_SETSHIELD, 0, TRUE);
         SendDlgItemMessageW(hDlg, IDC_BTN_FLUSH_THUMBCACHE, BCM_SETSHIELD, 0, TRUE);
@@ -1428,8 +1671,57 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
                            L"github.com/dennispayne/XISF-Shell-Extensions</a>";
         SetDlgItemTextW(hDlg, IDC_LINK_VERSION, ver.c_str());
 
+        // Inline documentation links on each handler row (replace the legacy
+        // Shift/Ctrl+click "open docs? Y/N" prompts). Each anchor opens the
+        // local handlers-overview.md at the relevant section via the WM_NOTIFY
+        // handler below.
+        SetDlgItemTextW(hDlg, IDC_LINK_PROPERTY_DOC, L"<a href=\"property\">Docs</a>");
+        SetDlgItemTextW(hDlg, IDC_LINK_PREVIEW_DOC,  L"<a href=\"preview\">Docs</a>");
+        SetDlgItemTextW(hDlg, IDC_LINK_FILTER_DOC,   L"<a href=\"filter\">Docs</a>");
+
+        // Documentation link next to the Advanced button (replaces the YN
+        // prompt that used to ask "open ETW docs first?").
+        SetDlgItemTextW(hDlg, IDC_LINK_ADVANCED_DOC,
+            L"<a href=\"etw\">ETW tracing documentation</a>");
+
+        // Catalog hash verification help link (previously had a YN prompt
+        // attached on click; now opens the relevant local doc section).
+        SetDlgItemTextW(hDlg, IDC_LINK_HASH_HELP,
+            L"<a href=\"verify\">Hash verification help</a>");
+
         // Apply button starts disabled (no pending changes)
         EnableWindow(GetDlgItem(hDlg, IDC_BTN_APPLY), FALSE);
+
+        {
+            HWND hList = GetDlgItem(hDlg, IDC_LIST_CATALOGS);
+            ListView_SetExtendedListViewStyle(hList, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_DOUBLEBUFFER);
+
+            LVCOLUMNW col{};
+            col.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_SUBITEM;
+            col.pszText = const_cast<LPWSTR>(L"Catalog");
+            col.cx = 110;
+            ListView_InsertColumn(hList, 0, &col);
+
+            col.pszText = const_cast<LPWSTR>(L"Source");
+            col.cx = 150;
+            col.iSubItem = 1;
+            ListView_InsertColumn(hList, 1, &col);
+
+            col.pszText = const_cast<LPWSTR>(L"Source Hash");
+            col.cx = 120;
+            col.iSubItem = 2;
+            ListView_InsertColumn(hList, 2, &col);
+
+            col.pszText = const_cast<LPWSTR>(L"Local Hash");
+            col.cx = 120;
+            col.iSubItem = 3;
+            ListView_InsertColumn(hList, 3, &col);
+
+            col.pszText = const_cast<LPWSTR>(L"Status");
+            col.cx = 45;
+            col.iSubItem = 4;
+            ListView_InsertColumn(hList, 4, &col);
+        }
 
         RefreshAllPresence();
         RefreshHandlerStatuses();
@@ -1452,11 +1744,13 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
                 std::thread([hDlg]() {
                     int installed = 0;
                     int failed = 0;
-                    for (const auto* src : catalogspec::kAllCatalogs) {
+                    for (size_t i = 0; i < catalogspec::kAllCatalogs.size(); ++i) {
+                        const auto* src = catalogspec::kAllCatalogs[i];
                         auto p = installer::Probe(*src);
                         if (p.state == installer::PresenceState::PresentVerified)
                             continue;
-                        auto rep = installer::InstallFromPinnedUrl(
+
+                        installer::Report rep = installer::InstallFromPinnedUrl(
                             *src,
                             [](std::uint64_t bytes, std::uint64_t max, void* u) -> bool {
                                 PostMessageW(static_cast<HWND>(u), WM_XISF_PROGRESS,
@@ -1479,32 +1773,88 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
 
     case WM_NOTIFY: {
         auto* hdr = reinterpret_cast<NMHDR*>(lParam);
-        if (hdr && hdr->idFrom == IDC_LINK_OPENNGC_COMMIT && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
-            std::wstring url = OpenNGCSourceUrl();
-            ShellExecuteW(hDlg, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-            SetProgressText(L"Viewing NGC catalog source on GitHub.");
-            return TRUE;
+        if (hdr && hdr->idFrom == IDC_LIST_CATALOGS) {
+            if (hdr->code == NM_CUSTOMDRAW) {
+                auto* cd = reinterpret_cast<NMLVCUSTOMDRAW*>(lParam);
+                if (cd->nmcd.dwDrawStage == CDDS_PREPAINT) {
+                    return CDRF_NOTIFYITEMDRAW;
+                }
+                if (cd->nmcd.dwDrawStage == CDDS_ITEMPREPAINT) {
+                    return CDRF_NOTIFYSUBITEMDRAW;
+                }
+                if (cd->nmcd.dwDrawStage == (CDDS_ITEMPREPAINT | CDDS_SUBITEM)) {
+                    const int row = static_cast<int>(cd->nmcd.dwItemSpec);
+                    const int sub = cd->iSubItem;
+                    if (sub == 1) {
+                        // Make source values look and scan like hyperlinks.
+                        cd->clrText = RGB(0, 102, 204);
+                        return CDRF_NEWFONT;
+                    }
+                    if (sub == 4 && row >= 0 && row < static_cast<int>(g_catalogRows.size())) {
+                        const auto& glyph = g_catalogRows[row].statusGlyph;
+                        if (glyph == L"✓") {
+                            cd->clrText = RGB(18, 130, 44);      // success
+                        } else if (glyph == L"⚠") {
+                            cd->clrText = RGB(196, 130, 0);      // warning / non-fatal
+                        } else {
+                            cd->clrText = RGB(180, 32, 32);      // failure
+                        }
+                        return CDRF_NEWFONT;
+                    }
+                    return CDRF_DODEFAULT;
+                }
+            }
+            if (hdr->code == LVN_ITEMCHANGED) {
+                auto* nmlv = reinterpret_cast<NMLISTVIEW*>(lParam);
+                if ((nmlv->uChanged & LVIF_STATE) != 0 &&
+                    ((nmlv->uNewState ^ nmlv->uOldState) & LVIS_SELECTED) != 0) {
+                    UpdateCatalogActionButtons();
+                }
+                return TRUE;
+            }
+            if (hdr->code == NM_CLICK || hdr->code == NM_DBLCLK) {
+                auto* act = reinterpret_cast<NMITEMACTIVATE*>(lParam);
+                if (act->iItem >= 0 &&
+                    act->iItem < static_cast<int>(g_catalogRows.size()) &&
+                    (act->iSubItem == 1 || hdr->code == NM_DBLCLK)) {
+                    const auto& link = g_catalogRows[act->iItem].sourceLink;
+                    auto rc = reinterpret_cast<INT_PTR>(
+                        ShellExecuteW(hDlg, L"open", link.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
+                    SetProgressText(rc > 32 ? L"Opened catalog source link." : L"Failed to open catalog source link.");
+                    return TRUE;
+                }
+            }
         }
         if (hdr && hdr->idFrom == IDC_LINK_HASH_HELP && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
-            // Provide local documentation option first, fall back to GitHub
-            if (MessageBoxW(hDlg, L"Learn about catalog verification and security.\n\nOpen local documentation (preferred)?", L"XISF Shell Extensions", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
-                OpenDocumentation(hDlg, L"user-guide/catalog-management.md#verification");
-            } else {
-                ShellExecuteW(hDlg, L"open", L"https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-git-commit-signature-verification", nullptr, nullptr, SW_SHOWNORMAL);
-            }
+            OpenDocumentation(hDlg, L"user-guide/catalog-management.md#verification");
             SetProgressText(L"Opened catalog verification documentation.");
             return TRUE;
         }
         if (hdr && hdr->idFrom == IDC_LINK_VERSION && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
-            if (MessageBoxW(hDlg, L"View XISF Shell Extensions on GitHub?\n\nAlternatively, open local documentation?", L"XISF Shell Extensions", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
-                ShellExecuteW(hDlg, L"open",
-                    L"https://github.com/dennispayne/XISF-Shell-Extensions",
-                    nullptr, nullptr, SW_SHOWNORMAL);
-            } else {
-                OpenDocumentation(hDlg, L"getting-started.md");
-                SetProgressText(L"Opened getting started guide.");
-            }
+            ShellExecuteW(hDlg, L"open",
+                L"https://github.com/dennispayne/XISF-Shell-Extensions",
+                nullptr, nullptr, SW_SHOWNORMAL);
             return TRUE;
+        }
+        if (hdr && (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
+            switch (hdr->idFrom) {
+            case IDC_LINK_PROPERTY_DOC:
+                OpenDocumentation(hDlg, L"user-guide/handlers-overview.md#property-handler");
+                SetProgressText(L"Opened Property Handler documentation.");
+                return TRUE;
+            case IDC_LINK_PREVIEW_DOC:
+                OpenDocumentation(hDlg, L"user-guide/handlers-overview.md#preview-handler");
+                SetProgressText(L"Opened Preview Handler documentation.");
+                return TRUE;
+            case IDC_LINK_FILTER_DOC:
+                OpenDocumentation(hDlg, L"user-guide/handlers-overview.md#search-filter");
+                SetProgressText(L"Opened Search Filter documentation.");
+                return TRUE;
+            case IDC_LINK_ADVANCED_DOC:
+                OpenDocumentation(hDlg, L"user-guide/settings-reference.md#etw-tracing");
+                SetProgressText(L"Opened ETW tracing documentation.");
+                return TRUE;
+            }
         }
         break;
     }
@@ -1514,17 +1864,11 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         HWND hCtl = reinterpret_cast<HWND>(lParam);
         int id = GetDlgCtrlID(hCtl);
         if (id == IDC_STATIC_PROPERTY_STATUS || id == IDC_STATIC_PREVIEW_STATUS ||
-            id == IDC_STATIC_FILTER_STATUS ||
-            id == IDC_STATIC_NGC_MATCH || id == IDC_STATIC_ADD_MATCH ||
-            id == IDC_STATIC_SHP_MATCH || id == IDC_STATIC_CST_MATCH) {
+            id == IDC_STATIC_FILTER_STATUS) {
             COLORREF color = g_iconBadColor;
             if (id == IDC_STATIC_PROPERTY_STATUS) color = g_propertyIconColor;
             else if (id == IDC_STATIC_PREVIEW_STATUS) color = g_previewIconColor;
             else if (id == IDC_STATIC_FILTER_STATUS) color = g_filterIconColor;
-            else if (id == IDC_STATIC_NGC_MATCH) color = g_ngcIconColor;
-            else if (id == IDC_STATIC_ADD_MATCH) color = g_addIconColor;
-            else if (id == IDC_STATIC_SHP_MATCH) color = g_shpIconColor;
-            else if (id == IDC_STATIC_CST_MATCH) color = g_cstIconColor;
             SetTextColor(hdc, color);
             SetBkColor(hdc, GetSysColor(COLOR_BTNFACE));
             SetBkMode(hdc, OPAQUE);
@@ -1550,12 +1894,6 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
                 g_pending.registerProperty = true;
                 SetProgressText(L"Property Handler will be registered on Apply (requires elevation).");
             }
-            // Right-click or Shift+Click shows help (simple heuristic: if modifier keys are down, show help)
-            if ((GetKeyState(VK_CONTROL) & 0x8000) || (GetKeyState(VK_SHIFT) & 0x8000)) {
-                if (MessageBoxW(hDlg, L"Property Handler reads XISF file metadata.\n\nOpen handler documentation?", L"XISF Shell Extensions", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
-                    OpenDocumentation(hDlg, L"user-guide/handlers-overview.md#property-handler");
-                }
-            }
             RefreshHandlerStatuses();
             UpdatePendingDisplay();
             return TRUE;
@@ -1572,11 +1910,6 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             } else {
                 g_pending.registerPreview = true;
                 SetProgressText(L"Preview Handler will be registered on Apply (requires elevation).");
-            }
-            if ((GetKeyState(VK_CONTROL) & 0x8000) || (GetKeyState(VK_SHIFT) & 0x8000)) {
-                if (MessageBoxW(hDlg, L"Preview Handler displays XISF preview and thumbnails.\n\nOpen handler documentation?", L"XISF Shell Extensions", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
-                    OpenDocumentation(hDlg, L"user-guide/handlers-overview.md#preview-handler");
-                }
             }
             RefreshHandlerStatuses();
             UpdatePendingDisplay();
@@ -1595,27 +1928,32 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
                 g_pending.registerFilter = true;
                 SetProgressText(L"Search Filter will be registered on Apply (requires elevation).");
             }
-            if ((GetKeyState(VK_CONTROL) & 0x8000) || (GetKeyState(VK_SHIFT) & 0x8000)) {
-                if (MessageBoxW(hDlg, L"Search Filter enables Windows Search indexing for XISF files.\n\nOpen handler documentation?", L"XISF Shell Extensions", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
-                    OpenDocumentation(hDlg, L"user-guide/handlers-overview.md#search-filter");
-                }
-            }
             RefreshHandlerStatuses();
             UpdatePendingDisplay();
             return TRUE;
         }
         case IDC_BTN_SHOW_TIERS: {
-            // Show feature tier dialog (already implemented)
             DialogBoxParamW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDD_TIERS), hDlg,
-                [](HWND hDlg, UINT msg, WPARAM wParam, LPARAM) -> INT_PTR {
+                [](HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) -> INT_PTR {
+                    if (msg == WM_INITDIALOG) {
+                        SetDlgItemTextW(hDlg, IDC_LINK_TIERS_DOC,
+                            L"<a href=\"https://github.com/dennispayne/XISF-Shell-Extensions/blob/main/docs/features/feature-tiers.md\">Open full feature tiers documentation</a>");
+                        return TRUE;
+                    }
+                    if (msg == WM_NOTIFY) {
+                        auto* hdr = reinterpret_cast<NMHDR*>(lParam);
+                        if (hdr && hdr->idFrom == IDC_LINK_TIERS_DOC &&
+                            (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
+                            auto rc = reinterpret_cast<INT_PTR>(ShellExecuteW(hDlg, L"open",
+                                L"https://github.com/dennispayne/XISF-Shell-Extensions/blob/main/docs/features/feature-tiers.md",
+                                nullptr, nullptr, SW_SHOWNORMAL));
+                            return rc > 32 ? TRUE : FALSE;
+                        }
+                    }
                     if (msg == WM_COMMAND && LOWORD(wParam) == IDOK) { EndDialog(hDlg, IDOK); return TRUE; }
                     if (msg == WM_CLOSE) { EndDialog(hDlg, IDCANCEL); return TRUE; }
                     return FALSE;
                 }, 0);
-            // Also offer to open full documentation
-            if (MessageBoxW(hDlg, L"Open full feature tier documentation in browser?", L"XISF Shell Extensions", MB_YESNO | MB_ICONQUESTION) == IDYES) {
-                OpenDocumentation(hDlg, L"features/feature-tiers.md");
-            }
             return TRUE;
         }
         case IDC_COMBO_FEATURE_TIER: {
@@ -1653,24 +1991,12 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             return TRUE;
         }
         case IDC_BTN_REGISTER_HANDLERS:    OnRegisterHandlers();      return TRUE;
-        case IDC_BTN_FETCH_NGC:            OnFetchOnline(0);         return TRUE;
-        case IDC_BTN_FETCH_ADD:            OnFetchOnline(1);         return TRUE;
-        case IDC_BTN_FETCH_SHP:            OnFetchOnline(2);         return TRUE;
-        case IDC_BTN_FETCH_CST:            OnFetchOnline(3);         return TRUE;
-        case IDC_BTN_REMOVE_NGC:           OnRemoveCatalog(0);       return TRUE;
-        case IDC_BTN_REMOVE_ADD:           OnRemoveCatalog(1);       return TRUE;
-        case IDC_BTN_REMOVE_SHP:           OnRemoveCatalog(2);       return TRUE;
-        case IDC_BTN_REMOVE_CST:           OnRemoveCatalog(3);       return TRUE;
+        case IDC_BTN_CATALOG_INSTALL:      OnInstallSelectedCatalog(); return TRUE;
+        case IDC_BTN_CATALOG_REMOVE:       OnRemoveSelectedCatalog();  return TRUE;
         case IDC_BTN_IMPORT_FILE:          OnImportFile();           return TRUE;
         case IDC_BTN_OPEN_CATALOG_DIR:     OnOpenCatalogDir();       return TRUE;
         case IDC_BTN_COPY_EXPECTED_HASHES: OnCopyExpectedHashes();   return TRUE;
         case IDC_BTN_ADVANCED: {
-            // Offer documentation about ETW tracing before opening advanced dialog
-            if (MessageBoxW(hDlg, L"Advanced: ETW tracing and handler management.\n\nOpen documentation about ETW tracing first?", L"XISF Shell Extensions", MB_YESNO | MB_ICONQUESTION) == IDYES) {
-                OpenDocumentation(hDlg, L"user-guide/settings-reference.md#etw-tracing");
-                SetProgressText(L"Opened ETW tracing documentation.");
-            }
-
             SHELLEXECUTEINFOW sei{};
             sei.cbSize = sizeof(sei);
             sei.fMask = SEE_MASK_NOCLOSEPROCESS;
@@ -1907,10 +2233,16 @@ void OnTraceStart(HWND hDlg)
     const bool prevInfo = IsDlgButtonChecked(hDlg, IDC_CHK_TRACE_PREV_INFO) == BST_CHECKED;
     const bool prevVerbose = IsDlgButtonChecked(hDlg, IDC_CHK_TRACE_PREV_VERBOSE) == BST_CHECKED;
 
+    const bool filtError = IsDlgButtonChecked(hDlg, IDC_CHK_TRACE_FILT_ERROR) == BST_CHECKED;
+    const bool filtWarn = IsDlgButtonChecked(hDlg, IDC_CHK_TRACE_FILT_WARN) == BST_CHECKED;
+    const bool filtInfo = IsDlgButtonChecked(hDlg, IDC_CHK_TRACE_FILT_INFO) == BST_CHECKED;
+    const bool filtVerbose = IsDlgButtonChecked(hDlg, IDC_CHK_TRACE_FILT_VERBOSE) == BST_CHECKED;
+
     const bool includeProp = propError || propWarn || propInfo || propVerbose;
     const bool includePrev = prevError || prevWarn || prevInfo || prevVerbose;
+    const bool includeFilt = filtError || filtWarn || filtInfo || filtVerbose;
 
-    if (!includeProp && !includePrev) {
+    if (!includeProp && !includePrev && !includeFilt) {
         SetAdvStatus(hDlg, L"Select at least one item/level in the trace matrix.");
         return;
     }
@@ -1925,6 +2257,7 @@ void OnTraceStart(HWND hDlg)
 
     const int propLevel = levelFromRow(propError, propWarn, propInfo, propVerbose);
     const int prevLevel = levelFromRow(prevError, prevWarn, prevInfo, prevVerbose);
+    const int filtLevel = levelFromRow(filtError, filtWarn, filtInfo, filtVerbose);
 
     g_traceRunning = IsTraceSessionRunning();
     if (g_traceRunning) {
@@ -1957,6 +2290,16 @@ void OnTraceStart(HWND hDlg)
         cmd += L" -ets";
         if (!RunLogman(cmd)) {
             SetAdvStatus(hDlg, L"Failed to add Preview provider.");
+            return;
+        }
+    }
+
+    if (includeFilt) {
+        std::wstring cmd = L"update trace XISFTrace -p \"{3A4B5C6D-7E8F-9012-AB34-CD56EF789012}\" 0xFFFF ";
+        cmd += std::to_wstring(filtLevel);
+        cmd += L" -ets";
+        if (!RunLogman(cmd)) {
+            SetAdvStatus(hDlg, L"Failed to add Filter provider.");
             return;
         }
     }
@@ -2096,6 +2439,8 @@ INT_PTR CALLBACK AdvancedDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lPar
     case WM_INITDIALOG:
         g_tracePath = GetTracePath();
         SetDlgItemTextW(hDlg, IDC_STATIC_TRACE_PATH, g_tracePath.c_str());
+        SetDlgItemTextW(hDlg, IDC_LINK_ETW_DOC,
+            L"<a href=\"etw\">ETW tracing documentation</a>");
         CheckDlgButton(hDlg, IDC_CHK_TRACE_PROP_ERROR, BST_UNCHECKED);
         CheckDlgButton(hDlg, IDC_CHK_TRACE_PROP_WARN, BST_CHECKED);
         CheckDlgButton(hDlg, IDC_CHK_TRACE_PROP_INFO, BST_CHECKED);
@@ -2104,6 +2449,10 @@ INT_PTR CALLBACK AdvancedDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lPar
         CheckDlgButton(hDlg, IDC_CHK_TRACE_PREV_WARN, BST_CHECKED);
         CheckDlgButton(hDlg, IDC_CHK_TRACE_PREV_INFO, BST_CHECKED);
         CheckDlgButton(hDlg, IDC_CHK_TRACE_PREV_VERBOSE, BST_UNCHECKED);
+        CheckDlgButton(hDlg, IDC_CHK_TRACE_FILT_ERROR, BST_UNCHECKED);
+        CheckDlgButton(hDlg, IDC_CHK_TRACE_FILT_WARN, BST_CHECKED);
+        CheckDlgButton(hDlg, IDC_CHK_TRACE_FILT_INFO, BST_CHECKED);
+        CheckDlgButton(hDlg, IDC_CHK_TRACE_FILT_VERBOSE, BST_UNCHECKED);
         g_traceRunning = IsTraceSessionRunning();
         g_traceExportInProgress = false;
         g_activeTracePath.clear();
@@ -2111,6 +2460,16 @@ INT_PTR CALLBACK AdvancedDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lPar
         UpdateTraceActionButtons(hDlg);
         SetAdvStatus(hDlg, g_traceRunning ? L"Trace session is RUNNING." : L"Trace session is STOPPED.");
         return TRUE;
+    case WM_NOTIFY: {
+        auto* hdr = reinterpret_cast<NMHDR*>(lParam);
+        if (hdr && hdr->idFrom == IDC_LINK_ETW_DOC &&
+            (hdr->code == NM_CLICK || hdr->code == NM_RETURN)) {
+            OpenDocumentation(hDlg, L"features/telemetry-etw.md");
+            SetAdvStatus(hDlg, L"Opened ETW tracing documentation.");
+            return TRUE;
+        }
+        break;
+    }
     case WM_XISF_TRACE_EXPORT_DONE: {
         std::unique_ptr<TraceExportResult> result(reinterpret_cast<TraceExportResult*>(lParam));
         g_traceExportInProgress = false;
@@ -2134,24 +2493,9 @@ INT_PTR CALLBACK AdvancedDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lPar
         case IDC_BTN_REGISTER_HANDLERS: OnRegisterHandlers(); return TRUE;
         case IDC_BTN_RESTART_EXPLORER:  OnRestartExplorer();  return TRUE;
         case IDC_BTN_FLUSH_THUMBCACHE:  OnFlushThumbnailCache(); return TRUE;
-        case IDC_BTN_TRACE_START: {
-            if (MessageBoxW(hDlg, L"Start ETW trace session.\n\nOpen ETW tracing documentation first?", L"XISF Shell Extensions", MB_YESNO | MB_ICONQUESTION) == IDYES) {
-                OpenDocumentation(hDlg, L"features/telemetry-etw.md");
-                SetAdvStatus(hDlg, L"Opened ETW tracing documentation.");
-                return TRUE;
-            }
-            OnTraceStart(hDlg);
-            return TRUE;
-        }
-        case IDC_BTN_TRACE_STOP:  OnTraceStop(hDlg);  return TRUE;
-        case IDC_BTN_TRACE_OPEN_ETL: {
-            if (MessageBoxW(hDlg, L"View ETL trace file.\n\nOpen ETW tracing documentation first?", L"XISF Shell Extensions", MB_YESNO | MB_ICONQUESTION) == IDYES) {
-                OpenDocumentation(hDlg, L"features/telemetry-etw.md");
-            } else {
-                OnTraceView(hDlg);
-            }
-            return TRUE;
-        }
+        case IDC_BTN_TRACE_START:    OnTraceStart(hDlg);   return TRUE;
+        case IDC_BTN_TRACE_STOP:     OnTraceStop(hDlg);    return TRUE;
+        case IDC_BTN_TRACE_OPEN_ETL: OnTraceView(hDlg);    return TRUE;
         case IDC_BTN_TRACE_EXPORT_XML: OnTraceExportXml(hDlg); return TRUE;
         case IDOK:
         case IDCANCEL: EndDialog(hDlg, 0); return TRUE;

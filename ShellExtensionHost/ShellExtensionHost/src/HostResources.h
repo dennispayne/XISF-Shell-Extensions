@@ -3,6 +3,7 @@
 
 #define IDD_SETTINGS                 101
 #define IDD_ADVANCED                 102
+#define IDI_SETTINGS_APP             201
 
 #define IDC_STATIC_INTRO             1000
 #define IDC_BTN_TOGGLE_PROPERTY      1001
@@ -62,6 +63,11 @@
 #define IDC_CHK_TRACE_PREV_INFO      1077
 #define IDC_CHK_TRACE_PREV_VERBOSE   1078
 
+#define IDC_CHK_TRACE_FILT_ERROR     1090
+#define IDC_CHK_TRACE_FILT_WARN      1091
+#define IDC_CHK_TRACE_FILT_INFO      1092
+#define IDC_CHK_TRACE_FILT_VERBOSE   1093
+
 // Feature tier & projection
 #define IDC_COMBO_FEATURE_TIER       1080
 #define IDC_STATIC_TIER_LABEL        1081
@@ -94,3 +100,21 @@
 
 #define IDC_BTN_FETCH_CST            1102
 #define IDC_BTN_REMOVE_CST           1103
+
+#define IDC_LIST_CATALOGS            1104
+#define IDC_BTN_CATALOG_INSTALL      1105
+#define IDC_BTN_CATALOG_REMOVE       1106
+#define IDC_LINK_TIERS_DOC           1107
+
+// Inline doc links + DLL path display (replace the legacy "open docs? Y/N"
+// MessageBox prompts with persistent SysLink controls placed next to the
+// relevant handler row / button.)
+#define IDC_STATIC_PROPERTY_PATH     1108
+#define IDC_STATIC_PREVIEW_PATH      1109
+#define IDC_STATIC_FILTER_PATH       1110
+#define IDC_LINK_PROPERTY_DOC        1111
+#define IDC_LINK_PREVIEW_DOC         1112
+#define IDC_LINK_FILTER_DOC          1113
+#define IDC_LINK_ETW_DOC             1114
+#define IDC_LINK_CATALOG_VERIFY_DOC  1115
+#define IDC_LINK_ADVANCED_DOC        1116
