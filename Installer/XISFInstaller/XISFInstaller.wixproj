@@ -22,12 +22,14 @@
   <PropertyGroup>
     <!-- Point to build output; CI or local builds place binaries here -->
     <BinDir Condition="'$(BinDir)' == ''">$(MSBuildThisFileDirectory)..\..\x64\Release\</BinDir>
+    <DataDir Condition="'$(DataDir)' == ''">$(MSBuildThisFileDirectory)..\..\data\</DataDir>
     <PropdescDir Condition="'$(PropdescDir)' == ''">$(MSBuildThisFileDirectory)..\..\PropertyHandler\XISFPropertyHandler\propdesc\</PropdescDir>
-    <DefineConstants>$(DefineConstants);BinDir=$(BinDir);PropdescDir=$(PropdescDir)</DefineConstants>
+    <DefineConstants>$(DefineConstants);BinDir=$(BinDir);DataDir=$(DataDir);PropdescDir=$(PropdescDir)</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
     <BindPath Include="BinDir" Path="$(BinDir)" />
+    <BindPath Include="DataDir" Path="$(DataDir)" />
     <BindPath Include="PropdescDir" Path="$(PropdescDir)" />
   </ItemGroup>
 
@@ -38,4 +40,25 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>
+
+  <!-- ── License (EULA) ──
+       The LicenseAgreementDlg shown by WixUI_FeatureTree consumes
+       License.rtf via the WixUILicenseRtf variable. Regenerate it
+       from the canonical repo LICENSE on every build so the two
+       never drift. The script is incremental (no-op when content
+       matches), so this stays cheap on warm rebuilds. -->
+  <ItemGroup>
+    <None Include="License.rtf" />
+    <None Include="$(MSBuildThisFileDirectory)..\..\LICENSE">
+      <Link>LICENSE</Link>
+    </None>
+  </ItemGroup>
+
+  <Target Name="RegenerateLicenseRtf"
+          BeforeTargets="BeforeBuild"
+          Inputs="$(MSBuildThisFileDirectory)..\..\LICENSE;$(MSBuildThisFileDirectory)..\..\scripts\Convert-LicenseToRtf.ps1"
+          Outputs="$(MSBuildThisFileDirectory)License.rtf">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\..\scripts\Convert-LicenseToRtf.ps1&quot;"
+          WorkingDirectory="$(MSBuildThisFileDirectory)..\.." />
+  </Target>
 </Project>

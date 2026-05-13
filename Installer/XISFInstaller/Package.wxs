@@ -4,13 +4,13 @@
 
   <!--
     XISF Shell Extensions MSI installer.
-    Installs all three handler DLLs, the settings app, and the propdesc schema.
+    Installs selected handler DLLs plus the always-on settings app and propdesc schema.
     COM registration is done via regsvr32 custom actions (deferred/elevated)
     because the DLLs' DllRegisterServer handles complex shared state
     (file associations, SystemFileAssociations, propdesc, ProgIDs).
 
-    Runtime handler enable/disable is managed by the settings app via HKCU flags,
-    not by MSI features. All handlers are always installed.
+    Runtime handler enable/disable is managed by the settings app via HKCU flags.
+    MSI feature selection controls which handler binaries are installed/registered.
   -->
 
   <Package
@@ -28,8 +28,81 @@
 
     <MediaTemplate EmbedCab="yes" />
 
+    <!-- ── Optional data path ──
+         User-supplied root of their .xisf collection. If set, the installer
+         adds it to Windows Search's default crawl scope (and removes it on
+         uninstall). Search must already be running; the XISFFilter handler
+         we register handles the actual content indexing.
+
+         Public + Secure so cmdline (XISF_DATA_PATH="D:\Astro") and UI can
+         set it. The default value is sourced from HKLM via RegistrySearch
+         so repairs/upgrades/uninstalls always know the previously chosen
+         path even when the property isn't supplied. -->
+    <Property Id="XISF_DATA_PATH" Secure="yes">
+      <RegistrySearch Id="XISFDataPathSearch"
+                      Root="HKLM"
+                      Key="SOFTWARE\DennisPayne\XISF Shell Extension\MSI"
+                      Name="DataPath"
+                      Type="raw" />
+    </Property>
+
     <!-- ── UI & Logging ── -->
-    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <ui:WixUI Id="WixUI_FeatureTree" InstallDirectory="INSTALLFOLDER" />
+
+    <!-- EULA shown by LicenseAgreementDlg. Sourced from the repo's MIT
+         LICENSE; License.rtf is regenerated from LICENSE in the build/
+         pipeline (see scripts) so the two stay in lockstep. -->
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+
+    <!-- Inject the optional data-path step between CustomizeDlg and
+         VerifyReadyDlg in the FeatureTree flow. Higher Order beats the
+         extension's default publishes. -->
+    <UI>
+      <Dialog Id="XISFDataPathDlg" Width="370" Height="270" Title="!(loc.InstallDirDlg_Title)">
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44"
+                 TabSkip="no" Text="!(loc.InstallDirDlgBannerBitmap)" />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="280" Height="15"
+                 Transparent="yes" NoPrefix="yes"
+                 Text="{\WixUI_Font_Title}XISF data location (optional)" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="320" Height="15"
+                 Transparent="yes" NoPrefix="yes"
+                 Text="Point Windows Search at your XISF collection so it gets indexed." />
+
+        <Control Id="HelpText" Type="Text" X="20" Y="60" Width="330" Height="50"
+                 NoPrefix="yes"
+                 Text="If your .xisf files live outside the default indexed locations (Documents, Pictures, etc.), enter the full path to your data root and the installer will add it to Windows Search. Leave blank to skip — you can always add it later from Indexing Options." />
+
+        <Control Id="PathLabel" Type="Text" X="20" Y="120" Width="100" Height="13"
+                 NoPrefix="yes" Text="Data &amp;path:" />
+        <Control Id="PathEdit" Type="Edit" X="20" Y="135" Width="330" Height="18"
+                 Property="XISF_DATA_PATH" Indirect="no" />
+        <Control Id="HintLabel" Type="Text" X="20" Y="158" Width="330" Height="13"
+                 NoPrefix="yes"
+                 Text="Example: D:\Astrophotography\XISF" />
+
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17"
+                 Default="no" Cancel="no" Text="!(loc.WixUIBack)">
+          <Publish Event="NewDialog" Value="CustomizeDlg" />
+        </Control>
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17"
+                 Default="yes" Cancel="no" Text="!(loc.WixUINext)">
+          <Publish Event="NewDialog" Value="VerifyReadyDlg" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17"
+                 Default="no" Cancel="yes" Text="!(loc.WixUICancel)">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+      </Dialog>
+
+      <Publish Dialog="CustomizeDlg" Control="Next" Event="NewDialog"
+               Value="XISFDataPathDlg" Order="3" />
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog"
+               Value="XISFDataPathDlg" Order="3"
+               Condition="WixUI_InstallMode = &quot;InstallCustom&quot;" />
+    </UI>
 
     <!-- ── Install directory ── -->
     <StandardDirectory Id="ProgramFiles64Folder">
@@ -43,20 +116,41 @@
       </Directory>
     </StandardDirectory>
 
+    <!-- Machine-wide catalog storage location used at runtime. -->
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="DennisPayneDataDir" Name="DennisPayne">
+        <Directory Id="XisfDataDir" Name="XISFShellExtension">
+          <Directory Id="XisfCatalogDir" Name="catalogs" />
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
     <!-- ── Components ── -->
-    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+    <ComponentGroup Id="PropertyHandlerComponents" Directory="INSTALLFOLDER">
 
       <Component Id="PropertyHandlerDll" Bitness="always64">
         <File Id="XISFPropertyHandler.dll" Source="$(var.BinDir)XISFPropertyHandler.dll" KeyPath="yes" />
       </Component>
 
+    </ComponentGroup>
+
+    <ComponentGroup Id="PreviewHandlerComponents" Directory="INSTALLFOLDER">
+
       <Component Id="PreviewHandlerDll" Bitness="always64">
         <File Id="XISFPreviewHandler.dll" Source="$(var.BinDir)XISFPreviewHandler.dll" KeyPath="yes" />
       </Component>
 
+    </ComponentGroup>
+
+    <ComponentGroup Id="FilterHandlerComponents" Directory="INSTALLFOLDER">
+
       <Component Id="FilterDll" Bitness="always64">
         <File Id="XISFFilter.dll" Source="$(var.BinDir)XISFFilter.dll" KeyPath="yes" />
       </Component>
+
+    </ComponentGroup>
+
+    <ComponentGroup Id="CoreComponents" Directory="INSTALLFOLDER">
 
       <Component Id="SettingsApp" Bitness="always64">
         <File Id="XISFShellExtensionHost.exe" Source="$(var.BinDir)XISFShellExtensionHost.exe" KeyPath="yes" />
@@ -64,6 +158,15 @@
 
       <Component Id="PropdescSchema" Bitness="always64">
         <File Id="xisf.propdesc" Source="$(var.PropdescDir)xisf.propdesc" KeyPath="yes" />
+      </Component>
+
+      <!-- Bundled verified snapshots used by the settings app as resilient seeds
+           for sharpless/constellation catalogs when online source access fails. -->
+      <Component Id="SharplessSeedCatalog" Bitness="always64">
+        <File Id="SeedSharplessCsv" Source="$(var.DataDir)sharpless.csv" KeyPath="yes" />
+      </Component>
+      <Component Id="ConstellationsSeedCatalog" Bitness="always64">
+        <File Id="SeedConstellationsCsv" Source="$(var.DataDir)constellations.csv" KeyPath="yes" />
       </Component>
 
       <!--
@@ -82,6 +185,25 @@
                        Name="RestartManagerInstalled" Type="integer" Value="1" KeyPath="yes" />
       </Component>
 
+      <!-- Persist the user-supplied data path so repair/upgrade/uninstall can
+           recover it via the RegistrySearch at AppSearch time. Always written
+           (empty string when the user skipped the field) and removed on
+           uninstall, which keeps the bookkeeping simple. -->
+      <Component Id="DataPathRegistry" Bitness="always64" Guid="6B7C8D9E-0F1A-2B3C-4D5E-6F7A8B9C0D1E">
+        <RegistryValue Root="HKLM" Key="SOFTWARE\DennisPayne\XISF Shell Extension\MSI"
+                       Name="DataPath" Type="string" Value="[XISF_DATA_PATH]" KeyPath="yes" />
+      </Component>
+
+    </ComponentGroup>
+
+    <ComponentGroup Id="CatalogDataComponents" Directory="XisfCatalogDir">
+      <Component Id="CatalogDataFolder" Bitness="always64" Guid="7F3F4192-4D0A-4B11-9F93-8F79E4EEA683">
+        <CreateFolder>
+          <util:PermissionEx User="Users" GenericRead="yes" GenericWrite="yes" GenericExecute="yes" />
+        </CreateFolder>
+        <RegistryValue Root="HKLM" Key="SOFTWARE\DennisPayne\XISF Shell Extension\Catalogs"
+                       Name="Path" Type="string" Value="[XisfCatalogDir]" KeyPath="yes" />
+      </Component>
     </ComponentGroup>
 
     <!-- ── Start Menu shortcut ── -->
@@ -98,12 +220,26 @@
       </Component>
     </ComponentGroup>
 
-    <!-- ── Single feature: everything ── -->
+    <!-- ── Features ── -->
     <Feature Id="Complete" Title="XISF Shell Extensions" Level="1"
              Description="Property handler, preview/thumbnail handler, search filter, and settings app."
              ConfigurableDirectory="INSTALLFOLDER"
              AllowAbsent="no">
-      <ComponentGroupRef Id="ProductComponents" />
+      <Feature Id="PropertyHandlerFeature" Title="Property handler" Level="1"
+              Description="Expose XISF metadata as Explorer properties.">
+        <ComponentGroupRef Id="PropertyHandlerComponents" />
+      </Feature>
+      <Feature Id="PreviewHandlerFeature" Title="Preview handler" Level="1"
+              Description="Enable Explorer preview/thumbnail support for XISF files.">
+        <ComponentGroupRef Id="PreviewHandlerComponents" />
+      </Feature>
+      <Feature Id="FilterHandlerFeature" Title="Filter handler" Level="1"
+              Description="Enable Windows Search indexing for XISF metadata.">
+        <ComponentGroupRef Id="FilterHandlerComponents" />
+      </Feature>
+
+      <ComponentGroupRef Id="CoreComponents" />
+      <ComponentGroupRef Id="CatalogDataComponents" />
       <ComponentGroupRef Id="ShortcutComponents" />
     </Feature>
 
@@ -116,76 +252,122 @@
          components (see docs/installer.md for the migration plan).
          
          CHANGED in v0.2+:
-         - Removed /s flag from regsvr32 to show errors instead of silencing them.
-         - Added logging via > [INSTALLFOLDER]regsvr32.log for troubleshooting.
-         - Failures in registration CAs now properly abort install (Return="check").
+         - Keep registration CAs fail-fast (Return="check").
+         - Use unattended regsvr32 invocation (/s) for reliability in non-interactive installs.
+         - Do NOT use shell redirection here: WixQuietExec64 executes processes directly,
+           not through cmd.exe, so operators like >> are treated as literal arguments.
          ════════════════════════════════════════════════════════════════════ -->
 
     <!-- Stop the Windows Search service before touching files so it releases
          XISFFilter.dll. Failures are ignored (service may be disabled). -->
     <SetProperty Id="CA_StopWSearch" Value="&quot;[System64Folder]net.exe&quot; stop wsearch /y"
-                 Before="CA_StopWSearch" Sequence="execute" />
+                 Before="CA_StopWSearch" Sequence="execute"
+                 Condition="($FilterDll=3 AND (?FilterDll&lt;&gt;3 OR REINSTALL)) OR ($FilterDll=2 AND ?FilterDll=3)" />
     <CustomAction Id="CA_StopWSearch" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="ignore" Impersonate="no" />
 
     <!-- Restart the Windows Search service after registration so it picks up
          the new filter immediately. Failures are ignored (service may be disabled). -->
     <SetProperty Id="CA_StartWSearch" Value="&quot;[System64Folder]net.exe&quot; start wsearch"
-                 Before="CA_StartWSearch" Sequence="execute" Condition="NOT REMOVE" />
+                 Before="CA_StartWSearch" Sequence="execute"
+                 Condition="(($FilterDll=3 AND (?FilterDll&lt;&gt;3 OR REINSTALL)) OR ($FilterDll=2 AND ?FilterDll=3)) AND NOT REMOVE=&quot;ALL&quot;" />
     <CustomAction Id="CA_StartWSearch" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="ignore" Impersonate="no" />
 
-    <!-- Register: property handler. Log output to help troubleshoot 1603 errors. -->
-    <SetProperty Id="CA_RegisterProperty" Value="&quot;[System64Folder]regsvr32.exe&quot; &quot;[INSTALLFOLDER]XISFPropertyHandler.dll&quot; &gt;&gt;&quot;[INSTALLFOLDER]regsvr32.log&quot;"
-                 Before="CA_RegisterProperty" Sequence="execute" Condition="NOT REMOVE" />
+    <!-- Register: property handler -->
+    <SetProperty Id="CA_RegisterProperty" Value="&quot;[System64Folder]regsvr32.exe&quot; /s &quot;[INSTALLFOLDER]XISFPropertyHandler.dll&quot;"
+                 Before="CA_RegisterProperty" Sequence="execute"
+                 Condition="$PropertyHandlerDll=3 AND (?PropertyHandlerDll&lt;&gt;3 OR REINSTALL)" />
     <CustomAction Id="CA_RegisterProperty" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="check" Impersonate="no" />
 
-    <!-- Register: preview handler. Log output to help troubleshoot 1603 errors. -->
-    <SetProperty Id="CA_RegisterPreview" Value="&quot;[System64Folder]regsvr32.exe&quot; &quot;[INSTALLFOLDER]XISFPreviewHandler.dll&quot; &gt;&gt;&quot;[INSTALLFOLDER]regsvr32.log&quot;"
-                 Before="CA_RegisterPreview" Sequence="execute" Condition="NOT REMOVE" />
+    <!-- Register: preview handler -->
+    <SetProperty Id="CA_RegisterPreview" Value="&quot;[System64Folder]regsvr32.exe&quot; /s &quot;[INSTALLFOLDER]XISFPreviewHandler.dll&quot;"
+                 Before="CA_RegisterPreview" Sequence="execute"
+                 Condition="$PreviewHandlerDll=3 AND (?PreviewHandlerDll&lt;&gt;3 OR REINSTALL)" />
     <CustomAction Id="CA_RegisterPreview" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="check" Impersonate="no" />
 
-    <!-- Register: search filter. Log output to help troubleshoot 1603 errors. -->
-    <SetProperty Id="CA_RegisterFilter" Value="&quot;[System64Folder]regsvr32.exe&quot; &quot;[INSTALLFOLDER]XISFFilter.dll&quot; &gt;&gt;&quot;[INSTALLFOLDER]regsvr32.log&quot;"
-                 Before="CA_RegisterFilter" Sequence="execute" Condition="NOT REMOVE" />
+    <!-- Register: search filter -->
+    <SetProperty Id="CA_RegisterFilter" Value="&quot;[System64Folder]regsvr32.exe&quot; /s &quot;[INSTALLFOLDER]XISFFilter.dll&quot;"
+                 Before="CA_RegisterFilter" Sequence="execute"
+                 Condition="$FilterDll=3 AND (?FilterDll&lt;&gt;3 OR REINSTALL)" />
     <CustomAction Id="CA_RegisterFilter" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="check" Impersonate="no" />
 
     <!-- Unregister: property handler -->
     <SetProperty Id="CA_UnregisterProperty" Value="&quot;[System64Folder]regsvr32.exe&quot; /u &quot;[INSTALLFOLDER]XISFPropertyHandler.dll&quot;"
-                 Before="CA_UnregisterProperty" Sequence="execute" Condition="REMOVE" />
+                 Before="CA_UnregisterProperty" Sequence="execute"
+                 Condition="$PropertyHandlerDll=2 AND ?PropertyHandlerDll=3" />
     <CustomAction Id="CA_UnregisterProperty" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="ignore" Impersonate="no" />
 
     <!-- Unregister: preview handler -->
     <SetProperty Id="CA_UnregisterPreview" Value="&quot;[System64Folder]regsvr32.exe&quot; /u &quot;[INSTALLFOLDER]XISFPreviewHandler.dll&quot;"
-                 Before="CA_UnregisterPreview" Sequence="execute" Condition="REMOVE" />
+                 Before="CA_UnregisterPreview" Sequence="execute"
+                 Condition="$PreviewHandlerDll=2 AND ?PreviewHandlerDll=3" />
     <CustomAction Id="CA_UnregisterPreview" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="ignore" Impersonate="no" />
 
     <!-- Unregister: search filter -->
     <SetProperty Id="CA_UnregisterFilter" Value="&quot;[System64Folder]regsvr32.exe&quot; /u &quot;[INSTALLFOLDER]XISFFilter.dll&quot;"
-                 Before="CA_UnregisterFilter" Sequence="execute" Condition="REMOVE" />
+                 Before="CA_UnregisterFilter" Sequence="execute"
+                 Condition="$FilterDll=2 AND ?FilterDll=3" />
     <CustomAction Id="CA_UnregisterFilter" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
+                  Execute="deferred" Return="ignore" Impersonate="no" />
+
+    <!-- ── Optional Windows Search scope management ────────────────────
+         Best-effort: failures are ignored so an indexing hiccup never
+         rolls back the install. The host EXE returns 0 even when Windows
+         Search is unavailable (service disabled, no privileges, etc.). -->
+
+    <!-- Add the user-supplied path to the System Index after the filter is
+         registered. Only runs when XISF_DATA_PATH is non-empty AND we are
+         installing/upgrading (not uninstalling) the settings host. -->
+    <SetProperty Id="CA_AddSearchPath"
+                 Value="&quot;[INSTALLFOLDER]XISFShellExtensionHost.exe&quot; --add-search-path &quot;[XISF_DATA_PATH]&quot;"
+                 Before="CA_AddSearchPath" Sequence="execute"
+                 Condition="XISF_DATA_PATH AND ($SettingsApp=3 AND (?SettingsApp&lt;&gt;3 OR REINSTALL))" />
+    <CustomAction Id="CA_AddSearchPath" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
+                  Execute="deferred" Return="ignore" Impersonate="no" />
+
+    <!-- Remove the path from the System Index when the host EXE is being
+         removed (uninstall or upgrade). Uses the persisted HKLM value
+         captured by the RegistrySearch on XISF_DATA_PATH, which survives
+         past RemoveRegistryValues because RegistrySearch ran at AppSearch
+         time. -->
+    <SetProperty Id="CA_RemoveSearchPath"
+                 Value="&quot;[INSTALLFOLDER]XISFShellExtensionHost.exe&quot; --remove-search-path &quot;[XISF_DATA_PATH]&quot;"
+                 Before="CA_RemoveSearchPath" Sequence="execute"
+                 Condition="XISF_DATA_PATH AND ($SettingsApp=2 AND ?SettingsApp=3)" />
+    <CustomAction Id="CA_RemoveSearchPath" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="ignore" Impersonate="no" />
 
     <!-- Schedule custom actions -->
     <InstallExecuteSequence>
       <!-- Stop Search before file replacement so the indexer releases handles. -->
-      <Custom Action="CA_StopWSearch" Before="InstallFiles" />
+      <Custom Action="CA_StopWSearch" Before="InstallFiles"
+              Condition="($FilterDll=3 AND (?FilterDll&lt;&gt;3 OR REINSTALL)) OR ($FilterDll=2 AND ?FilterDll=3)" />
 
-      <Custom Action="CA_UnregisterFilter"   Before="CA_UnregisterPreview"  Condition="REMOVE" />
-      <Custom Action="CA_UnregisterPreview"  Before="CA_UnregisterProperty" Condition="REMOVE" />
-      <Custom Action="CA_UnregisterProperty" Before="RemoveFiles"           Condition="REMOVE" />
+      <Custom Action="CA_UnregisterFilter"   Before="CA_UnregisterPreview"  Condition="$FilterDll=2 AND ?FilterDll=3" />
+      <Custom Action="CA_UnregisterPreview"  Before="CA_UnregisterProperty" Condition="$PreviewHandlerDll=2 AND ?PreviewHandlerDll=3" />
+      <Custom Action="CA_UnregisterProperty" Before="RemoveFiles"           Condition="$PropertyHandlerDll=2 AND ?PropertyHandlerDll=3" />
 
-      <Custom Action="CA_RegisterProperty" After="InstallFiles"          Condition="NOT REMOVE" />
-      <Custom Action="CA_RegisterPreview"  After="CA_RegisterProperty"   Condition="NOT REMOVE" />
-      <Custom Action="CA_RegisterFilter"   After="CA_RegisterPreview"    Condition="NOT REMOVE" />
+      <Custom Action="CA_RegisterProperty" After="InstallFiles"        Condition="$PropertyHandlerDll=3 AND (?PropertyHandlerDll&lt;&gt;3 OR REINSTALL)" />
+      <Custom Action="CA_RegisterPreview"  After="CA_RegisterProperty" Condition="$PreviewHandlerDll=3 AND (?PreviewHandlerDll&lt;&gt;3 OR REINSTALL)" />
+      <Custom Action="CA_RegisterFilter"   After="CA_RegisterPreview"  Condition="$FilterDll=3 AND (?FilterDll&lt;&gt;3 OR REINSTALL)" />
 
       <!-- Bring Search back up after the filter is registered. -->
-      <Custom Action="CA_StartWSearch" After="CA_RegisterFilter" Condition="NOT REMOVE" />
+      <Custom Action="CA_StartWSearch" After="CA_RegisterFilter"
+              Condition="(($FilterDll=3 AND (?FilterDll&lt;&gt;3 OR REINSTALL)) OR ($FilterDll=2 AND ?FilterDll=3)) AND NOT REMOVE=&quot;ALL&quot;" />
+
+      <!-- Add the user's data path to the index after Search is back up. -->
+      <Custom Action="CA_AddSearchPath" After="CA_StartWSearch"
+              Condition="XISF_DATA_PATH AND ($SettingsApp=3 AND (?SettingsApp&lt;&gt;3 OR REINSTALL))" />
+
+      <!-- Pull the path out of the index before we tear the host EXE down. -->
+      <Custom Action="CA_RemoveSearchPath" Before="CA_UnregisterFilter"
+              Condition="XISF_DATA_PATH AND ($SettingsApp=2 AND ?SettingsApp=3)" />
     </InstallExecuteSequence>
 
   </Package>
