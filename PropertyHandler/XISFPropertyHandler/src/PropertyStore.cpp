@@ -370,37 +370,46 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
 
     {
         std::lock_guard<std::mutex> lock(m_propertyLock);
-        PopulateProperties(tier, projectionEnabled);
-    }
-    m_initialized = true;
+        // Pixel stats: computed BEFORE PopulateProperties so the median can
+        // drive the AstroDataState (Linear / Non-Linear) heuristic. Only Full
+        // tier reads pixel data; Standard tier and below skip this step and
+        // fall back to the metadata heuristic in xisf::DetermineIsLinear.
+        xisf::PixelStatsResult pixelStats;
+        if (xisf::IsPixelStatsEnabled(tier)) {
+            m_pStream = pStream;
+            m_pStream->AddRef();
+            pixelStats = xisf::ComputePixelStats(m_pStream, m_metadata.xmlHeader);
+        }
 
-    // Pixel stats: only for Full tier
-    if (xisf::IsPixelStatsEnabled(tier)) {
-        m_pStream = pStream;
-        m_pStream->AddRef();
-        auto stats = xisf::ComputePixelStats(m_pStream, m_metadata.xmlHeader);
-        if (stats.available) {
-            std::lock_guard<std::mutex> lock(m_propertyLock);
-            for (auto& pe : m_properties) {
-                if (IsEqualPropertyKey(pe.key, PKEY_XISF_Median)) {
-                    PropVariantClear(&pe.value);
-                    InitPropVariantFromDouble(stats.median, &pe.value);
-                } else if (IsEqualPropertyKey(pe.key, PKEY_XISF_Mean)) {
-                    PropVariantClear(&pe.value);
-                    InitPropVariantFromDouble(stats.mean, &pe.value);
-                } else if (IsEqualPropertyKey(pe.key, PKEY_XISF_ClippingLow)) {
-                    PropVariantClear(&pe.value);
-                    InitPropVariantFromDouble(stats.clippingLowPct, &pe.value);
-                } else if (IsEqualPropertyKey(pe.key, PKEY_XISF_ClippingHigh)) {
-                    PropVariantClear(&pe.value);
-                    InitPropVariantFromDouble(stats.clippingHighPct, &pe.value);
+        PopulateProperties(tier, projectionEnabled, pixelStats);
+
+        // Apply pixel stats to the placeholder properties allocated inside
+        // PopulateProperties. Done under the same lock so consumers never
+        // observe a half-populated property store.
+        if (xisf::IsPixelStatsEnabled(tier)) {
+            if (pixelStats.available) {
+                for (auto& pe : m_properties) {
+                    if (IsEqualPropertyKey(pe.key, PKEY_XISF_Median)) {
+                        PropVariantClear(&pe.value);
+                        InitPropVariantFromDouble(pixelStats.median, &pe.value);
+                    } else if (IsEqualPropertyKey(pe.key, PKEY_XISF_Mean)) {
+                        PropVariantClear(&pe.value);
+                        InitPropVariantFromDouble(pixelStats.mean, &pe.value);
+                    } else if (IsEqualPropertyKey(pe.key, PKEY_XISF_ClippingLow)) {
+                        PropVariantClear(&pe.value);
+                        InitPropVariantFromDouble(pixelStats.clippingLowPct, &pe.value);
+                    } else if (IsEqualPropertyKey(pe.key, PKEY_XISF_ClippingHigh)) {
+                        PropVariantClear(&pe.value);
+                        InitPropVariantFromDouble(pixelStats.clippingHighPct, &pe.value);
+                    }
                 }
+                m_pixelStatsState = PixelStatsState::Computed;
+            } else {
+                m_pixelStatsState = PixelStatsState::Unavailable;
             }
-            m_pixelStatsState = PixelStatsState::Computed;
-        } else {
-            m_pixelStatsState = PixelStatsState::Unavailable;
         }
     }
+    m_initialized = true;
 
     { UINT32 _propCount = static_cast<UINT32>(m_properties.size()); ULONGLONG _dur = GetTickCount64() - initStart;
     TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeCompleted",
@@ -415,7 +424,8 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
     return S_OK;
 }
 
-void CXISFPropertyHandler::PopulateProperties(xisf::FeatureTier tier, bool projectionEnabled) {
+void CXISFPropertyHandler::PopulateProperties(xisf::FeatureTier tier, bool projectionEnabled,
+                                              const xisf::PixelStatsResult& pixelStats) {
     const ULONGLONG populateStart = GetTickCount64();
 
     // --- Basic tier: Direct metadata extraction from XML header ---
@@ -664,7 +674,8 @@ void CXISFPropertyHandler::PopulateProperties(xisf::FeatureTier tier, bool proje
             focalLength, hasFL, pxRaw,
             expTime, hasExp, cam,
             fNumber, hasFN,
-            filter, imgType, objName
+            filter, imgType, objName,
+            pixelStats.available, pixelStats.median
         };
 
         auto computed = xisf::PopulateComputedProperties(inputs);

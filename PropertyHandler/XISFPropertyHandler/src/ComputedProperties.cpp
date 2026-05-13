@@ -4,6 +4,7 @@
 #include "PropertyStore.h"
 #include "ConstellationDB.h"
 #include "DSOCatalog.h"
+#include "LinearityHeuristic.h"
 #include "PropertyHandlerTraceLogging.h"
 #include <propkey.h>
 #include <cmath>
@@ -128,11 +129,11 @@ static void EnsureCatalogLoaded()
 
         auto cat = std::make_shared<DSOCatalog>();
 
-        auto loadLocalAppDataCsv = [](DSOCatalog& c, const wchar_t* fileName, bool append) -> bool {
+        auto loadProgramDataCsv = [](DSOCatalog& c, const wchar_t* fileName, bool append) -> bool {
             PWSTR pszBase = nullptr;
-            if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &pszBase)) || !pszBase)
+            if (FAILED(SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &pszBase)) || !pszBase)
                 return false;
-            std::wstring wpath = std::wstring(pszBase) + L"\\XISFShellExtension\\catalogs\\" + fileName;
+            std::wstring wpath = std::wstring(pszBase) + L"\\DennisPayne\\XISFShellExtension\\catalogs\\" + fileName;
             CoTaskMemFree(pszBase);
             int len = WideCharToMultiByte(CP_UTF8, 0, wpath.c_str(), -1, nullptr, 0, nullptr, nullptr);
             if (len <= 0) return false;
@@ -141,15 +142,15 @@ static void EnsureCatalogLoaded()
             return append ? c.AppendFromCSVFile(path) : c.LoadFromCSVFile(path);
         };
 
-        bool anyLoaded = loadLocalAppDataCsv(*cat, L"NGC.csv", false);
-        if (loadLocalAppDataCsv(*cat, L"addendum.csv", true)) anyLoaded = true;
-        if (loadLocalAppDataCsv(*cat, L"sharpless.csv", true)) anyLoaded = true;
+        bool anyLoaded = loadProgramDataCsv(*cat, L"NGC.csv", false);
+        if (loadProgramDataCsv(*cat, L"addendum.csv", true)) anyLoaded = true;
+        if (loadProgramDataCsv(*cat, L"sharpless.csv", true)) anyLoaded = true;
 
         if (cat->Count() > 0) s_dsoCatalog = cat;
 
         WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_CATALOG | XISF_ETW_KEYWORD_PERF,
             L"CatalogConfigured Source=%ls PriorityCount=%u MatchToleranceDeg=%.3f EntryCount=%u",
-            anyLoaded ? L"localappdata-csv" : L"none",
+            anyLoaded ? L"programdata-csv" : L"none",
             static_cast<UINT32>(s_catalogPriority.size()),
             s_matchToleranceDeg,
             static_cast<UINT32>(cat->Count()));
@@ -164,9 +165,9 @@ static void EnsureConstellationLoaded()
 {
     std::call_once(*s_constellOnceFlag, []() {
         PWSTR pszBase = nullptr;
-        if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &pszBase)) || !pszBase)
+        if (FAILED(SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &pszBase)) || !pszBase)
             return;
-        std::wstring wpath = std::wstring(pszBase) + L"\\XISFShellExtension\\catalogs\\constellations.csv";
+        std::wstring wpath = std::wstring(pszBase) + L"\\DennisPayne\\XISFShellExtension\\catalogs\\constellations.csv";
         CoTaskMemFree(pszBase);
         int len = WideCharToMultiByte(CP_UTF8, 0, wpath.c_str(), -1, nullptr, 0, nullptr, nullptr);
         if (len <= 0) return;
@@ -175,7 +176,7 @@ static void EnsureConstellationLoaded()
         bool ok = ConstellationDB::LoadFromCSV(path);
         WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_CATALOG,
             L"ConstellationDBLoaded Source=%ls OK=%u",
-            ok ? L"localappdata-csv" : L"none", ok ? 1u : 0u);
+            ok ? L"programdata-csv" : L"none", ok ? 1u : 0u);
     });
 }
 
@@ -218,23 +219,21 @@ std::vector<ComputedPropertyEntry> PopulateComputedProperties(
         }
     }
 
-    // Data State (Linear / Non-Linear)
+    // Data State (Linear / Non-Linear) — see LinearityHeuristic.h for the
+    // priority order: pixel-median signal first, metadata fallback when the
+    // signal is unavailable.
     {
         auto sfIt = inputs.metadata.imageAttributes.find("sampleFormat");
         auto csIt = inputs.metadata.imageAttributes.find("colorSpace");
         std::string sampleFormat = (sfIt != inputs.metadata.imageAttributes.end()) ? sfIt->second : "";
         std::string colorSpace   = (csIt != inputs.metadata.imageAttributes.end()) ? csIt->second : "";
 
-        if (!sampleFormat.empty() || !colorSpace.empty()) {
-            bool isFloat32 = (sampleFormat == "Float32");
-            bool isFloat64 = (sampleFormat == "Float64");
-            bool isUInt8   = (sampleFormat == "UInt8");
-
-            bool isLinear = (isFloat32 || isFloat64);
-            if (colorSpace == "Gray" || colorSpace == "RGB") isLinear = true;
-            if (colorSpace == "GraySRGB" || colorSpace == "RGBSRGB") isLinear = false;
-            if (isUInt8) isLinear = false;
-
+        // Emit the property when we have any signal to base it on:
+        // either pixel statistics, or at least one of the image attributes.
+        if (inputs.hasPixelMedian || !sampleFormat.empty() || !colorSpace.empty()) {
+            const bool isLinear = xisf::DetermineIsLinear(
+                inputs.hasPixelMedian, inputs.pixelMedian,
+                sampleFormat, colorSpace);
             AddString(result, PKEY_XISF_DataState, isLinear ? "Linear" : "Non-Linear");
         }
     }

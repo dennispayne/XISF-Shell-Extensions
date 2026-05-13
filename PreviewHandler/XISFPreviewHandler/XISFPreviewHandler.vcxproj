@@ -69,7 +69,7 @@
       <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -92,6 +92,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\HandlerSettings.h" />
+    <ClInclude Include="src\LinearityHeuristic.h" />
     <ClInclude Include="src\PreviewHandlerTelemetry.h" />
     <ClInclude Include="src\PreviewHandlerTraceLogging.h" />
     <ClInclude Include="src\ThumbnailProvider.h" />

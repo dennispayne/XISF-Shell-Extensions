@@ -12,6 +12,9 @@
 #include "XISFParser.h"
 #include "HandlerSettings.h"
 
+namespace xisf { struct PixelStatsResult; }
+
+
 DEFINE_PROPERTYKEY(PKEY_XISF_ExposureTime, 0x7C54FA8B,0x9D63,0x4C10,0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E, 2);
 DEFINE_PROPERTYKEY(PKEY_XISF_CameraModel, 0x7C54FA8B,0x9D63,0x4C10,0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E, 3);
 DEFINE_PROPERTYKEY(PKEY_XISF_FocalLength, 0x7C54FA8B,0x9D63,0x4C10,0x8F,0xBE,0x1A,0x5A,0x0F,0x9A,0x3B,0x2E, 4);
@@ -126,7 +129,8 @@ private:
     enum class PixelStatsState { NotStarted, Computed, Unavailable };
     PixelStatsState m_pixelStatsState = PixelStatsState::NotStarted;
 
-    void PopulateProperties(xisf::FeatureTier tier, bool projectionEnabled);
+    void PopulateProperties(xisf::FeatureTier tier, bool projectionEnabled,
+                            const xisf::PixelStatsResult& pixelStats);
     void AddStringProp(const PROPERTYKEY& key, const std::string& value);
     void AddDoubleProp(const PROPERTYKEY& key, double value);
     void AddUInt32Prop(const PROPERTYKEY& key, uint32_t value);

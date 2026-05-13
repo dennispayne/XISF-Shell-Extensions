@@ -135,9 +135,9 @@ Computed by sampling ~1M pixels from the largest non-thumbnail image. See [Pixel
 
 | Property | Type | XISF Source | Example | Notes |
 |----------|------|-------------|---------|-------|
-| **DataState** (55) | String | `Observation:DataState` or detected state | "Original" or "Processed" | Indicates if data is raw or calibrated |
+| **DataState** (55) | String | Pixel-data median (preferred), with metadata fallback | `"Linear"` or `"Non-Linear"` | See [Linear vs. Non-Linear detection](../features/computed-properties.md#linear-vs-non-linear-data-state-heuristic) for the exact decision rule and threshold. |
 
-**Source Files**: PropertyStore.cpp:720-740
+**Source Files**: `PropertyHandler/XISFPropertyHandler/src/LinearityHeuristic.h`, `ComputedProperties.cpp`, `PropertyStore.cpp`
 
 ### 11. Computed/Derived (4 properties: propID 42-45, 46)
 

@@ -2242,4 +2242,160 @@ public:
     }
 };
 
+// ===========================================================================
+// LinearityHeuristic — gamma decision driven by per-channel pixel median.
+// Regression coverage for the user-reported bug where stretched PixInsight
+// outputs (Float32/RGB) were being double-stretched in the preview because
+// the metadata heuristic always classified them as Linear and applied
+// linear→sRGB gamma on top.
+// See PreviewHandler/XISFPreviewHandler/src/LinearityHeuristic.h.
+// ===========================================================================
+TEST_CLASS(PreviewHandler_LinearityGammaDecision)
+{
+    // Build an XISF stream of UInt16 pixels with a uniform gradient from
+    // valueLow to valueHigh across the image. Median ≈ (valueLow+valueHigh)/2.
+    // Post-1%/99% percentile stretch the data spans [0,1]; the decision to
+    // apply linear→sRGB gamma is made from the raw median, not the post-stretch
+    // distribution, so the histogram skew lets us confirm gamma branch taken.
+    static IStream* CreateGradientStream(UINT w, UINT h,
+                                         uint16_t valueLow, uint16_t valueHigh)
+    {
+        const size_t channelPixels = static_cast<size_t>(w) * h;
+        const size_t pixelBytes = channelPixels * 2;
+        const uint32_t pixelOffset = 2048;
+
+        char loc[64];
+        snprintf(loc, sizeof(loc), "attachment:%u:%zu", pixelOffset, pixelBytes);
+        char geom[64]; snprintf(geom, sizeof(geom), "%u:%u:1", w, h);
+        std::string xml =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+            "<xisf version=\"1.0\">"
+            "<Image geometry=\"" + std::string(geom) +
+            "\" sampleFormat=\"UInt16\" colorSpace=\"Gray\" "
+            "location=\"" + std::string(loc) + "\"></Image></xisf>";
+
+        std::vector<BYTE> buf;
+        const char sig[] = "XISF0100";
+        buf.insert(buf.end(), sig, sig + 8);
+        uint32_t xmlLen = static_cast<uint32_t>(xml.size());
+        auto* p = reinterpret_cast<const BYTE*>(&xmlLen);
+        buf.insert(buf.end(), p, p + 4);
+        uint32_t reserved = 0;
+        p = reinterpret_cast<const BYTE*>(&reserved);
+        buf.insert(buf.end(), p, p + 4);
+        buf.insert(buf.end(), xml.begin(), xml.end());
+        buf.resize(pixelOffset, 0);
+
+        for (size_t i = 0; i < channelPixels; ++i) {
+            const double t = (channelPixels > 1)
+                ? static_cast<double>(i) / (channelPixels - 1) : 0.0;
+            const uint16_t v = static_cast<uint16_t>(
+                valueLow + t * (static_cast<double>(valueHigh) - valueLow));
+            buf.push_back(static_cast<BYTE>(v & 0xFF));
+            buf.push_back(static_cast<BYTE>((v >> 8) & 0xFF));
+        }
+        return SHCreateMemStream(buf.data(), static_cast<UINT>(buf.size()));
+    }
+
+    static double HistogramMeanBin(const HistogramData& h, UINT ch = 0)
+    {
+        uint64_t weighted = 0;
+        uint64_t total = 0;
+        for (int b = 0; b < 256; ++b) {
+            weighted += static_cast<uint64_t>(b) * h.bins[ch][b];
+            total += h.bins[ch][b];
+        }
+        return total == 0 ? 0.0 : static_cast<double>(weighted) / total;
+    }
+
+public:
+    TEST_METHOD(LowMedianGradient_GammaApplied_HistogramBrightSkewed)
+    {
+        // Median ≈ 500 / 65535 ≈ 0.0076, well below the 0.05 threshold.
+        // Heuristic returns Linear → preview applies linear→sRGB gamma.
+        // After gamma, midtone bytes brighten (n^(1/2.2) > n for n in (0,1)).
+        // Mean histogram bin should sit > 128 (the no-gamma mean for a uniform
+        // post-stretch distribution).
+        auto* tp = new CThumbnailProvider();
+        IStream* pStream = CreateGradientStream(64, 64, 0, 1000);
+        Assert::AreEqual(S_OK, tp->Initialize(pStream, STGM_READ));
+
+        HBITMAP hbmp = nullptr;
+        WTS_ALPHATYPE alpha;
+        Assert::AreEqual(S_OK, tp->GetThumbnail(64, &hbmp, &alpha));
+
+        const auto& hist = tp->GetHistogram();
+        Assert::IsTrue(hist.valid, L"Histogram must be valid");
+        const double meanBin = HistogramMeanBin(hist);
+        Assert::IsTrue(meanBin > 140.0,
+            (L"Linear data should have gamma applied (bright skew). meanBin=" +
+             std::to_wstring(meanBin)).c_str());
+
+        if (hbmp) DeleteObject(hbmp);
+        pStream->Release();
+        tp->Release();
+    }
+
+    TEST_METHOD(HighMedianGradient_GammaSkipped_HistogramNotBrightSkewed)
+    {
+        // Median ≈ 30000 / 65535 ≈ 0.46, well above the 0.05 threshold.
+        // Heuristic returns Non-Linear → preview SKIPS gamma so the data is
+        // not double-stretched. Mean histogram bin should sit near 128
+        // (centroid of a uniform [0,1] post-stretch distribution mapped
+        // straight to bytes), distinctly lower than the gamma-applied case.
+        auto* tp = new CThumbnailProvider();
+        IStream* pStream = CreateGradientStream(64, 64, 10000, 50000);
+        Assert::AreEqual(S_OK, tp->Initialize(pStream, STGM_READ));
+
+        HBITMAP hbmp = nullptr;
+        WTS_ALPHATYPE alpha;
+        Assert::AreEqual(S_OK, tp->GetThumbnail(64, &hbmp, &alpha));
+
+        const auto& hist = tp->GetHistogram();
+        Assert::IsTrue(hist.valid, L"Histogram must be valid");
+        const double meanBin = HistogramMeanBin(hist);
+        Assert::IsTrue(meanBin < 140.0,
+            (L"Stretched data should NOT have gamma applied. meanBin=" +
+             std::to_wstring(meanBin)).c_str());
+        Assert::IsTrue(meanBin > 100.0,
+            (L"Sanity: stretched data mean bin should still be near midtones. meanBin=" +
+             std::to_wstring(meanBin)).c_str());
+
+        if (hbmp) DeleteObject(hbmp);
+        pStream->Release();
+        tp->Release();
+    }
+
+    TEST_METHOD(HighMedianGradient_BrighterThanLinearByDoubleStretchMargin)
+    {
+        // Direct cross-comparison: same gradient shape, only the absolute
+        // pixel values differ. The Linear case (gamma applied) MUST produce
+        // a brighter mean histogram bin than the Non-Linear case (gamma
+        // skipped). This is the regression assertion for the user bug.
+        auto* tpLin = new CThumbnailProvider();
+        IStream* sLin = CreateGradientStream(64, 64, 0, 1000);
+        Assert::AreEqual(S_OK, tpLin->Initialize(sLin, STGM_READ));
+        HBITMAP hLin = nullptr; WTS_ALPHATYPE aLin;
+        Assert::AreEqual(S_OK, tpLin->GetThumbnail(64, &hLin, &aLin));
+        const double meanLinear = HistogramMeanBin(tpLin->GetHistogram());
+
+        auto* tpNon = new CThumbnailProvider();
+        IStream* sNon = CreateGradientStream(64, 64, 10000, 50000);
+        Assert::AreEqual(S_OK, tpNon->Initialize(sNon, STGM_READ));
+        HBITMAP hNon = nullptr; WTS_ALPHATYPE aNon;
+        Assert::AreEqual(S_OK, tpNon->GetThumbnail(64, &hNon, &aNon));
+        const double meanNonLinear = HistogramMeanBin(tpNon->GetHistogram());
+
+        Assert::IsTrue(meanLinear > meanNonLinear + 15.0,
+            (L"Linear case should be visibly brighter than Non-Linear. "
+             L"meanLinear=" + std::to_wstring(meanLinear) +
+             L", meanNonLinear=" + std::to_wstring(meanNonLinear)).c_str());
+
+        if (hLin) DeleteObject(hLin);
+        if (hNon) DeleteObject(hNon);
+        sLin->Release(); tpLin->Release();
+        sNon->Release(); tpNon->Release();
+    }
+};
+
 } // namespace PreviewHandlerTests

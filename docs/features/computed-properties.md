@@ -13,6 +13,7 @@ Advanced property calculations and derivations for XISF files. This document cov
 | **Constellation** (44) | String | IAU boundaries | Full | "Orion" |
 | **MatchedObjects** (45) | String | DSO catalogs | Full | "M42, NGC 1976" |
 | **StarFWHM** (46) | Double | FITS keyword | Free+ | 2.1 arcseconds |
+| **DataState** (55) | String | Pixel-data median (Full); metadata fallback (Free/Standard) | Free+ | "Linear" / "Non-Linear" |
 
 ---
 
@@ -333,6 +334,109 @@ uint32_t width = 4096, height = 2748;
 //   Orion Nebula (distance: 0°)
 // MatchedObjects = "M42, NGC 1976, Orion Nebula"
 ```
+
+---
+
+## Linear vs. Non-Linear Data State Heuristic
+
+The **DataState** property (PKEY propID 55) reports whether an XISF image
+contains *linear* sensor data (raw signal, dark histogram clustered near zero)
+or *non-linear* data (already stretched/processed for visual presentation).
+Both the property handler and the preview handler consult the same heuristic
+so that the displayed string matches the gamma decision the preview makes.
+
+### Why the heuristic is necessary
+
+XISF images written by PixInsight do not preserve a tag that says "this image
+has been stretched." Stretched outputs are saved with the same surface metadata
+as a calibrated linear stack:
+
+```text
+sampleFormat="Float32"  colorSpace="RGB"  bounds="0:1"
+```
+
+The `<Property id="PixInsight:ProcessingHistory">` element does record the
+PixelMath / HistogramTransformation / STF / etc. operations that were applied,
+but its content is fragile: many real-world stretched files use star-reduction
+PixelMath expressions or other transforms that don't include the literal token
+`HistogramTransformation`. Parsing it is unreliable.
+
+Pixel statistics, by contrast, give a clean signal. A linear single sub or
+linear stack has the entire image hugging zero — typical median is **0.00 to
+0.01** (normalized to [0,1]). A stretched image has its midtones lifted into
+the visible range — typical median is **0.12 to 0.32**. The gap is wide and
+consistent across instruments and color spaces.
+
+### Decision rule
+
+The shared header `LinearityHeuristic.h` (one copy in each handler project)
+implements the decision:
+
+```cpp
+constexpr double kStretchedMedianThreshold = 0.05;
+
+inline bool DetermineIsLinear(bool hasPixelMedian, double pixelMedian,
+                              std::string_view sampleFormat,
+                              std::string_view colorSpace)
+{
+    if (hasPixelMedian)
+        return pixelMedian < kStretchedMedianThreshold;   // primary path
+
+    // Metadata fallback when pixel stats are unavailable
+    return !(sampleFormat == "Float32" && colorSpace == "RGB");
+}
+```
+
+Resulting `DataState` string: `"Linear"` if the function returns `true`,
+`"Non-Linear"` otherwise.
+
+### Threshold grounding
+
+The 0.05 threshold sits in the empty middle of the empirically observed gap:
+
+| File class | Sample format | Files measured | Median range |
+|------------|---------------|----------------|--------------|
+| Linear single subs (UInt16) | `UInt16` mono | M42 14s, IC1396 180s | 0.00 – 0.01 |
+| Linear PixInsight stack (Float32) | `Float32` RGB | M42 stacked | ≈ 0.00 |
+| Stretched PixInsight outputs (Float32) | `Float32` RGB | M31, IC1396, NA, M51, Cone, Horsehead | 0.12 – 0.32 |
+
+No real-world file in the test corpus produces a median between 0.02 and 0.10.
+
+### Where the median comes from
+
+For property handler queries, the median is computed by
+`PixelStatistics.cpp` (subsampled stride read with a ~1 M sample budget). The
+`PropertyStore::Initialize` path runs `ComputePixelStats` *before*
+`PopulateProperties` so the median is available when the DataState string is
+written.
+
+For thumbnail rendering, the existing per-channel `nth_element` percentile
+pass in `ThumbnailProvider.cpp` was extended to also extract the 50th
+percentile per channel; the per-channel medians are averaged and passed to
+`DetermineIsLinear`. The same threshold then drives the linear→sRGB gamma
+decision in [Preview Handler Deep Dive](preview-handler-deep-dive.md#linear-to-srgb-gamma-decision).
+
+### Tier behavior and fallback
+
+`PixelStatistics` is gated by `IsPixelStatsEnabled(tier) == (tier >= Full)`.
+For Free and Standard tiers, the preview handler still computes its own
+percentile-derived median for gamma purposes (it always reads pixels), but the
+property handler only has metadata to work with. In that case the fallback
+preserves the previous behavior: `Float32 + RGB` is reported as `Non-Linear`
+and everything else as `Linear`. Full tier (the default after install) always
+uses the pixel-median path.
+
+### Edge cases and limitations
+
+- **Heavily light-polluted single subs.** A bright sky background can lift
+  the median above 0.05 even though the data is technically linear. Acceptable
+  trade-off: such an image *looks* stretched and the preview handler skipping
+  gamma keeps midtones from clipping.
+- **Aggressively crushed processed images.** A processed image with the black
+  point pulled hard right could in theory drop the median below 0.05. None of
+  the corpus files exhibit this; the gap remains clean in practice.
+- **Single-pixel-value images.** Median is well-defined; handled by the same
+  branch as ordinary low-median data (Linear).
 
 ---
 

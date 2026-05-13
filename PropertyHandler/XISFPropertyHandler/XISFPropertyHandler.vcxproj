@@ -71,7 +71,7 @@
       <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -106,6 +106,7 @@
     <ClInclude Include="src\ConstellationDB.h" />
     <ClInclude Include="src\DSOCatalog.h" />
     <ClInclude Include="src\HandlerSettings.h" />
+    <ClInclude Include="src\LinearityHeuristic.h" />
     <ClInclude Include="src\PixelStatistics.h" />
     <ClInclude Include="src\PropertyStore.h" />
     <ClInclude Include="src\DSOAliasDB.h" />

@@ -257,6 +257,93 @@ The `AppID` pointing to `{6d2b5079-…}` causes the preview handler to run in a 
 
 ---
 
+## Linear-to-sRGB Gamma Decision
+
+After percentile auto-stretching maps each channel into [0, 1], the preview
+pipeline must decide whether the stretched data still represents a *linear*
+sensor signal (in which case applying linear→sRGB gamma — `pow(n, 1/2.2)` —
+is needed for natural-looking midtones) or a *non-linear* image that has
+already been stretched/processed (in which case applying gamma a second time
+double-stretches the data and crushes the highlights).
+
+Both `XISFPropertyHandler` and `XISFPreviewHandler` answer this question via
+the same shared header `LinearityHeuristic.h`, so the **DataState** column
+shown in Explorer's Details pane and the gamma decision made by the preview
+handler always agree.
+
+### Decision rule
+
+The same `xisf::DetermineIsLinear(...)` function used by the property handler
+drives the gamma branch in `ThumbnailProvider.cpp`:
+
+```cpp
+// Inside the per-channel percentile pass, after computing lo/hi via nth_element,
+// also extract the 50th percentile (median) per channel.
+double aggregateMedian = 0.0;
+for (UINT ch = 0; ch < channelCount; ++ch) aggregateMedian += params[ch].median;
+aggregateMedian /= channelCount;
+
+const bool isLinear = xisf::DetermineIsLinear(
+    /*hasPixelMedian*/ true, aggregateMedian,
+    sampleFormat, colorSpace);
+
+// Per pixel (after auto-stretch normalization to [0,1]):
+double v = NormalizedFromStretch(raw, lo, hi);
+if (isLinear) v = std::pow(v, 1.0 / 2.2);     // linear → sRGB gamma
+const BYTE byte = ToByte(v);                   // write to thumbnail bitmap
+```
+
+### Threshold and grounding
+
+The heuristic uses `kStretchedMedianThreshold = 0.05`. This was chosen from
+the same empirical corpus described in
+[Linear vs. Non-Linear data state heuristic](computed-properties.md#linear-vs-non-linear-data-state-heuristic):
+linear data has medians of 0.00–0.01; PixInsight-stretched outputs have
+medians of 0.12–0.32. There is no overlap.
+
+### Why the previous (metadata-only) heuristic broke
+
+The preview handler used to test only `sampleFormat == "Float32" &&
+colorSpace == "RGB"` to decide linearity. PixInsight saves stretched outputs
+with exactly those header values, so every stretched RGB file was marked
+Linear and got gamma applied on top of an already-stretched midtone — a
+visibly washed-out, double-stretched preview. The pixel-median heuristic
+fixes this by reading the actual data instead of guessing from headers.
+
+### Aggregate vs. per-channel median
+
+The handler averages per-channel medians rather than taking the maximum or a
+single channel's value. Stretched RGB images elevate all three channels
+together; linear images keep all three near zero. Averaging tolerates a single
+noisy or saturated channel better than the max would.
+
+### Edge cases
+
+- **Per-channel medians span the threshold** (e.g. one channel at 0.04, two
+  at 0.08). The average tips the decision; this matches practical preview
+  intent — a mostly-stretched image should not get re-stretched.
+- **Pixel decode fails or histogram pass is skipped.** The fallback metadata
+  branch in `DetermineIsLinear` returns `Linear` for non-`Float32`/non-RGB
+  inputs and `Non-Linear` for `Float32 + RGB`, preserving prior behavior.
+- **Linear single subs with bright sky background.** A high background can
+  push the median above 0.05; preview will then skip gamma. Acceptable: a
+  light-polluted sub usually wants its midtones left alone.
+
+### Test coverage
+
+`PreviewHandler_LinearityGammaDecision` (in
+`PreviewHandler/XISFPreviewHandlerTests/XISFPreviewHandlerTests.cpp`) builds
+two gradient streams that differ only in absolute pixel values:
+
+- Low-median gradient (median ≈ 0.008): histogram mean bin > 140 (gamma
+  brightened midtones).
+- High-median gradient (median ≈ 0.46): histogram mean bin < 140 and > 100
+  (gamma skipped; midtones near byte 128).
+- Cross-comparison: linear case is at least 15 byte values brighter than
+  non-linear case for the same gradient shape.
+
+---
+
 ## Project Layout
 
 ```

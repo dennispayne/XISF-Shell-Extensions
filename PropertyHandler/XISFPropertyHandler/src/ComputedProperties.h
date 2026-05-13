@@ -43,6 +43,14 @@ struct ComputedPropertyInputs {
     std::string filterName;
     std::string imageType;
     std::string objectName;
+
+    // Pixel-data signal for the Linear / Non-Linear DataState heuristic.
+    // Populated by the property store after ComputePixelStats has run when
+    // the file is at Full feature tier with a readable attached image.
+    // When unavailable (Standard tier or below, no attachment) the metadata
+    // fallback in xisf::DetermineIsLinear is used. See LinearityHeuristic.h.
+    bool hasPixelMedian = false;
+    double pixelMedian = 0.0;
 };
 
 // A single computed property value ready to be added to the property store.
