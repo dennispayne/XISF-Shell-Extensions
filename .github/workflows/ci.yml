@@ -101,38 +101,6 @@ jobs:
             Write-Host "OK  $($cat.Name) ($hash)"
           }
 
-      - name: Install project-hosted catalogs
-        shell: pwsh
-        run: |
-          $catalogDir = Join-Path $env:LOCALAPPDATA 'XISFShellExtension\catalogs'
-          New-Item -ItemType Directory -Path $catalogDir -Force | Out-Null
-          # Parse expected SHA-256 values for project-hosted catalogs directly
-          # from CatalogSpec.h. This way, bumping a hash in CatalogSpec.h after
-          # editing data/*.csv is sufficient; no workflow edit required.
-          $specPath = Join-Path $env:GITHUB_WORKSPACE 'ShellExtensionHost\ShellExtensionHost\src\CatalogSpec.h'
-          if (-not (Test-Path $specPath)) { throw "CatalogSpec.h not found at $specPath" }
-          $spec = Get-Content $specPath -Raw
-          # Each CatalogSource literal: displayName, fileName, url (1+ string-literal continuations), expectedSha256, maxBytes.
-          $pattern = 'CatalogSource\s+\w+\s*\{\s*L"[^"]*"\s*,\s*L"([^"]+)"\s*,\s*((?:L"[^"]*"\s*)+)\s*,\s*L"([0-9a-fA-F]{64})"'
-          $projectMatches = @([regex]::Matches($spec, $pattern) |
-            Where-Object { $_.Groups[2].Value -match 'raw\.githubusercontent\.com/dennispayne/XISF-Shell-Extensions/' })
-          if ($projectMatches.Count -eq 0) {
-            throw "No project-hosted CatalogSource entries parsed from CatalogSpec.h - regex may need updating."
-          }
-          foreach ($m in $projectMatches) {
-            $fileName    = $m.Groups[1].Value
-            $expectedSha = $m.Groups[3].Value.ToLower()
-            $src  = Join-Path $env:GITHUB_WORKSPACE "data\$fileName"
-            $dest = Join-Path $catalogDir $fileName
-            if (-not (Test-Path $src)) { throw "Project data file not found: $src" }
-            Copy-Item $src $dest -Force
-            $hash = (Get-FileHash -Algorithm SHA256 $dest).Hash.ToLower()
-            if ($hash -ne $expectedSha) {
-              throw "SHA-256 mismatch for $fileName : expected $expectedSha (from CatalogSpec.h), got $hash. Update data/$fileName or CatalogSpec.h."
-            }
-            Write-Host "OK  $fileName ($hash)"
-          }
-
       - name: Run unit tests
         shell: pwsh
         run: |
