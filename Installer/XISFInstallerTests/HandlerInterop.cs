@@ -25,7 +25,8 @@ internal static class HandlerInterop
         ref Guid riid,
         [MarshalAs(UnmanagedType.Interface)] out object ppv);
 
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
+    [DllImport("shell32.dll", EntryPoint = "SHCreateItemFromParsingName",
+        CharSet = CharSet.Unicode, PreserveSig = false)]
     public static extern IShellItem SHCreateItemFromParsingName_ShellItem(
         string pszPath, IntPtr pbc, ref Guid riid);
 
