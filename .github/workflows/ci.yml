@@ -193,9 +193,17 @@ jobs:
       - name: Run installer tests
         shell: pwsh
         run: |
+          # Skip InstallerIntegration tests in CI - they require a writable Windows
+          # Shell that performs full property-handler resolution. GitHub Actions
+          # Server runners install the MSI fine but PSGetItemPropertyHandler /
+          # Shell.GetDetailsOf return E_FAIL / empty columns there, so the
+          # integration suite is reserved for local elevated runs + the sandbox
+          # E2E harness in Packaging/tests/. The hermetic MsiTests +
+          # RuntimeLinkageTests suites still run here.
           dotnet test Installer\XISFInstallerTests\XISFInstallerTests.csproj `
             -c Release `
             -p:RestoreLockedMode=true `
+            --filter "TestCategory!=InstallerIntegration" `
             --logger "trx;LogFileName=installer-tests.trx" `
             --results-directory TestResults
 
