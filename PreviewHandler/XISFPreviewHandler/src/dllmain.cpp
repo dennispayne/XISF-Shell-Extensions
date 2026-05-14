@@ -142,6 +142,16 @@ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void** ppv)
     if (!ppv) return E_POINTER;
     *ppv = nullptr;
 
+    TraceLoggingWrite(g_hPreviewProvider, "PreviewHandlerDllGetClassObject",
+        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE),
+        TraceLoggingGuid(rclsid, "CLSID"),
+        TraceLoggingGuid(riid, "IID"));
+    if (g_xisfPreviewHandlerTelemetryHook) {
+        g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION,
+            XISF_PREVIEW_KEYWORD_LIFECYCLE, L"PreviewHandlerDllGetClassObject");
+    }
+
     if (IsEqualCLSID(rclsid, CLSID_XISFThumbnailProvider))
     {
         auto* pf = new (std::nothrow) CSimpleFactory<CThumbnailProvider>();

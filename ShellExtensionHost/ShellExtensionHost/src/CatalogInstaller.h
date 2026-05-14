@@ -1,14 +1,14 @@
 // CatalogInstaller.h - Download / import / verify catalog files.
 //
-// All installation paths flow through Install*() functions which:
+// Verified installation paths flow through Install*() functions which:
 //   1. Stream bytes into a temp file under CatalogDir() with a unique suffix.
 //   2. Hash-while-streaming with BCrypt SHA-256.
 //   3. Enforce the per-source maxBytes cap during streaming.
 //   4. Compare final hash to the compiled-in expected value.
 //   5. Atomically replace the target file via MoveFileExW.
 //
-// A hash mismatch deletes the temp file and returns an error. There is no
-// "try again without verification" for pinned sources.
+// A hash mismatch deletes the temp file and returns an error for pinned
+// sources. File-import can optionally skip pin checks via the unverified API.
 #pragma once
 
 #include "CatalogSpec.h"
@@ -30,6 +30,7 @@ enum class Result {
     HashInitFailed,
     HashFailed,
     HashMismatch,
+    InvalidContent,
     MoveFailed,
     SourceOpenFailed,
     OperationCancelled,
@@ -58,6 +59,13 @@ Report InstallFromPinnedUrl(const catalogspec::CatalogSource& src,
 Report InstallFromLocalFileVerified(const catalogspec::CatalogSource& src,
                                     const wchar_t* sourcePath,
                                     ProgressFn progress, void* user);
+
+// Copy a local file into the catalog directory without pin checks. The file is
+// streamed to a temp file and atomically replaced. Returns computed SHA-256.
+Report InstallFromLocalFileUnverified(const wchar_t* targetFileName,
+                                      const wchar_t* sourcePath,
+                                      std::uint64_t maxBytes,
+                                      ProgressFn progress, void* user);
 
 // Local summary helpers for the UI.
 enum class PresenceState {

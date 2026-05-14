@@ -69,7 +69,7 @@ Under the hood, toggles write to:
 ## Catalogs
 
 The Property Handler looks for catalog files in
-`%LOCALAPPDATA%\XISFShellExtension\catalogs\` and loads whatever is present
+`%ProgramData%\DennisPayne\XISFShellExtension\catalogs\` and loads whatever is present
 (`NGC.csv`, `addendum.csv`, `sharpless.csv`, `constellation_boundaries.csv`,
 `constellation_names.csv`). Missing files are simply skipped (constellation
 lookups fall back to compiled-in data when the CSV files are absent).
@@ -85,9 +85,10 @@ Two ways to install them:
    - `NGC.csv`, `addendum.csv` — from OpenNGC (mattiaverga/OpenNGC)
    - `sharpless.csv`, `constellation_boundaries.csv`, `constellation_names.csv`
      — from this project's own repository (`data/` directory)
-2. **Offline / air-gapped.** Click **Import from File…**, pick a local file,
-   and choose which catalog pin it should match. The same SHA-256 check
-   applies; mismatched files are rejected.
+2. **Offline / custom import.** Click **Import from File…** and pick any CSV.
+   The file is copied into the machine-wide catalog directory by filename
+   (including additional catalogs beyond the built-in set). Imported rows
+   display source hash as `N/A`.
 
 The **Copy Expected Hashes** button puts all pinned commit SHAs, URLs, and
 expected SHA-256 values on the clipboard so you can cross-verify them
@@ -141,5 +142,4 @@ Third-party data acquired at runtime (not bundled):
 
 - [OpenNGC](https://github.com/mattiaverga/OpenNGC) — CC BY-SA 4.0. Catalog
   files are downloaded from a pinned commit on user request and stored under
-  `%LOCALAPPDATA%\XISFShellExtension\catalogs\`.
-
+  `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\`.

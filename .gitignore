@@ -1,5 +1,6 @@
 # MCP config (contains auth tokens)
 .vscode/mcp.json
+.copilot/
 
 # Local-only agent/instruction configuration (keep workflows/templates trackable)
 .github/agents/

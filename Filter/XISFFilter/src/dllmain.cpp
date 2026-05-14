@@ -46,8 +46,22 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID) {
         g_hInst = hModule;
         DisableThreadLibraryCalls(hModule);
         TraceLoggingRegister(g_hFilterProvider);
+        TraceLoggingWrite(g_hFilterProvider, "FilterDllAttach",
+            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingKeyword(XISF_FILTER_KEYWORD_LIFECYCLE));
+        if (g_xisfFilterTelemetryHook) {
+            g_xisfFilterTelemetryHook(TRACE_LEVEL_INFORMATION,
+                XISF_FILTER_KEYWORD_LIFECYCLE, L"FilterDllAttach");
+        }
     }
     else if (dwReason == DLL_PROCESS_DETACH) {
+        TraceLoggingWrite(g_hFilterProvider, "FilterDllDetach",
+            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingKeyword(XISF_FILTER_KEYWORD_LIFECYCLE));
+        if (g_xisfFilterTelemetryHook) {
+            g_xisfFilterTelemetryHook(TRACE_LEVEL_INFORMATION,
+                XISF_FILTER_KEYWORD_LIFECYCLE, L"FilterDllDetach");
+        }
         TraceLoggingUnregister(g_hFilterProvider);
     }
     return TRUE;
@@ -58,6 +72,17 @@ STDAPI DllCanUnloadNow(void) { return (g_cDllRef == 0) ? S_OK : S_FALSE; }
 STDAPI DllGetClassObject(_In_ REFCLSID rclsid, _In_ REFIID riid, _Outptr_ void** ppv) {
     if (!ppv) return E_POINTER;
     *ppv = nullptr;
+
+    TraceLoggingWrite(g_hFilterProvider, "FilterDllGetClassObject",
+        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingKeyword(XISF_FILTER_KEYWORD_LIFECYCLE),
+        TraceLoggingGuid(rclsid, "CLSID"),
+        TraceLoggingGuid(riid, "IID"));
+    if (g_xisfFilterTelemetryHook) {
+        g_xisfFilterTelemetryHook(TRACE_LEVEL_INFORMATION,
+            XISF_FILTER_KEYWORD_LIFECYCLE, L"FilterDllGetClassObject");
+    }
+
     if (!IsEqualCLSID(rclsid, CLSID_XISFFilter)) return CLASS_E_CLASSNOTAVAILABLE;
     CClassFactory* pf = new (std::nothrow) CClassFactory();
     if (!pf) return E_OUTOFMEMORY;

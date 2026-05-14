@@ -51,8 +51,9 @@ The MSI (Microsoft Installer) is the easiest and most reliable way to install XI
 4. Review the welcome screen and click **"Next"**
    - [Screenshot: Installer welcome dialog]
 5. Choose the installation folder (default: `C:\Program Files\XISF Shell Extensions`) and click **"Next"**
-6. Click **"Install"** on the confirmation screen
-7. Watch the progress bar as files are installed and COM components are registered
+6. **(Optional)** XISF data location — if your `.xisf` files live outside the default indexed Windows folders (Documents, Pictures, etc.), enter the full path to your data root (e.g., `D:\Astrophotography\XISF`) and the installer will add it to Windows Search. Leave blank to skip; you can always add it later from **Indexing Options**.
+7. Click **"Install"** on the confirmation screen
+8. Watch the progress bar as files are installed and COM components are registered
 
 #### Silent Mode (Automated Deployments)
 
@@ -62,6 +63,15 @@ For automated or unattended installations, run the installer from PowerShell or 
 # As administrator in PowerShell:
 msiexec /i "XISF.ShellExtensions_<version>_x64.msi" /quiet /norestart
 ```
+
+To also have Windows Search index a specific data folder, pass `XISF_DATA_PATH`:
+
+```powershell
+msiexec /i "XISF.ShellExtensions_<version>_x64.msi" /quiet /norestart `
+        XISF_DATA_PATH="D:\Astrophotography\XISF"
+```
+
+The path is best-effort: if Windows Search is disabled or the path is invalid, the install still succeeds. The path is removed from the index on uninstall.
 
 Or using `Start-Process`:
 
@@ -179,6 +189,8 @@ For offline installation or air-gapped systems, see [Catalog Management](user-gu
 ### (Optional) Configure Windows Search Indexing
 
 To make XISF metadata searchable from the Windows Search box:
+
+> **Already set during install?** If you supplied a path on the "XISF data location" step of the installer (or via `XISF_DATA_PATH=` in silent mode), the installer already added it to the Windows Search index. The steps below are only needed if you skipped that or want to add additional folders.
 
 1. Press **Windows key + I** to open Windows Settings
 2. Go to **"Privacy & Security"** → **"Searching Windows"**

@@ -18,6 +18,8 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 
 #include "Sha256.h"
 #include "Paths.h"
@@ -213,7 +215,7 @@ namespace ShellExtensionHostTests_Sha256
 }
 
 // ===========================================================================
-// Paths - LocalAppData resolution + HKCU key constant
+// Paths - ProgramData catalog resolution + HKCU key constant
 // ===========================================================================
 namespace ShellExtensionHostTests_Paths
 {
@@ -236,6 +238,8 @@ namespace ShellExtensionHostTests_Paths
             Assert::IsFalse(dir.empty());
             Assert::IsTrue(dir.size() > root.size(), L"catalog dir must extend root");
             Assert::IsTrue(dir.compare(0, root.size(), root) == 0);
+            Assert::IsTrue(root.find(L"ProgramData") != std::wstring::npos,
+                L"catalog root should be machine-wide ProgramData");
 
             DWORD attrs = GetFileAttributesW(dir.c_str());
             Assert::AreNotEqual(INVALID_FILE_ATTRIBUTES, attrs);
@@ -502,6 +506,7 @@ namespace ShellExtensionHostTests_CatalogSpec
                 Assert::IsFalse(src->displayName.empty());
                 Assert::IsFalse(src->fileName.empty());
                 Assert::IsFalse(src->url.empty());
+                Assert::IsFalse(src->sourceUrl.empty());
                 Assert::AreEqual<size_t>(64, src->expectedSha256.size(),
                                          L"SHA-256 pin must be 64 hex chars");
                 for (wchar_t c : src->expectedSha256)
@@ -509,9 +514,28 @@ namespace ShellExtensionHostTests_CatalogSpec
                     bool ok = (c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f');
                     Assert::IsTrue(ok, L"pin must be lowercase hex");
                 }
+                Assert::IsFalse(src->sourceHashDisplay.empty());
                 Assert::IsTrue(src->maxBytes > 0);
                 Assert::IsTrue(src->maxBytes <= 64ull * 1024ull * 1024ull,
                                L"max size cap should be reasonable (<=64MB)");
+            }
+        }
+
+        TEST_METHOD(SourceHashDisplay_IsEitherPinnedHashOrNA)
+        {
+            for (auto* src : kAllCatalogs)
+            {
+                Assert::IsFalse(src->sourceHashDisplay.empty());
+                if (src->sourceHashDisplay == kSourceHashNA)
+                    continue;
+
+                Assert::AreEqual<size_t>(64, src->sourceHashDisplay.size(),
+                                         L"source hash display must be 64 hex chars when pinned");
+                for (wchar_t c : src->sourceHashDisplay)
+                {
+                    bool ok = (c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f');
+                    Assert::IsTrue(ok, L"sourceHashDisplay pin must be lowercase hex");
+                }
             }
         }
 
@@ -533,15 +557,25 @@ namespace ShellExtensionHostTests_CatalogSpec
             }
         }
 
-        TEST_METHOD(AllCatalogUrls_EmbedPinnedCommitSha)
+        TEST_METHOD(AllCatalogSourceUrls_AreHttps)
         {
+            constexpr std::wstring_view https = L"https://";
             for (auto* src : kAllCatalogs)
             {
-                bool embedsOpenNGC  = src->url.find(kOpenNGCCommit)  != std::wstring_view::npos;
-                bool embedsXISFData = src->url.find(kXISFDataCommit) != std::wstring_view::npos;
-                Assert::IsTrue(embedsOpenNGC || embedsXISFData,
-                               L"url must embed a pinned commit SHA");
+                Assert::IsTrue(src->sourceUrl.size() >= https.size());
+                Assert::IsTrue(src->sourceUrl.compare(0, https.size(), https) == 0,
+                               L"sourceUrl shown in UI must be HTTPS");
             }
+        }
+
+        TEST_METHOD(SharplessAndConstellations_AreNotUserRepoHosted)
+        {
+            Assert::IsTrue(kSharpless.url.find(L"dennispayne/XISF-Shell-Extensions") == std::wstring_view::npos);
+            Assert::IsTrue(kConstellations.url.find(L"dennispayne/XISF-Shell-Extensions") == std::wstring_view::npos);
+            Assert::IsTrue(kSharpless.sourceUrl.find(L"cdsarc.cds.unistra.fr") != std::wstring_view::npos);
+            Assert::IsTrue(kConstellations.sourceUrl.find(L"cdsarc.cds.unistra.fr") != std::wstring_view::npos);
+            Assert::AreEqual(std::wstring(L"N/A"), std::wstring(kSharpless.sourceHashDisplay));
+            Assert::AreEqual(std::wstring(L"N/A"), std::wstring(kConstellations.sourceHashDisplay));
         }
 
         TEST_METHOD(AllowedPrefixes_AreHttps)
@@ -560,6 +594,21 @@ namespace ShellExtensionHostTests_CatalogSpec
                 for (size_t j = i + 1; j < kAllCatalogs.size(); ++j)
                     Assert::IsFalse(kAllCatalogs[i]->fileName == kAllCatalogs[j]->fileName,
                                     L"catalog file names must be unique");
+        }
+
+        TEST_METHOD(HostProject_DoesNotBundleSeedCatalogFiles)
+        {
+            const auto projectPath =
+                std::filesystem::path(__FILE__).parent_path() /
+                L"..\\ShellExtensionHost\\ShellExtensionHost.vcxproj";
+            std::ifstream in(projectPath, std::ios::binary);
+            Assert::IsTrue(in.is_open(), L"failed to open ShellExtensionHost.vcxproj");
+
+            const std::string text((std::istreambuf_iterator<char>(in)),
+                                   std::istreambuf_iterator<char>());
+            Assert::IsFalse(text.empty(), L"host project file unexpectedly empty");
+            Assert::IsTrue(text.find("..\\..\\data\\sharpless.csv") == std::string::npos);
+            Assert::IsTrue(text.find("..\\..\\data\\constellations.csv") == std::string::npos);
         }
     };
 }
@@ -608,7 +657,9 @@ namespace ShellExtensionHostTests_CatalogInstaller
             sc.src.displayName    = L"synthetic";
             sc.src.fileName       = sc.fileName;
             sc.src.url            = sc.url;
+            sc.src.sourceUrl      = L"https://example.invalid/synthetic";
             sc.src.expectedSha256 = sc.hash;
+            sc.src.sourceHashDisplay = sc.hash;
             sc.src.maxBytes       = maxBytes;
             return sc;
         }
@@ -691,6 +742,71 @@ namespace ShellExtensionHostTests_CatalogInstaller
                 L"C:\\this-file-does-not-exist-xisf-test-987.bin",
                 nullptr, nullptr);
             Assert::IsTrue(r.result == Result::SourceOpenFailed);
+        }
+
+        TEST_METHOD(InstallFromLocalFileUnverified_CopiesWithoutPinCheck)
+        {
+            const std::string openNgc =
+                "Name;Type;RA;Dec;Const;MajAx;MinAx;PosAng;B-Mag;V-Mag;J-Mag;H-Mag;K-Mag;SurfBr;Hubble;Pax;Pm-RA;Pm-Dec;RadVel;Redshift;Cstar-U;Cstar-B;Cstar-V;M;NGC;IC;CstarNames;Identifiers;Common names;NED notes;OpenNGC notes\n"
+                "Sh2-1;HII;17:20:50.0;-34:42:00;Sco;90;90;;;;;;;;;;;;;;;;;;;;;;;Sh2-1;;sample\n";
+            std::vector<std::uint8_t> bytes(openNgc.begin(), openNgc.end());
+            auto src = WriteTempFile(bytes);
+
+            wchar_t unique[64]{};
+            std::swprintf(unique, 64, L"xisf-import-%llu.csv",
+                          static_cast<unsigned long long>(GetTickCount64()));
+
+            Report r = InstallFromLocalFileUnverified(unique, src.c_str(),
+                                                      4ull * 1024ull * 1024ull,
+                                                      nullptr, nullptr);
+            Assert::IsTrue(r.result == Result::Ok);
+            Assert::AreEqual<std::uint64_t>(bytes.size(), r.bytesTransferred);
+            Assert::AreEqual<size_t>(64, r.computedHash.size());
+
+            auto installed = xisf::paths::CatalogFile(unique);
+            Assert::AreNotEqual(INVALID_FILE_ATTRIBUTES, GetFileAttributesW(installed.c_str()));
+
+            DeleteFileW(src.c_str());
+            DeleteFileW(installed.c_str());
+        }
+
+        TEST_METHOD(InstallFromLocalFileUnverified_RejectsInvalidTargetName)
+        {
+            std::vector<std::uint8_t> bytes(64, 0x42);
+            auto src = WriteTempFile(bytes);
+
+            Report r = InstallFromLocalFileUnverified(L"..\\evil.csv", src.c_str(),
+                                                      1024ull * 1024ull,
+                                                      nullptr, nullptr);
+            Assert::IsTrue(r.result == Result::SourceOpenFailed);
+
+            DeleteFileW(src.c_str());
+        }
+
+        TEST_METHOD(InstallFromLocalFileUnverified_RejectsNonOpenNgcCsv)
+        {
+            const std::string malformed = "not;a;valid;openngc\nrow;without;required;columns\n";
+            std::vector<std::uint8_t> bytes(malformed.begin(), malformed.end());
+            auto src = WriteTempFile(bytes);
+
+            Report r = InstallFromLocalFileUnverified(L"user-import.csv", src.c_str(),
+                                                      1024ull * 1024ull,
+                                                      nullptr, nullptr);
+            Assert::IsTrue(r.result == Result::InvalidContent);
+            DeleteFileW(src.c_str());
+        }
+
+        TEST_METHOD(InstallFromLocalFileUnverified_RejectsMalformedConstellationsCsv)
+        {
+            const std::string malformed = "B,not-a-number,10,80,UMi\n";
+            std::vector<std::uint8_t> bytes(malformed.begin(), malformed.end());
+            auto src = WriteTempFile(bytes);
+
+            Report r = InstallFromLocalFileUnverified(L"constellations.csv", src.c_str(),
+                                                      1024ull * 1024ull,
+                                                      nullptr, nullptr);
+            Assert::IsTrue(r.result == Result::InvalidContent);
+            DeleteFileW(src.c_str());
         }
 
         TEST_METHOD(Probe_MissingFile_ReturnsMissing)

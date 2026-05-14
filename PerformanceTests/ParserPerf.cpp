@@ -64,9 +64,9 @@ namespace {
 
     std::string GetCatalogPath(const wchar_t* fileName) {
         PWSTR pszBase = nullptr;
-        if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &pszBase)) || !pszBase)
+        if (FAILED(SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &pszBase)) || !pszBase)
             return {};
-        std::wstring wpath = std::wstring(pszBase) + L"\\XISFShellExtension\\catalogs\\" + fileName;
+        std::wstring wpath = std::wstring(pszBase) + L"\\DennisPayne\\XISFShellExtension\\catalogs\\" + fileName;
         CoTaskMemFree(pszBase);
         int len = WideCharToMultiByte(CP_UTF8, 0, wpath.c_str(), -1, nullptr, 0, nullptr, nullptr);
         if (len <= 0) return {};
@@ -112,7 +112,7 @@ namespace PropertyHandler_Performance {
         {
             std::string path = GetCatalogPath(L"NGC.csv");
             if (path.empty() || !std::filesystem::exists(path)) {
-                Logger::WriteMessage("SKIPPED — NGC.csv not found in LocalAppData catalogs");
+                Logger::WriteMessage("SKIPPED — NGC.csv not found in ProgramData catalogs");
                 return;
             }
 

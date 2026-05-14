@@ -38,8 +38,22 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID) {
         g_hInst = hModule;
         DisableThreadLibraryCalls(hModule);
         TraceLoggingRegister(g_hPropertyProvider);
+        TraceLoggingWrite(g_hPropertyProvider, "PropertyHandlerDllAttach",
+            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE));
+        if (g_xisfPropertyHandlerTelemetryHook) {
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION,
+                XISF_ETW_KEYWORD_LIFECYCLE, L"PropertyHandlerDllAttach");
+        }
     }
     else if (dwReason == DLL_PROCESS_DETACH) {
+        TraceLoggingWrite(g_hPropertyProvider, "PropertyHandlerDllDetach",
+            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE));
+        if (g_xisfPropertyHandlerTelemetryHook) {
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION,
+                XISF_ETW_KEYWORD_LIFECYCLE, L"PropertyHandlerDllDetach");
+        }
         TraceLoggingUnregister(g_hPropertyProvider);
     }
     return TRUE;
@@ -50,6 +64,16 @@ STDAPI DllCanUnloadNow(void) { return (g_cDllRef == 0) ? S_OK : S_FALSE; }
 STDAPI DllGetClassObject(_In_ REFCLSID rclsid, _In_ REFIID riid, _Outptr_ void** ppv) {
     if (!ppv) return E_POINTER;
     *ppv = nullptr;
+
+    TraceLoggingWrite(g_hPropertyProvider, "PropertyHandlerDllGetClassObject",
+        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE),
+        TraceLoggingGuid(rclsid, "CLSID"),
+        TraceLoggingGuid(riid, "IID"));
+    if (g_xisfPropertyHandlerTelemetryHook) {
+        g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION,
+            XISF_ETW_KEYWORD_LIFECYCLE, L"PropertyHandlerDllGetClassObject");
+    }
 
     CClassFactory* pf = nullptr;
     if (IsEqualCLSID(rclsid, CLSID_XISFPropertyHandler)) {
