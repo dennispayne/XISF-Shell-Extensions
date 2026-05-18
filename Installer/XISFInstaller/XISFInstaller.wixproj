@@ -34,6 +34,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\PropertyHandler\XISFPropertyHandler\XISFPropertyHandler.vcxproj" />
+    <ProjectReference Include="..\..\PreviewHandler\XISFPreviewHandler\XISFPreviewHandler.vcxproj" />
+    <ProjectReference Include="..\..\Filter\XISFFilter\XISFFilter.vcxproj" />
+    <ProjectReference Include="..\..\ShellExtensionHost\ShellExtensionHost\ShellExtensionHost.vcxproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
     <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />
     <PackageReference Include="Nerdbank.GitVersioning" Version="3.9.50">
