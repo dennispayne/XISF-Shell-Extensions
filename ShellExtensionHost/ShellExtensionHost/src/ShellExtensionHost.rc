@@ -17,7 +17,7 @@ IDI_SETTINGS_APP ICON "XISFSettingsApp.ico"
 #define XISF_VERSION_STR XISF_STR(XISF_VERSION_TEXT)
 #endif
 
-IDD_SETTINGS DIALOGEX 0, 0, 500, 466
+IDD_SETTINGS DIALOGEX 0, 0, 500, 534
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX
 CAPTION "XISF Shell Extensions Utility"
 FONT 9, "Segoe UI", 400, 0, 0x1
@@ -80,21 +80,30 @@ BEGIN
     PUSHBUTTON      "Open Catalog Folder",
                     IDC_BTN_OPEN_CATALOG_DIR, 127, 306, 130, 14
 
-    GROUPBOX        "Status", -1, 10, 362, 480, 52
+    GROUPBOX        "Software Update",  -1,                  10, 362, 480, 62
+    LTEXT           "Installed:",        -1,                  20, 376, 44, 10
+    LTEXT           "",                  IDC_STATIC_UPDATE_INSTALLED,  67, 376, 115, 10
+    LTEXT           "Available:",        -1,                 188, 376,  44, 10
+    LTEXT           "",                  IDC_STATIC_UPDATE_AVAILABLE,  235, 376, 200, 10
+    LTEXT           "",                  IDC_STATIC_UPDATE_DETAIL,      20, 394, 340, 20
+    PUSHBUTTON      "Check for Updates", IDC_BTN_CHECK_UPDATES,        370, 374, 110, 14
+    PUSHBUTTON      "Install Update",    IDC_BTN_INSTALL_UPDATE,       370, 393, 110, 14
+
+    GROUPBOX        "Status", -1, 10, 430, 480, 52
     CONTROL         "", IDC_PROGRESS, PROGRESS_CLASSA,
-                    WS_CHILD | WS_VISIBLE,   20, 374, 460, 10
-    LTEXT           "",                 IDC_STATIC_PROGRESS_TEXT, 20, 388, 460, 20
-    RTEXT           "",                 IDC_STATIC_PENDING_TEXT, 300, 398, 180, 10
+                    WS_CHILD | WS_VISIBLE,   20, 442, 460, 10
+    LTEXT           "",                 IDC_STATIC_PROGRESS_TEXT, 20, 456, 460, 20
+    RTEXT           "",                 IDC_STATIC_PENDING_TEXT, 300, 466, 180, 10
 
     AUTOCHECKBOX    "Restart Explorer If Needed",
-                    IDC_CHK_RESTART_EXPLORER, 20, 420, 155, 10
+                    IDC_CHK_RESTART_EXPLORER, 20, 488, 155, 10
     PUSHBUTTON      "Advanced",
-                    IDC_BTN_ADVANCED,       20, 441, 60, 14
+                    IDC_BTN_ADVANCED,       20, 509, 60, 14
     CONTROL         "", IDC_LINK_ADVANCED_DOC, WC_LINK,
-                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 86, 444, 130, 10
+                    WS_CHILD | WS_VISIBLE | WS_TABSTOP, 86, 512, 130, 10
     PUSHBUTTON      "Apply",
-                    IDC_BTN_APPLY,          356, 444, 60, 14
-    DEFPUSHBUTTON   "Close",            IDOK,               422, 444,  60, 14
+                    IDC_BTN_APPLY,          356, 512, 60, 14
+    DEFPUSHBUTTON   "Close",            IDOK,               422, 512,  60, 14
 END
 
 IDD_ADVANCED DIALOGEX 0, 0, 360, 260

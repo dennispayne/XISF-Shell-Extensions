@@ -27,6 +27,8 @@
 #include "CatalogSpec.h"
 #include "CatalogInstaller.h"
 #include "HandlerDllPath.h"
+#include "UpdaterSpec.h"
+#include "UpdaterInternals.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -971,6 +973,239 @@ namespace ShellExtensionHostTests_HandlerDllPath
                 nullptr);
             Assert::IsTrue(withNull.empty(),
                 L"Null configuration must yield an empty resolved path");
+        }
+    };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// UpdaterInternals tests — pure logic, no network access
+// ────────────────────────────────────────────────────────────────────────────
+namespace ShellExtensionHostTests_Updater
+{
+    using namespace xisf::updater::internals;
+    using namespace Microsoft::VisualStudio::CppUnitTestFramework;
+
+    TEST_CLASS(UpdaterSemVerTests)
+    {
+    public:
+        TEST_METHOD(ParseSemVer_ThreePart_Correct)
+        {
+            SemVer v;
+            Assert::IsTrue(ParseSemVer(L"1.2.3", v));
+            Assert::AreEqual(1, v.major);
+            Assert::AreEqual(2, v.minor);
+            Assert::AreEqual(3, v.patch);
+        }
+
+        TEST_METHOD(ParseSemVer_WithVPrefix_Correct)
+        {
+            SemVer v;
+            Assert::IsTrue(ParseSemVer(L"v1.0.0", v));
+            Assert::AreEqual(1, v.major);
+            Assert::AreEqual(0, v.minor);
+            Assert::AreEqual(0, v.patch);
+        }
+
+        TEST_METHOD(ParseSemVer_FourPart_FourthIgnored)
+        {
+            SemVer v;
+            Assert::IsTrue(ParseSemVer(L"0.1.0.0", v));
+            Assert::AreEqual(0, v.major);
+            Assert::AreEqual(1, v.minor);
+            Assert::AreEqual(0, v.patch);
+        }
+
+        TEST_METHOD(ParseSemVer_PreReleaseSuffix_Stripped)
+        {
+            SemVer v;
+            Assert::IsTrue(ParseSemVer(L"1.2.0-beta.1", v));
+            Assert::AreEqual(1, v.major);
+            Assert::AreEqual(2, v.minor);
+            Assert::AreEqual(0, v.patch);
+        }
+
+        TEST_METHOD(CompareSemVer_NewerMajor_Positive)
+        {
+            SemVer a{2, 0, 0}, b{1, 9, 9};
+            Assert::IsTrue(CompareSemVer(a, b) > 0);
+        }
+
+        TEST_METHOD(CompareSemVer_NewerMinor_Positive)
+        {
+            SemVer a{1, 1, 0}, b{1, 0, 9};
+            Assert::IsTrue(CompareSemVer(a, b) > 0);
+        }
+
+        TEST_METHOD(CompareSemVer_NewerPatch_Positive)
+        {
+            SemVer a{1, 0, 2}, b{1, 0, 1};
+            Assert::IsTrue(CompareSemVer(a, b) > 0);
+        }
+
+        TEST_METHOD(CompareSemVer_Equal_Zero)
+        {
+            SemVer a{1, 0, 0}, b{1, 0, 0};
+            Assert::AreEqual(0, CompareSemVer(a, b));
+        }
+
+        TEST_METHOD(CompareSemVer_OlderMinor_Negative)
+        {
+            SemVer a{1, 0, 0}, b{1, 1, 0};
+            Assert::IsTrue(CompareSemVer(a, b) < 0);
+        }
+    };
+
+    TEST_CLASS(UpdaterJsonTests)
+    {
+    public:
+        TEST_METHOD(ExtractJsonString_SimpleValue_Extracted)
+        {
+            std::string json = R"({"tag_name":"v1.2.3","other":"x"})";
+            std::string val;
+            Assert::IsTrue(ExtractJsonString(json, "tag_name", val));
+            Assert::AreEqual(std::string("v1.2.3"), val);
+        }
+
+        TEST_METHOD(ExtractJsonString_EscapedQuotes_Handled)
+        {
+            std::string json = R"({"key":"val\"ue"})";
+            std::string val;
+            Assert::IsTrue(ExtractJsonString(json, "key", val));
+            Assert::AreEqual(std::string("val\\\"ue"), val);
+        }
+
+        TEST_METHOD(ExtractJsonString_MissingKey_ReturnsFalse)
+        {
+            std::string json = R"({"other":"x"})";
+            std::string val;
+            Assert::IsFalse(ExtractJsonString(json, "tag_name", val));
+        }
+
+        TEST_METHOD(ExtractJsonBool_True_Extracted)
+        {
+            std::string json = R"({"prerelease":true})";
+            bool val = false;
+            Assert::IsTrue(ExtractJsonBool(json, "prerelease", val));
+            Assert::IsTrue(val);
+        }
+
+        TEST_METHOD(ExtractJsonBool_False_Extracted)
+        {
+            std::string json = R"({"prerelease":false})";
+            bool val = true;
+            Assert::IsTrue(ExtractJsonBool(json, "prerelease", val));
+            Assert::IsFalse(val);
+        }
+    };
+
+    TEST_CLASS(UpdaterAssetNameTests)
+    {
+    public:
+        TEST_METHOD(IsExpectedMsiName_ValidAsset_True)
+        {
+            Assert::IsTrue(IsExpectedMsiName("XISF.ShellExtensions_1.0.0_x64.msi"));
+        }
+
+        TEST_METHOD(IsExpectedMsiName_WrongSuffix_False)
+        {
+            Assert::IsFalse(IsExpectedMsiName("XISF.ShellExtensions_1.0.0_x64.exe"));
+        }
+
+        TEST_METHOD(IsExpectedMsiName_WrongPrefix_False)
+        {
+            Assert::IsFalse(IsExpectedMsiName("SomeOtherApp_1.0.0_x64.msi"));
+        }
+
+        TEST_METHOD(IsExpectedMsiName_EmptyString_False)
+        {
+            Assert::IsFalse(IsExpectedMsiName(""));
+        }
+
+        TEST_METHOD(IsExpectedMsiName_PrefixSuffixOnly_False)
+        {
+            // No version component between prefix and suffix.
+            Assert::IsFalse(IsExpectedMsiName("XISF.ShellExtensions__x64.msi"));
+        }
+    };
+
+    TEST_CLASS(UpdaterChecksumParseTests)
+    {
+    public:
+        TEST_METHOD(ParseChecksumFile_ValidEntry_ReturnsHash)
+        {
+            std::string content =
+                "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890  "
+                "XISF.ShellExtensions_1.0.0_x64.msi\n";
+            auto hash = ParseChecksumFile(content, L"XISF.ShellExtensions_1.0.0_x64.msi");
+            Assert::AreEqual(std::wstring(L"abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"),
+                             hash);
+        }
+
+        TEST_METHOD(ParseChecksumFile_BsdFormat_ReturnsHash)
+        {
+            // BSD-style "*filename" after spaces
+            std::string content =
+                "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890 *"
+                "XISF.ShellExtensions_1.1.0_x64.msi\n";
+            auto hash = ParseChecksumFile(content, L"XISF.ShellExtensions_1.1.0_x64.msi");
+            Assert::IsFalse(hash.empty());
+        }
+
+        TEST_METHOD(ParseChecksumFile_CaseInsensitiveMatch_Succeeds)
+        {
+            std::string content =
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  "
+                "xisf.shellextensions_1.0.0_x64.msi\n";
+            auto hash = ParseChecksumFile(content, L"XISF.ShellExtensions_1.0.0_x64.msi");
+            Assert::IsFalse(hash.empty());
+        }
+
+        TEST_METHOD(ParseChecksumFile_FileNotInContent_ReturnsEmpty)
+        {
+            std::string content =
+                "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890  "
+                "OtherFile.txt\n";
+            auto hash = ParseChecksumFile(content, L"XISF.ShellExtensions_1.0.0_x64.msi");
+            Assert::IsTrue(hash.empty());
+        }
+
+        TEST_METHOD(ParseChecksumFile_HashNormalisedToLower)
+        {
+            std::string content =
+                "ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890  "
+                "XISF.ShellExtensions_1.0.0_x64.msi\n";
+            auto hash = ParseChecksumFile(content, L"XISF.ShellExtensions_1.0.0_x64.msi");
+            Assert::AreEqual(std::wstring(L"abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"),
+                             hash);
+        }
+    };
+
+    TEST_CLASS(UpdaterAllowListTests)
+    {
+    public:
+        TEST_METHOD(IsAllowedUpdateHost_ApiHost_True)
+        {
+            Assert::IsTrue(IsAllowedUpdateHost(L"api.github.com"));
+        }
+
+        TEST_METHOD(IsAllowedUpdateHost_CdnHost_True)
+        {
+            Assert::IsTrue(IsAllowedUpdateHost(L"objects.githubusercontent.com"));
+        }
+
+        TEST_METHOD(IsAllowedUpdateHost_GithubCom_True)
+        {
+            Assert::IsTrue(IsAllowedUpdateHost(L"github.com"));
+        }
+
+        TEST_METHOD(IsAllowedUpdateHost_ArbitraryHost_False)
+        {
+            Assert::IsFalse(IsAllowedUpdateHost(L"evil.example.com"));
+        }
+
+        TEST_METHOD(IsAllowedUpdateHost_CaseInsensitive_True)
+        {
+            Assert::IsTrue(IsAllowedUpdateHost(L"API.GITHUB.COM"));
         }
     };
 }

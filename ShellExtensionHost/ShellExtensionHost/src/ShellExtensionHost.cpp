@@ -33,6 +33,11 @@
 #include "CatalogInstaller.h"
 #include "Sha256.h"
 #include "HandlerDllPath.h"
+#include "UpdaterSpec.h"
+#include "UpdaterCheck.h"
+#include "UpdaterDownload.h"
+
+#pragma comment(lib, "advapi32.lib")
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "comdlg32.lib")
@@ -50,6 +55,7 @@
 #define XISF_VERSION_WSTR _XS_(XISF_VERSION_TEXT)
 
 using namespace xisf;
+using namespace xisf::updater;
 
 namespace {
 
@@ -57,10 +63,15 @@ HWND              g_hDlg = nullptr;
 std::atomic<bool> g_cancelRequested{false};
 std::atomic<bool> g_opInProgress{false};
 
-static constexpr UINT WM_XISF_PROGRESS = WM_APP + 1;
-static constexpr UINT WM_XISF_DONE     = WM_APP + 2;
+static constexpr UINT WM_XISF_PROGRESS          = WM_APP + 1;
+static constexpr UINT WM_XISF_DONE              = WM_APP + 2;
 static constexpr UINT WM_XISF_TRACE_EXPORT_DONE = WM_APP + 3;
 static constexpr UINT WM_XISF_AUTO_INSTALL_DONE = WM_APP + 4;
+
+// Update state
+std::atomic<bool> g_updateCheckInProgress{false};
+std::atomic<bool> g_updateDownloadInProgress{false};
+std::wstring      g_pendingUpdatePath;   // non-empty = MSI ready to launch
 
 COLORREF g_iconOkColor = RGB(18, 130, 44);
 COLORREF g_iconWarnColor = RGB(196, 130, 0);
@@ -202,6 +213,8 @@ void UpdateCatalogActionButtons();
 void RemoveImportedSourcePath(std::wstring_view fileName);
 bool TryReadRegisteredDllPath(const wchar_t* clsid, std::wstring& out);
 INT_PTR CALLBACK AdvancedDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam);
+void OnCheckForUpdates();
+void OnInstallUpdate();
 
 // Handler CLSIDs
 static constexpr const wchar_t* kPropertyClsid = L"{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}";
@@ -1355,6 +1368,110 @@ void OnFetchOnline()
     OnFetchOnline(0);
 }
 
+void OnCheckForUpdates()
+{
+    if (g_updateCheckInProgress.exchange(true)) return;
+
+    HWND hDlg = g_hDlg;
+    EnableWindow(GetDlgItem(hDlg, IDC_BTN_CHECK_UPDATES), FALSE);
+    SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_DETAIL, L"Checking for updates\u2026");
+    SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_AVAILABLE, L"\u2026");
+
+    std::thread([hDlg]() {
+        auto* info = new ReleaseInfo();
+        std::wstring errDetail;
+        CheckResult result = CheckForUpdate(*info, errDetail, /*ignoreInterval=*/true);
+        if (result == CheckResult::RateLimited) {
+            // Serve cached result but still return it.
+            result = info->version.empty() ? CheckResult::NoUpdate : result;
+        }
+        // Pack result into wParam; info pointer into lParam.
+        // The receiving handler owns info and must delete it.
+        if (result != CheckResult::UpdateAvailable && result != CheckResult::NoUpdate &&
+            result != CheckResult::RateLimited)
+        {
+            info->errorDetail = errDetail;
+        }
+        PostMessageW(hDlg, WM_XISF_UPDATE_CHECK_DONE,
+                     static_cast<WPARAM>(result),
+                     reinterpret_cast<LPARAM>(info));
+    }).detach();
+}
+
+void OnInstallUpdate()
+{
+    if (!g_pendingUpdatePath.empty()) {
+        // A downloaded MSI is ready — launch it.
+        if (!LaunchMsiInstaller(g_pendingUpdatePath)) {
+            SetDlgItemTextW(g_hDlg, IDC_STATIC_UPDATE_DETAIL,
+                            L"Failed to launch installer. Run it manually from the Downloads folder.");
+        }
+        return;
+    }
+
+    if (g_updateDownloadInProgress.exchange(true)) return;
+
+    // Retrieve the cached asset URLs from registry.
+    std::wstring msiUrl, checksumUrl;
+    {
+        std::wstring regKey(kUpdateRegistryKey);
+        HKEY hk = nullptr;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, regKey.c_str(), 0, KEY_READ, &hk) == ERROR_SUCCESS) {
+            auto readStr = [&](const std::wstring& name, std::wstring& out) {
+                DWORD type = 0, sz = 0;
+                RegQueryValueExW(hk, name.c_str(), nullptr, &type, nullptr, &sz);
+                if (type == REG_SZ && sz >= 2) {
+                    out.resize(sz / sizeof(wchar_t));
+                    RegQueryValueExW(hk, name.c_str(), nullptr, &type,
+                                     reinterpret_cast<BYTE*>(&out[0]), &sz);
+                    while (!out.empty() && out.back() == L'\0') out.pop_back();
+                }
+            };
+            readStr(std::wstring(kRegAssetUrl), msiUrl);
+            RegCloseKey(hk);
+        }
+    }
+    // Derive checksum URL by replacing the MSI filename with SHA256SUMS.txt in the same path.
+    if (!msiUrl.empty()) {
+        size_t slash = msiUrl.rfind(L'/');
+        if (slash != std::wstring::npos)
+            checksumUrl = msiUrl.substr(0, slash + 1) + std::wstring(kChecksumAssetName);
+    }
+
+    if (msiUrl.empty() || checksumUrl.empty()) {
+        g_updateDownloadInProgress = false;
+        SetDlgItemTextW(g_hDlg, IDC_STATIC_UPDATE_DETAIL,
+                        L"No update URL cached. Click \u2018Check for Updates\u2019 first.");
+        return;
+    }
+
+    HWND hDlg = g_hDlg;
+    EnableWindow(GetDlgItem(hDlg, IDC_BTN_INSTALL_UPDATE), FALSE);
+    EnableWindow(GetDlgItem(hDlg, IDC_BTN_CHECK_UPDATES), FALSE);
+    SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_DETAIL, L"Downloading update\u2026");
+
+    wchar_t tempBase[MAX_PATH]{};
+    GetTempPathW(ARRAYSIZE(tempBase), tempBase);
+    std::wstring tempDir = std::wstring(tempBase) + L"XISFUpdate";
+
+    std::thread([hDlg, msiUrl, checksumUrl, tempDir]() {
+        auto* report = new DownloadReport(
+            DownloadUpdate(msiUrl, checksumUrl, tempDir,
+                [hDlg](std::uint64_t received, std::uint64_t total) -> bool {
+                    if (total > 0) {
+                        LPARAM pct = static_cast<LPARAM>(received * 100 / total);
+                        PostMessageW(hDlg, WM_XISF_PROGRESS,
+                                     static_cast<WPARAM>(received),
+                                     static_cast<LPARAM>(total));
+                    }
+                    return true; // no cancellation for update download
+                })
+        );
+        PostMessageW(hDlg, WM_XISF_UPDATE_DOWNLOAD_DONE,
+                     0, reinterpret_cast<LPARAM>(report));
+    }).detach();
+}
+
 void OnImportFile()
 {
     if (g_opInProgress.load()) return;
@@ -1644,6 +1761,55 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
                            L"  \u2014  <a href=\"https://github.com/dennispayne/XISF-Shell-Extensions\">"
                            L"github.com/dennispayne/XISF-Shell-Extensions</a>";
         SetDlgItemTextW(hDlg, IDC_LINK_VERSION, ver.c_str());
+
+        // Software Update section: populate installed version and restore any cached state.
+        SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_INSTALLED, XISF_VERSION_WSTR);
+        SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_DETAIL, L"");
+
+        // Restore pending download path from registry (survives app restart).
+        {
+            std::wstring pendingPath;
+            HKEY hk = nullptr;
+            if (RegOpenKeyExW(HKEY_CURRENT_USER, std::wstring(kUpdateRegistryKey).c_str(),
+                              0, KEY_READ, &hk) == ERROR_SUCCESS) {
+                DWORD type = 0, sz = 0;
+                RegQueryValueExW(hk, std::wstring(kRegDownloadPath).c_str(), nullptr, &type, nullptr, &sz);
+                if (type == REG_SZ && sz >= 2) {
+                    pendingPath.resize(sz / sizeof(wchar_t));
+                    RegQueryValueExW(hk, std::wstring(kRegDownloadPath).c_str(), nullptr, &type,
+                                     reinterpret_cast<BYTE*>(&pendingPath[0]), &sz);
+                    while (!pendingPath.empty() && pendingPath.back() == L'\0') pendingPath.pop_back();
+                }
+                RegCloseKey(hk);
+            }
+            if (!pendingPath.empty() && GetFileAttributesW(pendingPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                g_pendingUpdatePath = pendingPath;
+                // Extract version from cached asset URL.
+                std::wstring cachedVer;
+                HKEY hk2 = nullptr;
+                if (RegOpenKeyExW(HKEY_CURRENT_USER, std::wstring(kUpdateRegistryKey).c_str(),
+                                  0, KEY_READ, &hk2) == ERROR_SUCCESS) {
+                    DWORD type2 = 0, sz2 = 0;
+                    RegQueryValueExW(hk2, std::wstring(kRegAvailableVer).c_str(), nullptr, &type2, nullptr, &sz2);
+                    if (type2 == REG_SZ && sz2 >= 2) {
+                        cachedVer.resize(sz2 / sizeof(wchar_t));
+                        RegQueryValueExW(hk2, std::wstring(kRegAvailableVer).c_str(), nullptr, &type2,
+                                         reinterpret_cast<BYTE*>(&cachedVer[0]), &sz2);
+                        while (!cachedVer.empty() && cachedVer.back() == L'\0') cachedVer.pop_back();
+                    }
+                    RegCloseKey(hk2);
+                }
+                SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_AVAILABLE,
+                                (cachedVer.empty() ? L"Ready" : cachedVer.c_str()));
+                SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_DETAIL,
+                                L"Downloaded and ready to install.");
+                SetDlgItemTextW(hDlg, IDC_BTN_INSTALL_UPDATE, L"Launch Installer");
+                EnableWindow(GetDlgItem(hDlg, IDC_BTN_INSTALL_UPDATE), TRUE);
+            } else {
+                SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_AVAILABLE, L"\u2014");
+                EnableWindow(GetDlgItem(hDlg, IDC_BTN_INSTALL_UPDATE), FALSE);
+            }
+        }
 
         // Inline documentation links on each handler row (replace the legacy
         // Shift/Ctrl+click "open docs? Y/N" prompts). Each anchor opens the
@@ -1977,6 +2143,8 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         case IDC_BTN_IMPORT_FILE:          OnImportFile();           return TRUE;
         case IDC_BTN_OPEN_CATALOG_DIR:     OnOpenCatalogDir();       return TRUE;
         case IDC_BTN_COPY_EXPECTED_HASHES: OnCopyExpectedHashes();   return TRUE;
+        case IDC_BTN_CHECK_UPDATES:        OnCheckForUpdates();      return TRUE;
+        case IDC_BTN_INSTALL_UPDATE:       OnInstallUpdate();        return TRUE;
         case IDC_BTN_ADVANCED: {
             SHELLEXECUTEINFOW sei{};
             sei.cbSize = sizeof(sei);
@@ -2112,6 +2280,76 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             SetProgressText(buf);
         }
         SendDlgItemMessageW(g_hDlg, IDC_PROGRESS, PBM_SETPOS, 0, 0);
+        return TRUE;
+    }
+
+    case WM_XISF_UPDATE_CHECK_DONE: {
+        auto result = static_cast<CheckResult>(wParam);
+        auto* info  = reinterpret_cast<ReleaseInfo*>(lParam);
+
+        g_updateCheckInProgress = false;
+        EnableWindow(GetDlgItem(hDlg, IDC_BTN_CHECK_UPDATES), TRUE);
+        SendDlgItemMessageW(hDlg, IDC_PROGRESS, PBM_SETPOS, 0, 0);
+
+        switch (result) {
+        case CheckResult::UpdateAvailable:
+            SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_AVAILABLE, info->version.c_str());
+            SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_DETAIL,
+                            (L"Version " + info->version + L" is available.").c_str());
+            SetDlgItemTextW(hDlg, IDC_BTN_INSTALL_UPDATE, L"Download && Install");
+            EnableWindow(GetDlgItem(hDlg, IDC_BTN_INSTALL_UPDATE), TRUE);
+            break;
+        case CheckResult::NoUpdate:
+        case CheckResult::RateLimited:
+            SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_AVAILABLE,
+                            info->version.empty() ? L"Up to date" : info->version.c_str());
+            SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_DETAIL, L"You are on the latest version.");
+            EnableWindow(GetDlgItem(hDlg, IDC_BTN_INSTALL_UPDATE), FALSE);
+            break;
+        case CheckResult::NetworkError:
+        case CheckResult::ParseError:
+            SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_AVAILABLE, L"Check failed");
+            SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_DETAIL,
+                            (L"Check failed: " + info->errorDetail).c_str());
+            break;
+        }
+        delete info;
+        return TRUE;
+    }
+
+    case WM_XISF_UPDATE_DOWNLOAD_DONE: {
+        auto* report = reinterpret_cast<DownloadReport*>(lParam);
+
+        g_updateDownloadInProgress = false;
+        EnableWindow(GetDlgItem(hDlg, IDC_BTN_CHECK_UPDATES), TRUE);
+        SendDlgItemMessageW(hDlg, IDC_PROGRESS, PBM_SETPOS, 0, 0);
+
+        if (report->result == DownloadResult::Ok) {
+            g_pendingUpdatePath = report->downloadedPath;
+
+            // Persist the path so it survives app restart.
+            HKEY hk = nullptr;
+            if (RegCreateKeyExW(HKEY_CURRENT_USER, std::wstring(kUpdateRegistryKey).c_str(),
+                                0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE,
+                                nullptr, &hk, nullptr) == ERROR_SUCCESS) {
+                const auto& p = report->downloadedPath;
+                RegSetValueExW(hk, std::wstring(kRegDownloadPath).c_str(), 0, REG_SZ,
+                               reinterpret_cast<const BYTE*>(p.c_str()),
+                               static_cast<DWORD>((p.size() + 1) * sizeof(wchar_t)));
+                RegCloseKey(hk);
+            }
+
+            SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_DETAIL,
+                            L"Download complete. Click \u2018Launch Installer\u2019 to install.");
+            SetDlgItemTextW(hDlg, IDC_BTN_INSTALL_UPDATE, L"Launch Installer");
+            EnableWindow(GetDlgItem(hDlg, IDC_BTN_INSTALL_UPDATE), TRUE);
+        } else {
+            SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_DETAIL,
+                            (L"Download failed: " + report->errorDetail).c_str());
+            // Re-enable Install button so user can retry.
+            EnableWindow(GetDlgItem(hDlg, IDC_BTN_INSTALL_UPDATE), TRUE);
+        }
+        delete report;
         return TRUE;
     }
 

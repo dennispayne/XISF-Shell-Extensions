@@ -89,6 +89,8 @@
     <ClCompile Include="..\ShellExtensionHost\src\Paths.cpp" />
     <ClCompile Include="..\ShellExtensionHost\src\HostSettings.cpp" />
     <ClCompile Include="..\ShellExtensionHost\src\CatalogInstaller.cpp" />
+    <ClCompile Include="..\ShellExtensionHost\src\UpdaterCheck.cpp" />
+    <ClCompile Include="..\ShellExtensionHost\src\UpdaterDownload.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

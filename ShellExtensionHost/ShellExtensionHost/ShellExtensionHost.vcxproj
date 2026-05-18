@@ -87,6 +87,8 @@
     <ClCompile Include="src\HostSettings.cpp" />
     <ClCompile Include="src\Paths.cpp" />
     <ClCompile Include="src\Sha256.cpp" />
+    <ClCompile Include="src\UpdaterCheck.cpp" />
+    <ClCompile Include="src\UpdaterDownload.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\CatalogInstaller.h" />
@@ -96,6 +98,10 @@
     <ClInclude Include="src\HostSettings.h" />
     <ClInclude Include="src\Paths.h" />
     <ClInclude Include="src\Sha256.h" />
+    <ClInclude Include="src\UpdaterCheck.h" />
+    <ClInclude Include="src\UpdaterDownload.h" />
+    <ClInclude Include="src\UpdaterInternals.h" />
+    <ClInclude Include="src\UpdaterSpec.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="src\ShellExtensionHost.rc" />

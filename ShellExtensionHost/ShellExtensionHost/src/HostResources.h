@@ -118,3 +118,14 @@
 #define IDC_LINK_ETW_DOC             1114
 #define IDC_LINK_CATALOG_VERIFY_DOC  1115
 #define IDC_LINK_ADVANCED_DOC        1116
+
+// Software Update section
+#define IDC_STATIC_UPDATE_INSTALLED  1120
+#define IDC_STATIC_UPDATE_AVAILABLE  1121
+#define IDC_STATIC_UPDATE_DETAIL     1122
+#define IDC_BTN_CHECK_UPDATES        1123
+#define IDC_BTN_INSTALL_UPDATE       1124
+
+// Custom window messages for update background threads
+#define WM_XISF_UPDATE_CHECK_DONE    (WM_APP + 20)
+#define WM_XISF_UPDATE_DOWNLOAD_DONE (WM_APP + 21)
