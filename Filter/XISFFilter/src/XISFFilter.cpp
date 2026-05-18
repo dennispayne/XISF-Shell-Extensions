@@ -3,6 +3,7 @@
 #include "XISFParser.h"
 #include "FilterTelemetry.h"
 #include <shlwapi.h>
+#include <propvarutil.h>
 #include <new>
 #include <cstring>
 #include <fstream>
@@ -14,6 +15,9 @@ extern long g_cDllRef;
 static const GUID s_PSGUID_STORAGE =
     { 0xB725F130, 0x47EF, 0x101A, { 0xA5, 0xF1, 0x02, 0x60, 0x8C, 0x9E, 0xEB, 0xAC } };
 static const ULONG PID_STG_CONTENTS = 19;
+static const GUID s_PSGUID_XISF =
+    { 0x7C54FA8B, 0x9D63, 0x4C10, { 0x8F, 0xBE, 0x1A, 0x5A, 0x0F, 0x9A, 0x3B, 0x2E } };
+static const ULONG PID_XISF_DATASTATE = 55;
 
 // ---------------------------------------------------------------------------
 // Constructor
@@ -24,6 +28,8 @@ CXISFFilter::CXISFFilter()
     , m_currentChunk(0)
     , m_currentOffset(0)
     , m_initialized(false)
+    , m_pendingDataStateValue(false)
+    , m_hasDataStateValue(false)
 {
     InterlockedIncrement(&g_cDllRef);
 }
@@ -139,8 +145,10 @@ IFACEMETHODIMP CXISFFilter::Load(LPCOLESTR pszFileName, DWORD /*dwMode*/)
     }
 
     m_textChunks = result.metadata.GetSearchableTextChunks();
+    PopulateDerivedValues(result);
     m_currentChunk = 0;
     m_currentOffset = 0;
+    m_pendingDataStateValue = false;
     m_initialized = false;
     return S_OK;
 }
@@ -180,6 +188,7 @@ IFACEMETHODIMP CXISFFilter::Init(ULONG /*grfFlags*/, ULONG cAttributes,
 
     m_currentChunk = 0;
     m_currentOffset = 0;
+    m_pendingDataStateValue = false;
     m_initialized = true;
 
     WriteFilterTelemetry(TRACE_LEVEL_INFORMATION, XISF_FILTER_KEYWORD_FILTER,
@@ -195,7 +204,27 @@ IFACEMETHODIMP CXISFFilter::GetChunk(STAT_CHUNK* pStat)
     if (!m_initialized) return FILTER_E_END_OF_CHUNKS;
 
     if (m_currentChunk >= static_cast<ULONG>(m_textChunks.size()))
+    {
+        if (m_hasDataStateValue && m_currentChunk == static_cast<ULONG>(m_textChunks.size()))
+        {
+            memset(pStat, 0, sizeof(*pStat));
+            pStat->idChunk = m_currentChunk + 1;
+            pStat->breakType = CHUNK_EOS;
+            pStat->flags = CHUNK_VALUE;
+            pStat->locale = GetSystemDefaultLCID();
+            pStat->attribute.guidPropSet = s_PSGUID_XISF;
+            pStat->attribute.psProperty.ulKind = PRSPEC_PROPID;
+            pStat->attribute.psProperty.propid = PID_XISF_DATASTATE;
+            pStat->idChunkSource = pStat->idChunk;
+            pStat->cwcStartSource = 0;
+            pStat->cwcLenSource = 0;
+
+            m_pendingDataStateValue = true;
+            ++m_currentChunk;
+            return S_OK;
+        }
         return FILTER_E_END_OF_CHUNKS;
+    }
 
     memset(pStat, 0, sizeof(*pStat));
     pStat->idChunk = m_currentChunk + 1;
@@ -256,9 +285,60 @@ IFACEMETHODIMP CXISFFilter::GetText(ULONG* pcwcBuffer, WCHAR* awcBuffer)
     return S_OK;
 }
 
-IFACEMETHODIMP CXISFFilter::GetValue(PROPVARIANT** /*ppPropValue*/)
+void CXISFFilter::PopulateDerivedValues(const xisf::ParseResult& result)
 {
-    return FILTER_E_NO_VALUES;
+    m_hasDataStateValue = false;
+    m_dataStateValue.clear();
+
+    auto sfIt = result.metadata.imageAttributes.find("sampleFormat");
+    auto csIt = result.metadata.imageAttributes.find("colorSpace");
+    const std::string sampleFormat =
+        (sfIt != result.metadata.imageAttributes.end()) ? sfIt->second : "";
+    const std::string colorSpace =
+        (csIt != result.metadata.imageAttributes.end()) ? csIt->second : "";
+
+    if (sampleFormat.empty() && colorSpace.empty())
+        return;
+
+    const bool isLinear = DetermineIsLinearFromMetadata(sampleFormat, colorSpace);
+    m_dataStateValue = isLinear ? L"Linear" : L"Non-Linear";
+    m_hasDataStateValue = true;
+}
+
+bool CXISFFilter::DetermineIsLinearFromMetadata(std::string_view sampleFormat,
+                                                std::string_view colorSpace)
+{
+    const bool isFloat32 = (sampleFormat == "Float32");
+    const bool isFloat64 = (sampleFormat == "Float64");
+    const bool isUInt8   = (sampleFormat == "UInt8");
+
+    bool isLinear = (isFloat32 || isFloat64);
+    if (colorSpace == "Gray" || colorSpace == "RGB") isLinear = true;
+    if (colorSpace == "GraySRGB" || colorSpace == "RGBSRGB") isLinear = false;
+    if (isUInt8) isLinear = false;
+    return isLinear;
+}
+
+IFACEMETHODIMP CXISFFilter::GetValue(PROPVARIANT** ppPropValue)
+{
+    if (!ppPropValue) return E_INVALIDARG;
+    *ppPropValue = nullptr;
+    if (!m_initialized || !m_pendingDataStateValue || !m_hasDataStateValue)
+        return FILTER_E_NO_VALUES;
+
+    PROPVARIANT* pv = static_cast<PROPVARIANT*>(CoTaskMemAlloc(sizeof(PROPVARIANT)));
+    if (!pv) return E_OUTOFMEMORY;
+    PropVariantInit(pv);
+
+    HRESULT hr = InitPropVariantFromString(m_dataStateValue.c_str(), pv);
+    if (FAILED(hr)) {
+        CoTaskMemFree(pv);
+        return hr;
+    }
+
+    *ppPropValue = pv;
+    m_pendingDataStateValue = false;
+    return S_OK;
 }
 
 IFACEMETHODIMP CXISFFilter::BindRegion(FILTERREGION, REFIID, void**)
@@ -319,8 +399,10 @@ HRESULT CXISFFilter::ParseFromStream(IStream* pStm)
     }
 
     m_textChunks = result.metadata.GetSearchableTextChunks();
+    PopulateDerivedValues(result);
     m_currentChunk = 0;
     m_currentOffset = 0;
+    m_pendingDataStateValue = false;
     m_initialized = false;
     return S_OK;
 }

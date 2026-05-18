@@ -16,6 +16,7 @@ namespace xisf {
 struct PixelStatsResult {
     bool available = false;
     double median = 0.0;
+    double p95 = 0.0;
     double mean = 0.0;
     double clippingLowPct = 0.0;
     double clippingHighPct = 0.0;

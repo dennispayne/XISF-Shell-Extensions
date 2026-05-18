@@ -51,6 +51,7 @@ struct ComputedPropertyInputs {
     // fallback in xisf::DetermineIsLinear is used. See LinearityHeuristic.h.
     bool hasPixelMedian = false;
     double pixelMedian = 0.0;
+    double pixelP95 = 0.0;
 };
 
 // A single computed property value ready to be added to the property store.

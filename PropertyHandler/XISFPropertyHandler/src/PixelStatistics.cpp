@@ -233,30 +233,36 @@ PixelStatsResult ComputePixelStats(IStream* pStream, const std::string& xmlHeade
     // Compute stats — round to display precision
     double meanVal = runningSum / samples.size();
 
-    // Median via nth_element (O(n))
+    // Median + p95 via nth_element (O(n))
     size_t midIdx = samples.size() / 2;
     std::nth_element(samples.begin(), samples.begin() + midIdx, samples.end());
     double medianVal = samples[midIdx];
+    size_t p95Idx = (samples.size() * 95) / 100;
+    if (p95Idx >= samples.size()) p95Idx = samples.size() - 1;
+    std::nth_element(samples.begin(), samples.begin() + p95Idx, samples.end());
+    double p95Val = samples[p95Idx];
 
     double clipLowPct = 100.0 * clipLow / samples.size();
     double clipHighPct = 100.0 * clipHigh / samples.size();
 
     // Round: Median/Mean to 4 decimal places, Clipping to 1
     medianVal = std::round(medianVal * 10000.0) / 10000.0;
+    p95Val = std::round(p95Val * 10000.0) / 10000.0;
     meanVal = std::round(meanVal * 10000.0) / 10000.0;
     clipLowPct = std::round(clipLowPct * 10.0) / 10.0;
     clipHighPct = std::round(clipHighPct * 10.0) / 10.0;
 
     result.available = true;
     result.median = medianVal;
+    result.p95 = p95Val;
     result.mean = meanVal;
     result.clippingLowPct = clipLowPct;
     result.clippingHighPct = clipHighPct;
 
     ULONGLONG statsDur = GetTickCount64() - statsStart;
     WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PERF,
-        L"PixelStatsComputed Median=%.4f Mean=%.4f ClipLow=%.2f%% ClipHigh=%.2f%% Samples=%zu DurationMs=%llu",
-        medianVal, meanVal, clipLowPct, clipHighPct, samples.size(), statsDur);
+        L"PixelStatsComputed Median=%.4f P95=%.4f Mean=%.4f ClipLow=%.2f%% ClipHigh=%.2f%% Samples=%zu DurationMs=%llu",
+        medianVal, p95Val, meanVal, clipLowPct, clipHighPct, samples.size(), statsDur);
 
     return result;
 }

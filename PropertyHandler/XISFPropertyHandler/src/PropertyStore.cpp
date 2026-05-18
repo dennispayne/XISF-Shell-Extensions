@@ -370,7 +370,7 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
 
     {
         std::lock_guard<std::mutex> lock(m_propertyLock);
-        // Pixel stats: computed BEFORE PopulateProperties so the median can
+        // Pixel stats: computed BEFORE PopulateProperties so median/p95 can
         // drive the AstroDataState (Linear / Non-Linear) heuristic. Only Full
         // tier reads pixel data; Standard tier and below skip this step and
         // fall back to the metadata heuristic in xisf::DetermineIsLinear.
@@ -675,7 +675,7 @@ void CXISFPropertyHandler::PopulateProperties(xisf::FeatureTier tier, bool proje
             expTime, hasExp, cam,
             fNumber, hasFN,
             filter, imgType, objName,
-            pixelStats.available, pixelStats.median
+            pixelStats.available, pixelStats.median, pixelStats.p95
         };
 
         auto computed = xisf::PopulateComputedProperties(inputs);

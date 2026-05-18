@@ -6,7 +6,10 @@
 #include <filter.h>
 #include <filterr.h>
 #include <string>
+#include <string_view>
 #include <vector>
+
+namespace xisf { struct ParseResult; }
 
 // {B4E7F2A1-3D8C-4F5E-9A1B-6C2D8E4F7A3B}
 DEFINE_GUID(CLSID_XISFFilter,
@@ -53,10 +56,16 @@ private:
     ~CXISFFilter() = default;
 
     HRESULT ParseFromStream(IStream* pStm);
+    void PopulateDerivedValues(const xisf::ParseResult& result);
+    static bool DetermineIsLinearFromMetadata(std::string_view sampleFormat,
+                                              std::string_view colorSpace);
 
     long m_cRef;
     std::vector<std::wstring> m_textChunks;
     ULONG m_currentChunk;    // Index into m_textChunks for GetChunk
     ULONG m_currentOffset;   // Character offset within current chunk for GetText
     bool  m_initialized;     // True after Init() succeeds
+    bool  m_pendingDataStateValue;
+    bool  m_hasDataStateValue;
+    std::wstring m_dataStateValue;
 };

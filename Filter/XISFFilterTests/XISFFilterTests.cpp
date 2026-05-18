@@ -11,6 +11,7 @@
 #include <initguid.h>
 #include <filter.h>
 #include <filterr.h>
+#include <propvarutil.h>
 #include <shlwapi.h>
 #include <strsafe.h>
 #include <string>
@@ -448,14 +449,65 @@ public:
         pStream->Release();
     }
 
-    TEST_METHOD(GetValue_ReturnsNoValues)
+    TEST_METHOD(GetValue_WithoutPendingValueChunk_ReturnsNoValues)
     {
         CXISFFilter* pFilter = new CXISFFilter();
         PROPVARIANT* pPropValue = nullptr;
         HRESULT hr = pFilter->GetValue(&pPropValue);
         Assert::AreEqual(static_cast<HRESULT>(FILTER_E_NO_VALUES), hr,
-                          L"GetValue should always return FILTER_E_NO_VALUES");
+                          L"GetValue should return FILTER_E_NO_VALUES when no value chunk is pending");
         pFilter->Release();
+    }
+
+    TEST_METHOD(GetValue_DataStateChunk_ReturnsStringValue)
+    {
+        std::wstring path = BuildTempXISF(kXmlWithFITSKeywords);
+        IStream* pStream = CreateStreamFromFile(path);
+        Assert::IsNotNull(pStream);
+
+        CXISFFilter* pFilter = new CXISFFilter();
+        pFilter->Load(pStream);
+        pFilter->Init(0, 0, nullptr, nullptr);
+
+        // Drain text chunks until the DataState value chunk appears.
+        STAT_CHUNK stat = {};
+        HRESULT hr = S_OK;
+        int guard = 0;
+        bool sawValueChunk = false;
+        while ((hr = pFilter->GetChunk(&stat)) == S_OK && guard++ < 1000) {
+            if (stat.flags == CHUNK_TEXT) {
+                WCHAR buf[256];
+                ULONG sz = ARRAYSIZE(buf);
+                while (true) {
+                    sz = ARRAYSIZE(buf);
+                    HRESULT textHr = pFilter->GetText(&sz, buf);
+                    if (textHr == FILTER_E_NO_MORE_TEXT || textHr == FILTER_S_LAST_TEXT)
+                        break;
+                }
+                continue;
+            }
+            if (stat.flags == CHUNK_VALUE) {
+                sawValueChunk = true;
+                break;
+            }
+        }
+
+        Assert::IsTrue(sawValueChunk, L"Expected a CHUNK_VALUE for DataState");
+        Assert::AreEqual(static_cast<ULONG>(55), stat.attribute.psProperty.propid,
+            L"Value chunk should map to XISF.DataState (propID 55)");
+
+        PROPVARIANT* pv = nullptr;
+        hr = pFilter->GetValue(&pv);
+        Assert::AreEqual(S_OK, hr, L"GetValue should return DataState for value chunk");
+        Assert::IsNotNull(pv);
+        Assert::AreEqual(static_cast<USHORT>(VT_LPWSTR), pv->vt);
+        Assert::AreEqual(L"Linear", pv->pwszVal,
+            L"UInt16+Gray metadata fallback should classify as Linear");
+        PropVariantClear(pv);
+        CoTaskMemFree(pv);
+
+        pFilter->Release();
+        pStream->Release();
     }
 
     TEST_METHOD(Init_EmptyFile_HandlesGracefully)

@@ -2169,6 +2169,65 @@ public:
         return SHCreateMemStream(buf.data(), static_cast<UINT>(buf.size()));
     }
 
+    static IStream* CreateXISFStreamWithUInt16TwoLevel(uint16_t lowValue,
+                                                       uint16_t highValue,
+                                                       double highFraction,
+                                                       UINT w = 100, UINT h = 100,
+                                                       const char* sampleFormat = "UInt16",
+                                                       const char* colorSpace = "Gray") {
+        const size_t pixelCount = static_cast<size_t>(w) * h;
+        const size_t pixelBytes = pixelCount * 2; // UInt16
+        const std::string offsetTok = "@@@@@@@@@@@@";
+        const std::string sizeTok   = "############";
+        std::string xml;
+        xml.reserve(512);
+        xml += "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+        xml += "<xisf version=\"1.0\" xmlns=\"http://www.pixinsight.com/xisf\">\n";
+        xml += "  <Image geometry=\"";
+        xml += std::to_string(w); xml += ":"; xml += std::to_string(h); xml += ":1\" sampleFormat=\"";
+        xml += sampleFormat; xml += "\" colorSpace=\""; xml += colorSpace;
+        xml += "\" location=\"attachment:" + offsetTok + ":" + sizeTok + "\"></Image>\n";
+        xml += "</xisf>";
+
+        const size_t headerBytes = 16 + xml.size();
+        auto pad = [](std::string s, size_t width) {
+            while (s.size() < width) s.insert(s.begin(), '0');
+            return s;
+        };
+        std::string offsetStr = pad(std::to_string(headerBytes), offsetTok.size());
+        std::string sizeStr   = pad(std::to_string(pixelBytes), sizeTok.size());
+        auto pos = xml.find(offsetTok); xml.replace(pos, offsetTok.size(), offsetStr);
+        pos = xml.find(sizeTok);        xml.replace(pos, sizeTok.size(), sizeStr);
+
+        std::vector<BYTE> buf;
+        buf.reserve(headerBytes + pixelBytes);
+        const char sig[] = "XISF0100";
+        buf.insert(buf.end(), sig, sig + 8);
+        uint32_t xmlLen = static_cast<uint32_t>(xml.size());
+        auto* p = reinterpret_cast<const BYTE*>(&xmlLen);
+        buf.insert(buf.end(), p, p + 4);
+        uint32_t reserved = 0;
+        p = reinterpret_cast<const BYTE*>(&reserved);
+        buf.insert(buf.end(), p, p + 4);
+        buf.insert(buf.end(), xml.begin(), xml.end());
+
+        if (highFraction < 0.0) highFraction = 0.0;
+        if (highFraction > 1.0) highFraction = 1.0;
+        const size_t highCount = static_cast<size_t>(std::llround(highFraction * pixelCount));
+        const size_t lowCount = pixelCount - highCount;
+
+        for (size_t i = 0; i < lowCount; ++i) {
+            buf.push_back(static_cast<BYTE>(lowValue & 0xFF));
+            buf.push_back(static_cast<BYTE>((lowValue >> 8) & 0xFF));
+        }
+        for (size_t i = 0; i < highCount; ++i) {
+            buf.push_back(static_cast<BYTE>(highValue & 0xFF));
+            buf.push_back(static_cast<BYTE>((highValue >> 8) & 0xFF));
+        }
+
+        return SHCreateMemStream(buf.data(), static_cast<UINT>(buf.size()));
+    }
+
     TEST_METHOD(LowMedianPixelData_ReportsLinear) {
         // pixelValue = 100 / 65535 ≈ 0.0015 — well under threshold (0.05).
         // Even a UInt16 + Gray file (which the metadata fallback would call
@@ -2223,6 +2282,29 @@ public:
         // path against real PixInsight outputs.
         auto* h = new CXISFPropertyHandler();
         IStream* s = CreateXISFStreamWithUInt16(13107, 100, 100, "UInt16", "Gray"); // ~0.20
+        IInitializeWithStream* pi = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&pi));
+        pi->Initialize(s, STGM_READ);
+        IPropertyStore* ps = nullptr;
+        h->QueryInterface(IID_PPV_ARGS(&ps));
+        PROPVARIANT pv; PropVariantInit(&pv);
+        ps->GetValue(PKEY_XISF_DataState, &pv);
+        Assert::AreEqual(USHORT(VT_LPWSTR), pv.vt);
+        Assert::AreEqual(L"Non-Linear", pv.pwszVal);
+        PropVariantClear(&pv);
+        ps->Release(); pi->Release(); s->Release(); h->Release();
+    }
+
+    TEST_METHOD(LowMedianHighP95PixelData_ReportsNonLinear) {
+        // 94% of samples at ~0.0015 and 6% at ~0.1068:
+        // median remains low (linear-like), but p95 crosses the stretched
+        // threshold and should force Non-Linear classification.
+        auto* h = new CXISFPropertyHandler();
+        IStream* s = CreateXISFStreamWithUInt16TwoLevel(
+            100,       // ~0.0015
+            7000,      // ~0.1068
+            0.06,      // 6% high values -> p95 in upper bucket
+            100, 100, "UInt16", "Gray");
         IInitializeWithStream* pi = nullptr;
         h->QueryInterface(IID_PPV_ARGS(&pi));
         pi->Initialize(s, STGM_READ);

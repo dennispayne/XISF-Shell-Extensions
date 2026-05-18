@@ -104,7 +104,7 @@ FONT 9, "Segoe UI", 400, 0, 0x1
 BEGIN
     GROUPBOX        "Handler actions (elevated)", -1, 10, 8, 340, 44
     PUSHBUTTON      "Register Handlers", IDC_BTN_REGISTER_HANDLERS, 20, 24, 100, 14
-    PUSHBUTTON      "Restart Explorer",  IDC_BTN_RESTART_EXPLORER, 126, 24, 90, 14
+    PUSHBUTTON      "Refresh Handlers",  IDC_BTN_RESTART_EXPLORER, 126, 24, 90, 14
     PUSHBUTTON      "Flush Thumbnails",  IDC_BTN_FLUSH_THUMBCACHE, 222, 24, 100, 14
 
     LTEXT           "Logman ETW trace session.", -1, 10, 60, 220, 10

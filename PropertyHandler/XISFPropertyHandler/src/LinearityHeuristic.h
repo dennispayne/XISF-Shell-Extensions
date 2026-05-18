@@ -7,11 +7,12 @@
 //
 // Decision rule (in priority order):
 //
-//   1. If the caller has computed a pixel-data median (subsampled across the
-//      largest non-thumbnail image), use it as the authoritative signal.
+//   1. If the caller has computed pixel-data quantiles (subsampled across the
+//      largest non-thumbnail image), use them as the authoritative signal.
 //
-//        median <  kStretchedMedianThreshold  →  Linear
 //        median >= kStretchedMedianThreshold  →  Non-Linear
+//        p95    >= kStretchedP95Threshold     →  Non-Linear
+//        else                                  →  Linear
 //
 //      Rationale: linear astrophotography data (raw subexposures, calibrated
 //      lights, integrated stacks before stretching) has the vast majority of
@@ -28,6 +29,10 @@
 //        Linear integrated stacks (PixInsight ImageIntegration output): median ~0.00
 //        Permanently stretched PixInsight outputs (6 distinct targets): median 0.12 - 0.32
 //      Threshold of 0.05 sits in the wide gap between these two populations.
+//
+//      We also use the 95th percentile as a guard for dark-background
+//      processed images where aggressive black-point placement can keep the
+//      median near zero even after non-linear processing.
 //
 //   2. If pixel statistics are not available (Standard tier or below, OR the
 //      file has no readable attached image), fall back to the legacy metadata
@@ -60,25 +65,30 @@ namespace xisf {
 
 // Median-based threshold. See the long comment above for empirical grounding.
 inline constexpr double kStretchedMedianThreshold = 0.05;
+inline constexpr double kStretchedP95Threshold = 0.05;
 
 // Return true if the image data should be treated as still-linear (i.e. would
 // benefit from a linear→sRGB gamma correction when displayed).
 //
 // Parameters:
-//   hasPixelMedian  true if pixelMedian is meaningful (Full tier + readable
-//                   pixel data). When true, drives the decision exclusively.
+//   hasPixelMedian  true if pixelMedian/pixelP95 are meaningful (Full tier +
+//                   readable pixel data). When true, drives the decision.
 //   pixelMedian     median of subsampled pixel values, normalized to [0,1].
+//   pixelP95        95th percentile of subsampled values, normalized to [0,1].
 //   sampleFormat    XISF Image element sampleFormat attribute
 //                   ("UInt8" | "UInt16" | "Float32" | "Float64" | "").
 //   colorSpace      XISF Image element colorSpace attribute
 //                   ("Gray" | "RGB" | "GraySRGB" | "RGBSRGB" | "").
 inline bool DetermineIsLinear(bool hasPixelMedian,
                               double pixelMedian,
+                              double pixelP95,
                               std::string_view sampleFormat,
                               std::string_view colorSpace)
 {
     if (hasPixelMedian) {
-        return pixelMedian < kStretchedMedianThreshold;
+        if (pixelMedian >= kStretchedMedianThreshold) return false;
+        if (pixelP95 >= kStretchedP95Threshold) return false;
+        return true;
     }
 
     // Metadata fallback (legacy heuristic).

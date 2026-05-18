@@ -683,27 +683,33 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
         }
     }
 
-    // Per-channel percentile auto-stretch (1%–99%) plus a 50th-percentile
+    // Per-channel percentile auto-stretch (1%–99%) plus 50th/95th-percentile
     // sample for the LinearityHeuristic.
     // For mono, one stretch. For RGB, independent per-channel stretch preserves
     // color balance from any palette (Hubble SHO, HOO, LRGB, natural color, etc.)
-    struct StretchParams { float lo, hi, median; };
+    struct StretchParams { float lo, hi, median, p95; };
     std::vector<StretchParams> stretch(readChannels);
     for (UINT ch = 0; ch < readChannels; ++ch)
     {
         std::vector<float> sorted(thumbCh[ch]);
         size_t loIdx = thumbPixels / 100;
         size_t midIdx = thumbPixels / 2;
+        size_t p95Idx = (thumbPixels * 95) / 100;
         size_t hiIdx = thumbPixels - thumbPixels / 100 - 1;
         if (hiIdx <= loIdx) hiIdx = loIdx + 1;
         if (midIdx <= loIdx) midIdx = loIdx + 1;
+        if (p95Idx <= midIdx) p95Idx = midIdx + 1;
         if (hiIdx <= midIdx) hiIdx = midIdx + 1;
+        if (p95Idx >= hiIdx) p95Idx = hiIdx - 1;
         std::nth_element(sorted.begin(), sorted.begin() + loIdx, sorted.end());
         stretch[ch].lo = sorted[loIdx];
         std::nth_element(sorted.begin() + loIdx + 1,
                          sorted.begin() + midIdx, sorted.end());
         stretch[ch].median = sorted[midIdx];
         std::nth_element(sorted.begin() + midIdx + 1,
+                         sorted.begin() + p95Idx, sorted.end());
+        stretch[ch].p95 = sorted[p95Idx];
+        std::nth_element(sorted.begin() + p95Idx + 1,
                          sorted.begin() + hiIdx, sorted.end());
         stretch[ch].hi = sorted[hiIdx];
         if (stretch[ch].hi <= stretch[ch].lo)
@@ -716,14 +722,18 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
     // has all channels near zero, so the average is a robust separator and
     // tolerates a single noisy channel without flipping the verdict.
     double aggregateMedian = 0.0;
+    double aggregateP95 = 0.0;
     for (UINT ch = 0; ch < readChannels; ++ch)
         aggregateMedian += stretch[ch].median;
+    for (UINT ch = 0; ch < readChannels; ++ch)
+        aggregateP95 += stretch[ch].p95;
     aggregateMedian /= readChannels;
+    aggregateP95 /= readChannels;
 
     // Determine if data is linear and needs gamma correction for display.
     // See src/LinearityHeuristic.h for the threshold and rationale.
     const bool isLinear = xisf::DetermineIsLinear(
-        /*hasPixelMedian=*/true, aggregateMedian, sampleFmt, colorSpace);
+        /*hasPixelMedian=*/true, aggregateMedian, aggregateP95, sampleFmt, colorSpace);
     constexpr float kInvGamma = 1.0f / 2.2f;
 
     // Build a 24-bit BGR pixel buffer (bottom-up for SetDIBits)

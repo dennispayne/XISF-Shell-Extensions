@@ -232,7 +232,7 @@ std::vector<ComputedPropertyEntry> PopulateComputedProperties(
         // either pixel statistics, or at least one of the image attributes.
         if (inputs.hasPixelMedian || !sampleFormat.empty() || !colorSpace.empty()) {
             const bool isLinear = xisf::DetermineIsLinear(
-                inputs.hasPixelMedian, inputs.pixelMedian,
+                inputs.hasPixelMedian, inputs.pixelMedian, inputs.pixelP95,
                 sampleFormat, colorSpace);
             AddString(result, PKEY_XISF_DataState, isLinear ? "Linear" : "Non-Linear");
         }

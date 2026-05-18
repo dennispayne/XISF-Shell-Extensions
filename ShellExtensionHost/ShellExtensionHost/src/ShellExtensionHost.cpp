@@ -1402,27 +1402,12 @@ void OnOpenCatalogDir()
 void OnRestartExplorer()
 {
     if (MessageBoxW(g_hDlg,
-            L"Restart File Explorer now?\r\n\r\n"
-            L"This closes and relaunches explorer.exe so handler changes apply immediately.",
-            L"Restart Explorer", MB_YESNO | MB_ICONQUESTION) != IDYES)
+            L"Refresh handlers now?\r\n\r\n"
+            L"This runs unregister \u2192 restart Explorer \u2192 register for Property, Preview, and Filter handlers.",
+            L"Refresh Handlers", MB_YESNO | MB_ICONQUESTION) != IDYES)
         return;
 
-    static constexpr wchar_t kRestartExplorerArgs[] =
-        L"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "
-        L"\"Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue; "
-        L"Start-Sleep -Milliseconds 500; Start-Process explorer.exe\"";
-
-    auto rc = reinterpret_cast<INT_PTR>(
-        ShellExecuteW(g_hDlg, L"runas", L"powershell.exe", kRestartExplorerArgs, nullptr, SW_HIDE));
-    if (rc <= 32) {
-        if (rc == SE_ERR_ACCESSDENIED)
-            SetProgressText(L"Restart Explorer cancelled.");
-        else
-            SetProgressText(L"Failed to restart Explorer.");
-        return;
-    }
-
-    SetProgressText(L"Restart Explorer requested.");
+    OnRegisterHandlers();
 }
 
 void OnFlushThumbnailCache()

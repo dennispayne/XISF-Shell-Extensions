@@ -278,13 +278,16 @@ drives the gamma branch in `ThumbnailProvider.cpp`:
 
 ```cpp
 // Inside the per-channel percentile pass, after computing lo/hi via nth_element,
-// also extract the 50th percentile (median) per channel.
+// also extract the 50th and 95th percentile per channel.
 double aggregateMedian = 0.0;
+double aggregateP95 = 0.0;
 for (UINT ch = 0; ch < channelCount; ++ch) aggregateMedian += params[ch].median;
+for (UINT ch = 0; ch < channelCount; ++ch) aggregateP95 += params[ch].p95;
 aggregateMedian /= channelCount;
+aggregateP95 /= channelCount;
 
 const bool isLinear = xisf::DetermineIsLinear(
-    /*hasPixelMedian*/ true, aggregateMedian,
+    /*hasPixelMedian*/ true, aggregateMedian, aggregateP95,
     sampleFormat, colorSpace);
 
 // Per pixel (after auto-stretch normalization to [0,1]):
@@ -295,11 +298,13 @@ const BYTE byte = ToByte(v);                   // write to thumbnail bitmap
 
 ### Threshold and grounding
 
-The heuristic uses `kStretchedMedianThreshold = 0.05`. This was chosen from
+The heuristic uses `kStretchedMedianThreshold = 0.05` and
+`kStretchedP95Threshold = 0.05`. This was chosen from
 the same empirical corpus described in
 [Linear vs. Non-Linear data state heuristic](computed-properties.md#linear-vs-non-linear-data-state-heuristic):
 linear data has medians of 0.00–0.01; PixInsight-stretched outputs have
-medians of 0.12–0.32. There is no overlap.
+medians of 0.12–0.32. The p95 guard catches dark-background stretched files
+whose median alone can look linear.
 
 ### Why the previous (metadata-only) heuristic broke
 
@@ -307,26 +312,26 @@ The preview handler used to test only `sampleFormat == "Float32" &&
 colorSpace == "RGB"` to decide linearity. PixInsight saves stretched outputs
 with exactly those header values, so every stretched RGB file was marked
 Linear and got gamma applied on top of an already-stretched midtone — a
-visibly washed-out, double-stretched preview. The pixel-median heuristic
+visibly washed-out, double-stretched preview. The pixel-quantile heuristic
 fixes this by reading the actual data instead of guessing from headers.
 
-### Aggregate vs. per-channel median
+### Aggregate vs. per-channel quantiles
 
-The handler averages per-channel medians rather than taking the maximum or a
-single channel's value. Stretched RGB images elevate all three channels
-together; linear images keep all three near zero. Averaging tolerates a single
-noisy or saturated channel better than the max would.
+The handler averages per-channel medians (and p95 values) rather than taking
+the maximum or a single channel's value. Stretched RGB images elevate all three
+channels together; linear images keep all three near zero. Averaging tolerates
+a single noisy or saturated channel better than the max would.
 
 ### Edge cases
 
-- **Per-channel medians span the threshold** (e.g. one channel at 0.04, two
-  at 0.08). The average tips the decision; this matches practical preview
-  intent — a mostly-stretched image should not get re-stretched.
+- **Per-channel quantiles span the threshold** (e.g. one channel high, two
+  low). The average tips the decision; this matches practical preview intent —
+  a mostly-stretched image should not get re-stretched.
 - **Pixel decode fails or histogram pass is skipped.** The fallback metadata
-  branch in `DetermineIsLinear` returns `Linear` for non-`Float32`/non-RGB
-  inputs and `Non-Linear` for `Float32 + RGB`, preserving prior behavior.
+  branch in `DetermineIsLinear` uses sample format + color-space rules (including
+  explicit `*SRGB` and `UInt8` non-linear handling).
 - **Linear single subs with bright sky background.** A high background can
-  push the median above 0.05; preview will then skip gamma. Acceptable: a
+  push median or p95 above 0.05; preview will then skip gamma. Acceptable: a
   light-polluted sub usually wants its midtones left alone.
 
 ### Test coverage
