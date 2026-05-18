@@ -572,30 +572,19 @@ int RunSearchPathOp(SearchPathOp op, const std::wstring& pathIn)
     return 0;
 }
 
-// Headless mode: install all missing/mismatched catalogs silently.
-// Returns 0 if all catalogs are verified, 1 if any install failed.
+// Headless mode: download and verify all missing/mismatched catalogs silently.
+// Called by the MSI custom action (--silent-install) immediately after install.
+// Returns 0 if all catalogs are verified, 1 if any download or verify failed.
 int RunSilentCatalogInstall()
 {
     int failures = 0;
-    for (size_t i = 0; i < catalogspec::kAllCatalogs.size(); ++i) {
-        const auto* src = catalogspec::kAllCatalogs[i];
+    for (const auto* src : catalogspec::kAllCatalogs) {
         auto p = installer::Probe(*src);
         if (p.state == installer::PresenceState::PresentVerified)
             continue;
 
-        installer::Report rep{};
-        if (i == 2 || i == 3) {
-            wchar_t modPath[MAX_PATH] = {};
-            GetModuleFileNameW(nullptr, modPath, MAX_PATH);
-            PathRemoveFileSpecW(modPath);
-            std::wstring seedPath = std::wstring(modPath) + L"\\" + std::wstring(src->fileName);
-            rep = installer::InstallFromLocalFileVerified(
-                *src, seedPath.c_str(),
-                [](std::uint64_t, std::uint64_t, void*) -> bool { return true; }, nullptr);
-        } else {
-            rep = installer::InstallFromPinnedUrl(
-                *src, [](std::uint64_t, std::uint64_t, void*) -> bool { return true; }, nullptr);
-        }
+        installer::Report rep = installer::InstallFromPinnedUrl(
+            *src, [](std::uint64_t, std::uint64_t, void*) -> bool { return true; }, nullptr);
         if (rep.result != installer::Result::Ok)
             failures++;
     }
@@ -1713,19 +1702,27 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         UpdateCatalogActionButtons();
         AddTooltips();
 
-        // Auto-install missing catalogs in background
+        // Catalog health check: classify each catalog as verified, stale, or missing
+        // and provide an appropriate startup status message.
         {
-            bool anyMissing = false;
+            int nVerified = 0, nStale = 0, nMissing = 0;
             for (const auto* src : catalogspec::kAllCatalogs) {
                 auto p = installer::Probe(*src);
-                if (p.state != installer::PresenceState::PresentVerified) {
-                    anyMissing = true;
-                    break;
-                }
+                if (p.state == installer::PresenceState::PresentVerified) nVerified++;
+                else if (p.state == installer::PresenceState::Missing)    nMissing++;
+                else                                                       nStale++;
             }
-            if (anyMissing && !g_opInProgress.exchange(true)) {
+            int nBad = nMissing + nStale;
+            if (nBad > 0 && !g_opInProgress.exchange(true)) {
+                wchar_t buf[128];
+                if (nMissing > 0 && nStale > 0)
+                    swprintf_s(buf, L"\u26a0 %d catalog(s) missing, %d outdated \u2014 downloading\u2026", nMissing, nStale);
+                else if (nMissing > 0)
+                    swprintf_s(buf, L"\u26a0 %d catalog(s) missing \u2014 downloading\u2026", nMissing);
+                else
+                    swprintf_s(buf, L"\u26a0 %d catalog(s) outdated \u2014 refreshing\u2026", nStale);
+                SetProgressText(buf);
                 SetBusy(true);
-                SetProgressText(L"Auto-installing missing catalogs\u2026");
                 std::thread([hDlg]() {
                     int installed = 0;
                     int failed = 0;
@@ -1746,7 +1743,6 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
                         if (rep.result == installer::Result::Ok) installed++;
                         else failed++;
                     }
-                    // Pack installed|failed into wParam/lParam
                     PostMessageW(hDlg, WM_XISF_AUTO_INSTALL_DONE,
                         static_cast<WPARAM>(installed), static_cast<LPARAM>(failed));
                 }).detach();

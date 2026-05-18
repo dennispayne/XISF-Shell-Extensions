@@ -160,15 +160,6 @@
         <File Id="xisf.propdesc" Source="$(var.PropdescDir)xisf.propdesc" KeyPath="yes" />
       </Component>
 
-      <!-- Bundled verified snapshots used by the settings app as resilient seeds
-           for sharpless/constellation catalogs when online source access fails. -->
-      <Component Id="SharplessSeedCatalog" Bitness="always64">
-        <File Id="SeedSharplessCsv" Source="$(var.DataDir)sharpless.csv" KeyPath="yes" />
-      </Component>
-      <Component Id="ConstellationsSeedCatalog" Bitness="always64">
-        <File Id="SeedConstellationsCsv" Source="$(var.DataDir)constellations.csv" KeyPath="yes" />
-      </Component>
-
       <!--
         Restart Manager hint: the install folder hosts the loaded handler DLLs.
         Telling MSI/RestartManager about it allows Explorer.exe (and any other
@@ -203,14 +194,6 @@
         </CreateFolder>
         <RegistryValue Root="HKLM" Key="SOFTWARE\DennisPayne\XISF Shell Extension\Catalogs"
                        Name="Path" Type="string" Value="[XisfCatalogDir]" KeyPath="yes" />
-      </Component>
-
-      <!-- Install the constellation boundary CSV directly to the runtime catalog
-           directory so MSI manages it and upgrades always deliver the current data.
-           Without this the handler can load a stale seeded copy that pre-dates
-           boundary additions, producing wrong constellation lookups (issue #15). -->
-      <Component Id="ConstellationCatalogData" Bitness="always64">
-        <File Id="CatalogConstellationsCsv" Source="$(var.DataDir)constellations.csv" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 
@@ -339,16 +322,25 @@
     <CustomAction Id="CA_AddSearchPath" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="ignore" Impersonate="no" />
 
-    <!-- Remove the path from the System Index when the host EXE is being
-         removed (uninstall or upgrade). Uses the persisted HKLM value
-         captured by the RegistrySearch on XISF_DATA_PATH, which survives
-         past RemoveRegistryValues because RegistrySearch ran at AppSearch
-         time. -->
+    <!-- Pull the path out of the index before we tear the host EXE down. Uses the
+         persisted HKLM value captured by the RegistrySearch on XISF_DATA_PATH,
+         which survives past RemoveRegistryValues because RegistrySearch ran at
+         AppSearch time. -->
     <SetProperty Id="CA_RemoveSearchPath"
                  Value="&quot;[INSTALLFOLDER]XISFShellExtensionHost.exe&quot; --remove-search-path &quot;[XISF_DATA_PATH]&quot;"
                  Before="CA_RemoveSearchPath" Sequence="execute"
                  Condition="XISF_DATA_PATH AND ($SettingsApp=2 AND ?SettingsApp=3)" />
     <CustomAction Id="CA_RemoveSearchPath" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
+                  Execute="deferred" Return="ignore" Impersonate="no" />
+
+    <!-- Download and verify all catalog files at install time so the extension
+         has current data without requiring a manual Settings-app visit.
+         Return="ignore" so a transient network failure never rolls back the install. -->
+    <SetProperty Id="CA_SilentCatalogInstall"
+                 Value="&quot;[INSTALLFOLDER]XISFShellExtensionHost.exe&quot; --silent-install"
+                 Before="CA_SilentCatalogInstall" Sequence="execute"
+                 Condition="$SettingsApp=3 AND NOT REMOVE=&quot;ALL&quot;" />
+    <CustomAction Id="CA_SilentCatalogInstall" DllEntry="WixQuietExec64" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Return="ignore" Impersonate="no" />
 
     <!-- Schedule custom actions -->
@@ -376,6 +368,11 @@
       <!-- Pull the path out of the index before we tear the host EXE down. -->
       <Custom Action="CA_RemoveSearchPath" Before="CA_UnregisterFilter"
               Condition="XISF_DATA_PATH AND ($SettingsApp=2 AND ?SettingsApp=3)" />
+
+      <!-- Download and verify all catalog files after install completes.
+           Failures are ignored — the user can retry via the Settings app. -->
+      <Custom Action="CA_SilentCatalogInstall" After="CA_AddSearchPath"
+              Condition="$SettingsApp=3 AND NOT REMOVE=&quot;ALL&quot;" />
     </InstallExecuteSequence>
 
   </Package>
