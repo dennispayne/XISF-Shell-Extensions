@@ -204,6 +204,14 @@
         <RegistryValue Root="HKLM" Key="SOFTWARE\DennisPayne\XISF Shell Extension\Catalogs"
                        Name="Path" Type="string" Value="[XisfCatalogDir]" KeyPath="yes" />
       </Component>
+
+      <!-- Install the constellation boundary CSV directly to the runtime catalog
+           directory so MSI manages it and upgrades always deliver the current data.
+           Without this the handler can load a stale seeded copy that pre-dates
+           boundary additions, producing wrong constellation lookups (issue #15). -->
+      <Component Id="ConstellationCatalogData" Bitness="always64">
+        <File Id="CatalogConstellationsCsv" Source="$(var.DataDir)constellations.csv" KeyPath="yes" />
+      </Component>
     </ComponentGroup>
 
     <!-- ── Start Menu shortcut ── -->

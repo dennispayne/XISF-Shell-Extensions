@@ -3182,6 +3182,47 @@ TEST_CLASS(PropertyHandler_ConstellationDB_FileLoad)
         bool ok = xisf::ConstellationDB::LoadFromCSV("C:\\nonexistent_xisf_test_combined.csv");
         Assert::IsFalse(ok, L"LoadFromCSV should return false for missing file");
     }
+
+    // Regression: spot-check identified that a stale runtime constellations.csv
+    // (missing the Boo boundary row at decLow=28) caused RA~232.66 Dec~39.58 to
+    // return CrB instead of Boo.  Verify that the correct boundary row wins.
+    // Issue #15.
+    TEST_METHOD(Identify_CrBBooBoundary_CorrectRowWins_ReturnsBootes)
+    {
+        // Rows must be in decreasing decLow order (algorithm is first-match).
+        // B,14.9667,15.7500,28.0000,Boo is the authoritative boundary row that
+        // was absent from the stale runtime CSV; without it CrB at decLow=26 wins.
+        std::string csv =
+            "B,14.9667,15.7500,28.0000,Boo\r\n"
+            "B,15.1833,16.1667,26.0000,CrB\r\n"
+            "N,Boo,Bootes\r\n"
+            "N,CrB,Corona Borealis\r\n";
+        auto path = WriteTempCsv(csv);
+        bool ok = xisf::ConstellationDB::LoadFromCSV(path);
+        DeleteFileA(path.c_str());
+        Assert::IsTrue(ok, L"LoadFromCSV should succeed");
+        // RA=232.661 deg (=15.511h), Dec=39.582 deg
+        auto result = xisf::ConstellationDB::Identify(232.661, 39.582);
+        Assert::AreEqual(std::string("Boo"), result,
+            L"RA~232.66 Dec~39.58 should map to Boo, not CrB (issue #15 regression)");
+    }
+
+    // Regression: verify polar coordinate near Dec~89.86 correctly maps to UMi.
+    // Issue #15.
+    TEST_METHOD(Identify_PolarCoordinate_ReturnsUrsaMinor)
+    {
+        std::string csv =
+            "B,0.0000,24.0000,88.0000,UMi\r\n"
+            "N,UMi,Ursa Minor\r\n";
+        auto path = WriteTempCsv(csv);
+        bool ok = xisf::ConstellationDB::LoadFromCSV(path);
+        DeleteFileA(path.c_str());
+        Assert::IsTrue(ok, L"LoadFromCSV should succeed");
+        // RA=359.456 deg (=23.964h), Dec=89.863 deg
+        auto result = xisf::ConstellationDB::Identify(359.456, 89.863);
+        Assert::AreEqual(std::string("UMi"), result,
+            L"RA~359.46 Dec~89.86 should map to UMi (issue #15 regression)");
+    }
 };
 
 } // namespace PropertyHandlerTests
