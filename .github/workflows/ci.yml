@@ -185,10 +185,13 @@ jobs:
       - name: Build MSI installer
         shell: pwsh
         run: |
-          dotnet build Installer\XISFInstaller\XISFInstaller.wixproj `
-            -c Release `
-            -p:RestoreLockedMode=true `
-            -p:XISFVersion=${{ steps.ver.outputs.version }}
+          msbuild Installer\XISFInstaller\XISFInstaller.wixproj `
+            /restore `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:RestoreLockedMode=true `
+            /p:XISFVersion=${{ steps.ver.outputs.version }} `
+            /m /v:minimal /nologo
 
       - name: Run installer tests
         shell: pwsh
