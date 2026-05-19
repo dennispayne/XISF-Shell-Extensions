@@ -40,7 +40,7 @@ The installer uses WiX v5 and requires the .NET 8 SDK. Install the
 extension to load the `.wixproj` in Solution Explorer with full IntelliSense.
 
 ```powershell
-dotnet build Installer\XISFInstaller\XISFInstaller.wixproj -c Release
+msbuild Installer\XISFInstaller\XISFInstaller.wixproj /restore /p:Configuration=Release
 ```
 
 The MSI is placed in `Installer\XISFInstaller\bin\Release\`.
