@@ -190,7 +190,7 @@ jobs:
         run: |
           $stage = Join-Path $env:RUNNER_TEMP 'release-assets'
           New-Item -ItemType Directory -Path $stage -Force | Out-Null
-          $msi = Get-ChildItem 'Installer\XISFInstaller\bin\Release\**\*.msi' -Recurse | Select-Object -First 1
+          $msi = Get-ChildItem 'Installer\XISFInstaller\bin\*\ReleaseMode\*.msi' -Recurse | Select-Object -First 1
           if (-not $msi) { throw 'MSI not found after build.' }
           $destName = "XISF.ShellExtensions_${{ steps.ver.outputs.version }}_x64.msi"
           Copy-Item $msi.FullName (Join-Path $stage $destName)
@@ -218,3 +218,5 @@ jobs:
           path: |
             ${{ runner.temp }}/release-assets/*.msi
             ${{ runner.temp }}/release-assets/SHA256SUMS.txt
+
+
