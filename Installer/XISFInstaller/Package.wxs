@@ -192,6 +192,8 @@
         <CreateFolder>
           <util:PermissionEx User="Users" GenericRead="yes" GenericWrite="yes" GenericExecute="yes" />
         </CreateFolder>
+        <File Id="SeedSharplessCsv" Source="$(var.DataDir)sharpless.csv" />
+        <File Id="SeedConstellationsCsv" Source="$(var.DataDir)constellations.csv" />
         <RegistryValue Root="HKLM" Key="SOFTWARE\DennisPayne\XISF Shell Extension\Catalogs"
                        Name="Path" Type="string" Value="[XisfCatalogDir]" KeyPath="yes" />
       </Component>
