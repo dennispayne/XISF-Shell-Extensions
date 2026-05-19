@@ -137,7 +137,7 @@ TEST_CLASS(XISFParserTests) {
 **Run integration tests:**
 ```powershell
 # Build MSI first
-msbuild Installer\XISFInstaller\XISFInstaller.wixproj /restore /p:Configuration=Release /m /v:minimal /nologo
+msbuild Installer\XISFInstaller\XISFInstaller.wixproj /restore /p:Configuration=Release /p:Platform=x64 /m /v:minimal /nologo
 
 # Run installer tests
 dotnet test Installer\XISFInstallerTests\XISFInstallerTests.csproj

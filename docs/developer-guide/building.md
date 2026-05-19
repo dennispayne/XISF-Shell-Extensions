@@ -168,7 +168,7 @@ msbuild ShellExtensionHost\ShellExtensionHost\ShellExtensionHost.vcxproj `
   /p:Configuration=Release /p:Platform=x64
 
 # Installer (requires Visual Studio MSBuild / Build Tools with C++ workload)
-msbuild Installer\XISFInstaller\XISFInstaller.wixproj /restore /p:Configuration=Release /m /v:minimal /nologo
+msbuild Installer\XISFInstaller\XISFInstaller.wixproj /restore /p:Configuration=Release /p:Platform=x64 /m /v:minimal /nologo
 ```
 
 ### Build Configurations
@@ -295,6 +295,7 @@ The WiX v5 installer builds the final MSI package.
 msbuild Installer\XISFInstaller\XISFInstaller.wixproj `
   /restore `
   /p:Configuration=Release `
+  /p:Platform=x64 `
   /m /v:minimal /nologo
 ```
 

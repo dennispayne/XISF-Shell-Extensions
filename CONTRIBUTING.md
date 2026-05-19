@@ -41,7 +41,7 @@ MSBuild (or Build Tools for Visual Studio) with the C++ workload. Install the
 extension to load the `.wixproj` in Solution Explorer with full IntelliSense.
 
 ```powershell
-msbuild Installer\XISFInstaller\XISFInstaller.wixproj /restore /p:Configuration=Release /m /v:minimal /nologo
+msbuild Installer\XISFInstaller\XISFInstaller.wixproj /restore /p:Configuration=Release /p:Platform=x64 /m /v:minimal /nologo
 ```
 
 The MSI is placed in `Installer\XISFInstaller\bin\Release\`.
