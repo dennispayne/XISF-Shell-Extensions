@@ -186,11 +186,12 @@ jobs:
         shell: pwsh
         run: |
           msbuild Installer\XISFInstaller\XISFInstaller.wixproj `
-             /restore `
-             /p:Configuration=Release `
-             /p:Platform=x64 `
-             /p:RestoreLockedMode=true `
-             /p:XISFVersion=${{ steps.ver.outputs.version }}
+            /restore `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:RestoreLockedMode=true `
+            /p:XISFVersion=${{ steps.ver.outputs.version }} `
+            /m /v:minimal /nologo
 
       - name: Run installer tests
         shell: pwsh
@@ -215,4 +216,3 @@ jobs:
           name: msi-unsigned
           path: Installer\XISFInstaller\bin\Release\**\*.msi
           if-no-files-found: error
-

@@ -169,11 +169,12 @@ jobs:
         shell: pwsh
         run: |
           msbuild Installer\XISFInstaller\XISFInstaller.wixproj `
-             /restore `
-             /p:Configuration=Release `
-             /p:Platform=x64 `
-             /p:RestoreLockedMode=true `
-             /p:XISFVersion=${{ steps.ver.outputs.version }}
+            /restore `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:RestoreLockedMode=true `
+            /p:XISFVersion=${{ steps.ver.outputs.version }} `
+            /m /v:minimal /nologo
 
       - name: Run installer tests
         shell: pwsh
@@ -217,4 +218,3 @@ jobs:
           path: |
             ${{ runner.temp }}/release-assets/*.msi
             ${{ runner.temp }}/release-assets/SHA256SUMS.txt
-
