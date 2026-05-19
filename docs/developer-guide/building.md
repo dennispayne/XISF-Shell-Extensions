@@ -167,8 +167,8 @@ msbuild PreviewHandler\XISFPreviewHandler\XISFPreviewHandler.vcxproj `
 msbuild ShellExtensionHost\ShellExtensionHost\ShellExtensionHost.vcxproj `
   /p:Configuration=Release /p:Platform=x64
 
-# Installer
-msbuild Installer\XISFInstaller\XISFInstaller.wixproj /restore /p:Configuration=Release
+# Installer (requires Visual Studio MSBuild / Build Tools with C++ workload)
+msbuild Installer\XISFInstaller\XISFInstaller.wixproj /restore /p:Configuration=Release /m /v:minimal /nologo
 ```
 
 ### Build Configurations
@@ -294,7 +294,8 @@ The WiX v5 installer builds the final MSI package.
 ```powershell
 msbuild Installer\XISFInstaller\XISFInstaller.wixproj `
   /restore `
-  /p:Configuration=Release
+  /p:Configuration=Release `
+  /m /v:minimal /nologo
 ```
 
 ### Verify MSI
