@@ -180,9 +180,14 @@ jobs:
       - name: Run installer tests
         shell: pwsh
         run: |
+          # Skip InstallerIntegration tests on GitHub-hosted runners. The
+          # release environment can install the MSI, but shell-backed calls
+          # used by those tests (PSGetItemPropertyHandler / Shell.GetDetailsOf)
+          # are not reliable there. Keep running the hermetic installer suites.
           dotnet test Installer\XISFInstallerTests\XISFInstallerTests.csproj `
             -c Release `
             -p:RestoreLockedMode=true `
+            --filter "TestCategory!=InstallerIntegration" `
             --logger "trx;LogFileName=installer-tests.trx" `
             --results-directory TestResults
 
