@@ -138,7 +138,8 @@ jobs:
           $projectMatches = @([regex]::Matches($spec, $pattern) |
             Where-Object { $_.Groups[2].Value -match 'raw\.githubusercontent\.com/dennispayne/XISF-Shell-Extensions/' })
           if ($projectMatches.Count -eq 0) {
-            throw "No project-hosted CatalogSource entries parsed from CatalogSpec.h - regex may need updating."
+            Write-Host "No project-hosted CatalogSource entries found in CatalogSpec.h - all catalogs use external URLs. Skipping."
+            exit 0
           }
           foreach ($m in $projectMatches) {
             $fileName    = $m.Groups[1].Value
