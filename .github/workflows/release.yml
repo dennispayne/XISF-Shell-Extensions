@@ -205,13 +205,50 @@ jobs:
           "release_dir=$stage" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           Get-ChildItem $stage
 
+      - name: Compose release notes
+        id: notes
+        shell: pwsh
+        run: |
+          $tag = '${{ steps.ver.outputs.tag }}'
+          $repo = '${{ github.repository }}'
+          $tags = @(git tag --list 'v*' --sort=version:refname)
+          $idx = [Array]::IndexOf($tags, $tag)
+          $prev = if ($idx -gt 0) { $tags[$idx - 1] } else { $null }
+          $range = if ($prev) { "$prev..$tag" } else { $tag }
+
+          $subjects = @(git log $range --pretty=format:'%s')
+          $subjects = @($subjects | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+          $highlights = @($subjects | Where-Object { $_ -notmatch '^Merge ' } | Select-Object -First 3)
+          if ($highlights.Count -eq 0) { $highlights = @($subjects | Select-Object -First 3) }
+          if ($highlights.Count -eq 0) { $highlights = @('Release updates and maintenance improvements.') }
+          $changes = @($subjects | Select-Object -First 12)
+
+          $compare = if ($prev) {
+            "https://github.com/$repo/compare/$prev...$tag"
+          } else {
+            "https://github.com/$repo/releases/tag/$tag"
+          }
+
+          $notesPath = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+          $lines = @()
+          $lines += '## Highlights'
+          foreach ($h in $highlights) { $lines += "- $h" }
+          $lines += ''
+          $lines += '## What changed'
+          foreach ($c in $changes) { $lines += "- $c" }
+          $lines += ''
+          $lines += '## Compare'
+          $lines += "- $compare"
+          $lines | Set-Content -Path $notesPath -Encoding utf8
+          "release_notes_path=$notesPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
           name: ${{ steps.ver.outputs.tag }}
-          generate_release_notes: true
+          body_path: ${{ steps.notes.outputs.release_notes_path }}
           prerelease: ${{ contains(steps.ver.outputs.full_version, '-') }}
           files: |
             ${{ runner.temp }}/release-assets/*.msi
