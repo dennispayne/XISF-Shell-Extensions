@@ -12,29 +12,30 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>
-    <ProjectGuid>{C2D3E4F5-A6B7-8901-2345-6789ABCDEF01}</ProjectGuid>
-    <RootNamespace>ShellExtensionHostTests</RootNamespace>
+    <ProjectGuid>{D5C8E1A2-3F4B-4A6E-9C7D-1B2E3F4A5B6C}</ProjectGuid>
+    <RootNamespace>Shared</RootNamespace>
+    <TargetName>Shared</TargetName>
     <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
-    <TargetName>ShellExtensionHostTests</TargetName>
-    <ProjectName>ShellExtensionHostTests</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
-  <ImportGroup Label="ExtensionSettings" />
-  <ImportGroup Label="Shared" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataProps" />
   </ImportGroup>
@@ -46,54 +47,35 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_LIB;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <Optimization>Disabled</Optimization>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(ProjectDir)..\ShellExtensionHost\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
-    <Link>
-      <SubSystem>Windows</SubSystem>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>shlwapi.lib;ole32.lib;shell32.lib;winhttp.lib;bcrypt.lib;advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-    </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_LIB;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(ProjectDir)..\ShellExtensionHost\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
-    <Link>
-      <SubSystem>Windows</SubSystem>
-      <EnableCOMDATFolding>true</EnableCOMDATFolding>
-      <OptimizeReferences>true</OptimizeReferences>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>shlwapi.lib;ole32.lib;shell32.lib;winhttp.lib;bcrypt.lib;advapi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-    </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="ShellExtensionHostTests.cpp" />
-    <ClCompile Include="..\ShellExtensionHost\src\Sha256.cpp" />
-    <ClCompile Include="..\ShellExtensionHost\src\Paths.cpp" />
-    <ClCompile Include="..\ShellExtensionHost\src\HostSettings.cpp" />
-    <ClCompile Include="..\ShellExtensionHost\src\CatalogInstaller.cpp" />
-    <ClCompile Include="..\ShellExtensionHost\src\UpdaterCheck.cpp" />
-    <ClCompile Include="..\ShellExtensionHost\src\UpdaterDownload.cpp" />
-    <ClCompile Include="..\ShellExtensionHost\src\WinHttpHelpers.cpp" />
-    <ClCompile Include="..\ShellExtensionHost\src\RegistryHelpers.cpp" />
+    <ClCompile Include="src\XISFParser.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\XISFParser.h" />
+    <ClInclude Include="src\LinearityHeuristic.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <ImportGroup Label="ExtensionTargets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
 </Project>

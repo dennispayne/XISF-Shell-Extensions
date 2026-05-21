@@ -1,6 +1,7 @@
 // DSOCatalog.cpp - Positional DSO catalog implementation (Property Handler)
 // Parses OpenNGC-format CSV, builds spatial index, provides cone search.
 #include "DSOCatalog.h"
+#include "StringUtil.h"
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -16,28 +17,15 @@ namespace xisf {
 // ---------------------------------------------------------------------------
 
 std::string DSOCatalog::ToLower(const std::string& s) {
-    std::string r = s;
-    std::transform(r.begin(), r.end(), r.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return r;
+    return xisf::str::ToLower(s);
 }
 
 std::string DSOCatalog::Trim(const std::string& s) {
-    size_t a = s.find_first_not_of(" \t\r\n");
-    if (a == std::string::npos) return {};
-    size_t b = s.find_last_not_of(" \t\r\n");
-    return s.substr(a, b - a + 1);
+    return xisf::str::Trim(s);
 }
 
 std::vector<std::string> DSOCatalog::SplitCSV(const std::string& line, char delim) {
-    std::vector<std::string> fields;
-    std::string field;
-    for (char c : line) {
-        if (c == delim) { fields.push_back(field); field.clear(); }
-        else field += c;
-    }
-    fields.push_back(field);
-    return fields;
+    return xisf::str::SplitFields(line, delim);
 }
 
 // ---------------------------------------------------------------------------

@@ -54,6 +54,7 @@
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <Optimization>Disabled</Optimization>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)..\..\Shared\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <!-- Uncomment when nlohmann/json is available via vcpkg (vcpkg install nlohmann-json):
       <AdditionalIncludeDirectories>$(VcpkgRoot)\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories> -->
     </ClCompile>
@@ -75,6 +76,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)..\..\Shared\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <!-- Uncomment when nlohmann/json is available via vcpkg (vcpkg install nlohmann-json):
       <AdditionalIncludeDirectories>$(VcpkgRoot)\installed\x64-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories> -->
     </ClCompile>
@@ -98,7 +100,7 @@
     <ClCompile Include="src\PropertyStore.cpp" />
     <ClCompile Include="src\DSOAliasDB.cpp" />
     <ClCompile Include="src\PropertySheetHandler.cpp" />
-    <ClCompile Include="src\XISFParser.cpp" />
+    <ClCompile Include="src\StringUtil.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\ClassFactory.h" />
@@ -106,14 +108,18 @@
     <ClInclude Include="src\ConstellationDB.h" />
     <ClInclude Include="src\DSOCatalog.h" />
     <ClInclude Include="src\HandlerSettings.h" />
-    <ClInclude Include="src\LinearityHeuristic.h" />
     <ClInclude Include="src\PixelStatistics.h" />
     <ClInclude Include="src\PropertyStore.h" />
     <ClInclude Include="src\DSOAliasDB.h" />
     <ClInclude Include="src\PropertySheetHandler.h" />
     <ClInclude Include="src\PropertyHandlerTraceLogging.h" />
+    <ClInclude Include="src\StringUtil.h" />
     <ClInclude Include="src\resource.h" />
-    <ClInclude Include="src\XISFParser.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Shared\Shared.vcxproj">
+      <Project>{D5C8E1A2-3F4B-4A6E-9C7D-1B2E3F4A5B6C}</Project>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <None Include="src\XISFPropertyHandler.def" />

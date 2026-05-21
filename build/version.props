@@ -20,7 +20,7 @@
 <Project>
   <PropertyGroup>
     <!-- Legacy CI fallback when NB.GV is not active. -->
-    <XISFVersion Condition="'$(XISFVersion)' == ''">0.1.0</XISFVersion>
+    <XISFVersion Condition="'$(XISFVersion)' == ''">1.0.3</XISFVersion>
     <XISFBuildNumber Condition="'$(XISFBuildNumber)' == ''">0</XISFBuildNumber>
 
     <!-- Suppress NB.GV's auto-generated native Version.rc. Each handler ships

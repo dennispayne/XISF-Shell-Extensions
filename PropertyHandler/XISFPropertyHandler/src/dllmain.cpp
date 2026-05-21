@@ -39,19 +39,19 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID) {
         DisableThreadLibraryCalls(hModule);
         TraceLoggingRegister(g_hPropertyProvider);
         TraceLoggingWrite(g_hPropertyProvider, "PropertyHandlerDllAttach",
-            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingLevel(TRACE_LEVEL_VERBOSE),
             TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE));
         if (g_xisfPropertyHandlerTelemetryHook) {
-            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION,
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_VERBOSE,
                 XISF_ETW_KEYWORD_LIFECYCLE, L"PropertyHandlerDllAttach");
         }
     }
     else if (dwReason == DLL_PROCESS_DETACH) {
         TraceLoggingWrite(g_hPropertyProvider, "PropertyHandlerDllDetach",
-            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingLevel(TRACE_LEVEL_VERBOSE),
             TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE));
         if (g_xisfPropertyHandlerTelemetryHook) {
-            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION,
+            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_VERBOSE,
                 XISF_ETW_KEYWORD_LIFECYCLE, L"PropertyHandlerDllDetach");
         }
         TraceLoggingUnregister(g_hPropertyProvider);
@@ -66,12 +66,12 @@ STDAPI DllGetClassObject(_In_ REFCLSID rclsid, _In_ REFIID riid, _Outptr_ void**
     *ppv = nullptr;
 
     TraceLoggingWrite(g_hPropertyProvider, "PropertyHandlerDllGetClassObject",
-        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingLevel(TRACE_LEVEL_VERBOSE),
         TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE),
         TraceLoggingGuid(rclsid, "CLSID"),
         TraceLoggingGuid(riid, "IID"));
     if (g_xisfPropertyHandlerTelemetryHook) {
-        g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION,
+        g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_VERBOSE,
             XISF_ETW_KEYWORD_LIFECYCLE, L"PropertyHandlerDllGetClassObject");
     }
 

@@ -1,9 +1,9 @@
 // LinearityHeuristic.h — shared "is this image still in linear stage?" logic.
 //
-// IMPORTANT: This header is intentionally duplicated in
-// PropertyHandler/XISFPropertyHandler/src/LinearityHeuristic.h so the two
-// independent COM DLLs make the SAME determination from the SAME signals
-// (pixel median + image element attributes). Keep them in sync.
+// Lives in the Shared static library and is consumed by both the
+// PreviewHandler and PropertyHandler COM DLLs so they make the SAME
+// determination from the SAME signals (pixel median + image element
+// attributes).
 //
 // Decision rule (in priority order):
 //
@@ -34,7 +34,8 @@
 //      processed images where aggressive black-point placement can keep the
 //      median near zero even after non-linear processing.
 //
-//   2. If pixel statistics are not available, fall back to the legacy metadata
+//   2. If pixel statistics are not available (Standard tier or below, OR the
+//      file has no readable attached image), fall back to the legacy metadata
 //      heuristic based on sampleFormat and colorSpace:
 //
 //        Float32/Float64 + RGB/Gray  →  Linear
@@ -45,7 +46,8 @@
 //      This fallback is necessarily lossy: PixInsight does not change
 //      sampleFormat or colorSpace when permanently stretching, so a stretched
 //      Float32/RGB file is indistinguishable from a linear one without
-//      looking at pixel values.
+//      looking at pixel values. Users on Standard tier or below will get the
+//      best-effort metadata-only answer.
 //
 // Edge cases the median heuristic intentionally rolls into "Non-Linear":
 //   - Extremely bright single subs (e.g. moon, planet) where the linear sensor
@@ -69,8 +71,8 @@ inline constexpr double kStretchedP95Threshold = 0.05;
 // benefit from a linear→sRGB gamma correction when displayed).
 //
 // Parameters:
-//   hasPixelMedian  true if pixelMedian/pixelP95 are meaningful. When true,
-//                   drives the decision.
+//   hasPixelMedian  true if pixelMedian/pixelP95 are meaningful (Full tier +
+//                   readable pixel data). When true, drives the decision.
 //   pixelMedian     median of subsampled pixel values, normalized to [0,1].
 //   pixelP95        95th percentile of subsampled values, normalized to [0,1].
 //   sampleFormat    XISF Image element sampleFormat attribute

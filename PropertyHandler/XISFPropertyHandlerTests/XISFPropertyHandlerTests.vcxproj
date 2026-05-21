@@ -51,7 +51,7 @@
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <Optimization>Disabled</Optimization>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(ProjectDir)..\XISFPropertyHandler\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(ProjectDir)..\XISFPropertyHandler\src;$(MSBuildThisFileDirectory)..\..\Shared\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -71,7 +71,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(ProjectDir)..\XISFPropertyHandler\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(ProjectDir)..\XISFPropertyHandler\src;$(MSBuildThisFileDirectory)..\..\Shared\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -84,13 +84,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="XISFPropertyHandlerTests.cpp" />
-    <ClCompile Include="..\XISFPropertyHandler\src\XISFParser.cpp" />
+    <ClCompile Include="..\..\Shared\src\XISFParser.cpp" />
     <ClCompile Include="..\XISFPropertyHandler\src\DSOAliasDB.cpp" />
     <ClCompile Include="..\XISFPropertyHandler\src\ComputedProperties.cpp" />
     <ClCompile Include="..\XISFPropertyHandler\src\PixelStatistics.cpp" />
     <ClCompile Include="..\XISFPropertyHandler\src\PropertyStore.cpp" />
     <ClCompile Include="..\XISFPropertyHandler\src\DSOCatalog.cpp" />
     <ClCompile Include="..\XISFPropertyHandler\src\ConstellationDB.cpp" />
+    <ClCompile Include="..\XISFPropertyHandler\src\StringUtil.cpp" />
     <ClCompile Include="..\XISFPropertyHandler\src\PropertySheetHandler.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

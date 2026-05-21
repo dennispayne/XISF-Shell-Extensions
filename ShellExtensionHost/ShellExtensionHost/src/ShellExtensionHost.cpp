@@ -1,7 +1,4 @@
-﻿// ShellExtensionHost.cpp - Settings UI + hardened catalog installer front-end.
-//
-// All security-sensitive operations (URL handling, TLS, hashing, atomic rename,
-// URL allow-list) live in CatalogInstaller.cpp. This file is UI wiring only.
+﻿// Settings UI + catalog installer front-end.
 
 #include <windows.h>
 #include <windowsx.h>
@@ -18,7 +15,6 @@
 #include <atomic>
 #include <memory>
 #include <cstdint>
-#include <commctrl.h>
 #include <filesystem>
 #include <unordered_map>
 #include <tlhelp32.h>
@@ -36,6 +32,7 @@
 #include "UpdaterSpec.h"
 #include "UpdaterCheck.h"
 #include "UpdaterDownload.h"
+#include "RegistryHelpers.h"
 
 #pragma comment(lib, "advapi32.lib")
 
@@ -120,14 +117,23 @@ struct TraceExportResult {
     std::wstring xmlPath;
 };
 
-bool RunProcessHiddenAndWait(const std::wstring& exe, const std::wstring& args, DWORD* exitCode = nullptr);
-bool RunProcessHiddenAndWaitTimeout(const std::wstring& exe, const std::wstring& args, DWORD timeoutMs, DWORD* exitCode = nullptr);
+bool RunProcessHiddenAndWait(const std::wstring& exe, const std::wstring& args,
+                             DWORD* exitCode = nullptr, DWORD timeoutMs = INFINITE);
+
+// Common Windows tooling paths.
+static constexpr const wchar_t* kRegsvr32  = L"C:\\Windows\\System32\\regsvr32.exe";
+static constexpr const wchar_t* kLogmanExe = L"C:\\Windows\\System32\\logman.exe";
+
+// PowerShell command template to restart Explorer (used after handler changes).
+static constexpr const wchar_t* kRestartExplorerCmd =
+    L"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "
+    L"\"Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue; "
+    L"Start-Sleep -Milliseconds 500; Start-Process explorer.exe\"";
 
 bool IsTraceSessionRunning()
 {
-    std::wstring exe = L"C:\\Windows\\System32\\logman.exe";
     DWORD ec = 1;
-    return RunProcessHiddenAndWait(exe, L"query XISFTrace -ets", &ec) && ec == 0;
+    return RunProcessHiddenAndWait(kLogmanExe, L"query XISFTrace -ets", &ec) && ec == 0;
 }
 
 // Helper function to build documentation URLs
@@ -203,7 +209,6 @@ void UpdateTraceActionButtons(HWND hDlg)
 }
 
 void SetProgressText(const std::wstring& s);
-void RefreshAllPresence();
 void AddTooltips();
 void SetTooltip(int id, const wchar_t* text);
 void OnRegisterHandlers();
@@ -211,18 +216,18 @@ void OnFetchOnline(int idx);
 void OnLocalImport(HWND hDlg, std::wstring targetFileName, std::wstring path);
 void UpdateCatalogActionButtons();
 void RemoveImportedSourcePath(std::wstring_view fileName);
+void RefreshCatalogListControl();
 bool TryReadRegisteredDllPath(const wchar_t* clsid, std::wstring& out);
 INT_PTR CALLBACK AdvancedDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam);
 void OnCheckForUpdates();
 void OnInstallUpdate();
+bool CopyTextToClipboard(HWND hWnd, const std::wstring& text);
 
 // Handler CLSIDs
 static constexpr const wchar_t* kPropertyClsid = L"{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}";
 static constexpr const wchar_t* kPreviewClsid  = L"{9C76E8AD-4E85-5F30-B00D-3C7D1AB5F6E0}";
 static constexpr const wchar_t* kFilterClsid   = L"{B4E7F2A1-3D8C-4F5E-9A1B-6C2D8E4F7A3B}";
 
-// --- Deferred-settings model ---
-// Changes are tracked here and only written to registry on Apply.
 struct PendingSettings {
     bool origPropertyEnabled = true;
     bool origPreviewEnabled = true;
@@ -267,10 +272,6 @@ struct PendingSettings {
         return registerProperty || registerPreview || registerFilter;
     }
 
-    bool NeedsElevation() const {
-        return g_hDlg && (IsDlgButtonChecked(g_hDlg, IDC_CHK_RESTART_EXPLORER) == BST_CHECKED);
-    }
-
     void Apply() {
         if (curPropertyEnabled != origPropertyEnabled) {
             hostsettings::SetPropertyEnabled(curPropertyEnabled);
@@ -311,11 +312,6 @@ void UpdatePendingDisplay()
     EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_APPLY), (n > 0 || restart) ? TRUE : FALSE);
     SendDlgItemMessageW(g_hDlg, IDC_BTN_APPLY, BCM_SETSHIELD, 0,
                         restart ? TRUE : FALSE);
-}
-
-void UpdateToggleButton(int btnId, bool enabled)
-{
-    SetDlgItemTextW(g_hDlg, btnId, enabled ? L"Disable" : L"Enable");
 }
 
 // Check if a handler CLSID is registered and its DLL exists
@@ -377,28 +373,8 @@ std::wstring BuildHandlerDllPath(hostpaths::HandlerType handler)
     return hostpaths::ResolveHandlerDllPath(root, handler, cfg);
 }
 
-bool RunProcessHiddenAndWait(const std::wstring& exe, const std::wstring& args, DWORD* exitCode)
-{
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_HIDE;
-    PROCESS_INFORMATION pi{};
-
-    std::wstring cmd = L"\"" + exe + L"\" " + args;
-    BOOL ok = CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi);
-    if (!ok) return false;
-
-    WaitForSingleObject(pi.hProcess, INFINITE);
-    DWORD ec = 1;
-    GetExitCodeProcess(pi.hProcess, &ec);
-    if (exitCode) *exitCode = ec;
-    CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
-    return true;
-}
-
-bool RunProcessHiddenAndWaitTimeout(const std::wstring& exe, const std::wstring& args, DWORD timeoutMs, DWORD* exitCode)
+bool RunProcessHiddenAndWait(const std::wstring& exe, const std::wstring& args,
+                             DWORD* exitCode, DWORD timeoutMs)
 {
     STARTUPINFOW si{};
     si.cb = sizeof(si);
@@ -468,7 +444,7 @@ bool RegisterOneHandlerDirect(hostpaths::HandlerType handler, std::wstring& err)
         return false;
     }
 
-    const std::wstring regsvr = L"C:\\Windows\\System32\\regsvr32.exe";
+    const std::wstring regsvr = kRegsvr32;
     if (!RunProcessHiddenAndWait(regsvr, L"/u /s \"" + dll + L"\"")) {
         err = L"regsvr32 unregister failed.";
         return false;
@@ -476,14 +452,14 @@ bool RegisterOneHandlerDirect(hostpaths::HandlerType handler, std::wstring& err)
 
     switch (handler) {
     case hostpaths::HandlerType::Property:
-        DeleteClsidTreeBothRoots(L"{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}");
+        DeleteClsidTreeBothRoots(kPropertyClsid);
         break;
     case hostpaths::HandlerType::Preview:
-        DeleteClsidTreeBothRoots(L"{9C76E8AD-4E85-5F30-B00D-3C7D1AB5F6E0}");
+        DeleteClsidTreeBothRoots(kPreviewClsid);
         DeleteClsidTreeBothRoots(L"{AD87F6CE-5B03-6E41-C11E-4DB2AC06F5F1}");
         break;
     case hostpaths::HandlerType::Filter:
-        DeleteClsidTreeBothRoots(L"{B4E7F2A1-3D8C-4F5E-9A1B-6C2D8E4F7A3B}");
+        DeleteClsidTreeBothRoots(kFilterClsid);
         break;
     }
 
@@ -518,18 +494,9 @@ bool StartsWith(const std::wstring& s, const std::wstring& prefix)
     return s.size() >= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
 }
 
-// ────────────────────────────────────────────────────────────────────
-// Windows Search index scope management (optional MSI feature)
-//
-// Invoked by the MSI's --add-search-path / --remove-search-path CAs
-// when the user provides an XISF data root in the installer UI. The
-// XISFFilter handler we register is what makes .xisf indexable; this
-// merely tells the System Index *where* to look.
-//
-// All paths are best-effort: if Windows Search is unavailable (service
-// disabled, perms denied, COM not registered) we return 0 so the MSI
-// never rolls back over an indexing detail.
-// ────────────────────────────────────────────────────────────────────
+// Tells Explorer/MSI where the configured XISF data root lives. Windows Search
+// needs this to know *where* to crawl; the XISFFilter handler controls *what*
+// to extract. Best-effort: failures don't roll back the MSI.
 
 std::wstring PathToCrawlUrl(const std::wstring& raw)
 {
@@ -604,32 +571,13 @@ int RunSilentCatalogInstall()
     return failures > 0 ? 1 : 0;
 }
 
-// ---------------------------------------------------------------------------
-// MSIX registration: write per-user shell metadata to HKCU.
-//
-// MSIX manifests register COM classes and file type associations but do NOT
-// call DllRegisterServer.  Explorer also needs FullDetails / PreviewDetails /
-// InfoTip to know which columns to display, plus KindMap, PerceivedType,
-// Content Type, and the propdesc schema for custom property definitions.
-//
-// All writes target HKCU (no elevation required).  Idempotent — safe to call
-// on every login via the windows.startupTask manifest extension.
-// ---------------------------------------------------------------------------
+// MSIX per-user shell metadata: writes FullDetails/PreviewDetails/InfoTip,
+// ProgID/extension association, and registers the propdesc schema. HKCU only.
 int RunMsixRegistration()
 {
     auto SetHKCU = [](const wchar_t* subKey, const wchar_t* valueName,
                       const wchar_t* data) -> bool {
-        HKEY hKey = nullptr;
-        DWORD dwDisp = 0;
-        LONG lr = RegCreateKeyExW(HKEY_CURRENT_USER, subKey, 0, nullptr,
-                                  REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr,
-                                  &hKey, &dwDisp);
-        if (lr != ERROR_SUCCESS) return false;
-        DWORD cbData = static_cast<DWORD>((wcslen(data) + 1) * sizeof(wchar_t));
-        lr = RegSetValueExW(hKey, valueName, 0, REG_SZ,
-                            reinterpret_cast<const BYTE*>(data), cbData);
-        RegCloseKey(hKey);
-        return lr == ERROR_SUCCESS;
+        return xisf::regutil::WriteHKCUString(subKey, valueName, data);
     };
 
     // FullDetails — determines columns in Explorer Details view.
@@ -682,7 +630,7 @@ int RunMsixRegistration()
     // to HKLM; for per-user MSIX we try HKCU (may or may not be honored).
     const wchar_t* phKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\"
                            L"PropertySystem\\PropertyHandlers\\.xisf";
-    if (!SetHKCU(phKey, nullptr, L"{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}"))
+    if (!SetHKCU(phKey, nullptr, kPropertyClsid))
         failures++;
 
     // shellex handler CLSID mappings — Explorer uses these GUIDs to look up
@@ -690,7 +638,7 @@ int RunMsixRegistration()
     const wchar_t* thumbShellEx =
         L"Software\\Classes\\.xisf\\shellex\\"
         L"{E357FCCD-A995-4576-B01F-234630154E96}";
-    SetHKCU(thumbShellEx, nullptr, L"{9C76E8AD-4E85-5F30-B00D-3C7D1AB5F6E0}");
+    SetHKCU(thumbShellEx, nullptr, kPreviewClsid);
 
     const wchar_t* previewShellEx =
         L"Software\\Classes\\.xisf\\shellex\\"
@@ -988,6 +936,27 @@ void RefreshHandlerStatuses()
         g_pending.HasPendingRegistration() ? TRUE : FALSE);
 }
 
+// Shared logic for the three WM_COMMAND handler-toggle buttons.
+void OnHandlerToggle(bool& pendingRegister, bool& curEnabled,
+                     const wchar_t* clsid, const wchar_t* label)
+{
+    wchar_t buf[160];
+    if (pendingRegister) {
+        pendingRegister = false;
+        swprintf_s(buf, L"%s registration cancelled.", label);
+    } else if (IsHandlerRegistered(clsid)) {
+        curEnabled = !curEnabled;
+        swprintf_s(buf, L"%s will be %s after Apply.",
+                   label, curEnabled ? L"enabled" : L"disabled");
+    } else {
+        pendingRegister = true;
+        swprintf_s(buf, L"%s will be registered on Apply (requires elevation).", label);
+    }
+    SetProgressText(buf);
+    RefreshHandlerStatuses();
+    UpdatePendingDisplay();
+}
+
 bool IsCatalogInstalled(const catalogspec::CatalogSource& src)
 {
     return installer::Probe(src).state != installer::PresenceState::Missing;
@@ -1027,7 +996,7 @@ void OnRemoveCatalog(int idx)
         SetProgressText(std::wstring(L"Failed to remove ") + std::wstring(src.fileName) + L".");
     }
 
-    RefreshAllPresence();
+    RefreshCatalogListControl();
     UpdateCatalogActionButtons();
     InvalidateRect(g_hDlg, nullptr, TRUE);
 }
@@ -1072,7 +1041,7 @@ void OnRemoveSelectedCatalog()
     } else {
         SetProgressText(L"Failed to remove " + row.fileName + L".");
     }
-    RefreshAllPresence();
+    RefreshCatalogListControl();
 }
 
 std::wstring CatalogPinnedVersion(const catalogspec::CatalogSource& src)
@@ -1272,11 +1241,6 @@ void RefreshCatalogListControl()
     UpdateCatalogActionButtons();
 }
 
-void RefreshAllPresence()
-{
-    RefreshCatalogListControl();
-}
-
 void SetProgressText(const std::wstring& s)
 {
     SetDlgItemTextW(g_hDlg, IDC_STATIC_PROGRESS_TEXT, s.c_str());
@@ -1363,11 +1327,6 @@ void OnLocalImport(HWND hDlg, std::wstring targetFileName, std::wstring path)
     }).detach();
 }
 
-void OnFetchOnline()
-{
-    OnFetchOnline(0);
-}
-
 void OnCheckForUpdates()
 {
     if (g_updateCheckInProgress.exchange(true)) return;
@@ -1412,25 +1371,10 @@ void OnInstallUpdate()
     if (g_updateDownloadInProgress.exchange(true)) return;
 
     // Retrieve the cached asset URLs from registry.
-    std::wstring msiUrl, checksumUrl;
-    {
-        std::wstring regKey(kUpdateRegistryKey);
-        HKEY hk = nullptr;
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, regKey.c_str(), 0, KEY_READ, &hk) == ERROR_SUCCESS) {
-            auto readStr = [&](const std::wstring& name, std::wstring& out) {
-                DWORD type = 0, sz = 0;
-                RegQueryValueExW(hk, name.c_str(), nullptr, &type, nullptr, &sz);
-                if (type == REG_SZ && sz >= 2) {
-                    out.resize(sz / sizeof(wchar_t));
-                    RegQueryValueExW(hk, name.c_str(), nullptr, &type,
-                                     reinterpret_cast<BYTE*>(&out[0]), &sz);
-                    while (!out.empty() && out.back() == L'\0') out.pop_back();
-                }
-            };
-            readStr(std::wstring(kRegAssetUrl), msiUrl);
-            RegCloseKey(hk);
-        }
-    }
+    std::wstring msiUrl = xisf::regutil::ReadHKCUString(
+        std::wstring(kUpdateRegistryKey).c_str(),
+        std::wstring(kRegAssetUrl).c_str());
+    std::wstring checksumUrl;
     // Derive checksum URL by replacing the MSI filename with SHA256SUMS.txt in the same path.
     if (!msiUrl.empty()) {
         size_t slash = msiUrl.rfind(L'/');
@@ -1556,20 +1500,7 @@ void OnCopyExpectedHashes()
         text += L"  url = "; text += src->url; text += L"\r\n\r\n";
     }
 
-    if (!OpenClipboard(g_hDlg)) return;
-    EmptyClipboard();
-    size_t bytes = (text.size() + 1) * sizeof(wchar_t);
-    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, bytes);
-    if (hMem) {
-        if (auto* dst = static_cast<wchar_t*>(GlobalLock(hMem))) {
-            memcpy(dst, text.c_str(), bytes);
-            GlobalUnlock(hMem);
-            SetClipboardData(CF_UNICODETEXT, hMem);
-        } else {
-            GlobalFree(hMem);
-        }
-    }
-    CloseClipboard();
+    CopyTextToClipboard(g_hDlg, text);
     SetProgressText(L"Expected hashes copied to clipboard.");
 }
 
@@ -1682,7 +1613,7 @@ void OnDone(int idx, installer::Report* repPtr)
             msg = fileLabel + L": installed (" + FormatBytes(rep->bytesTransferred) +
                   L", sha256 matches pin).";
         }
-        RefreshAllPresence();
+        RefreshCatalogListControl();
     } else if (rep->result == installer::Result::HashMismatch) {
         msg = fileLabel + L": REJECTED \u2014 SHA-256 mismatch.\r\n"
               L"  expected " + expectedHash + L"\r\n"
@@ -1698,7 +1629,7 @@ void OnDone(int idx, installer::Report* repPtr)
     }
     SetProgressText(msg);
     SetBusy(false);
-    RefreshAllPresence();
+    RefreshCatalogListControl();
     UpdateCatalogActionButtons();
     InvalidateRect(g_hDlg, nullptr, TRUE);
 }
@@ -1768,37 +1699,13 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
 
         // Restore pending download path from registry (survives app restart).
         {
-            std::wstring pendingPath;
-            HKEY hk = nullptr;
-            if (RegOpenKeyExW(HKEY_CURRENT_USER, std::wstring(kUpdateRegistryKey).c_str(),
-                              0, KEY_READ, &hk) == ERROR_SUCCESS) {
-                DWORD type = 0, sz = 0;
-                RegQueryValueExW(hk, std::wstring(kRegDownloadPath).c_str(), nullptr, &type, nullptr, &sz);
-                if (type == REG_SZ && sz >= 2) {
-                    pendingPath.resize(sz / sizeof(wchar_t));
-                    RegQueryValueExW(hk, std::wstring(kRegDownloadPath).c_str(), nullptr, &type,
-                                     reinterpret_cast<BYTE*>(&pendingPath[0]), &sz);
-                    while (!pendingPath.empty() && pendingPath.back() == L'\0') pendingPath.pop_back();
-                }
-                RegCloseKey(hk);
-            }
+            const std::wstring updateKey(kUpdateRegistryKey);
+            std::wstring pendingPath = xisf::regutil::ReadHKCUString(
+                updateKey.c_str(), std::wstring(kRegDownloadPath).c_str());
             if (!pendingPath.empty() && GetFileAttributesW(pendingPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
                 g_pendingUpdatePath = pendingPath;
-                // Extract version from cached asset URL.
-                std::wstring cachedVer;
-                HKEY hk2 = nullptr;
-                if (RegOpenKeyExW(HKEY_CURRENT_USER, std::wstring(kUpdateRegistryKey).c_str(),
-                                  0, KEY_READ, &hk2) == ERROR_SUCCESS) {
-                    DWORD type2 = 0, sz2 = 0;
-                    RegQueryValueExW(hk2, std::wstring(kRegAvailableVer).c_str(), nullptr, &type2, nullptr, &sz2);
-                    if (type2 == REG_SZ && sz2 >= 2) {
-                        cachedVer.resize(sz2 / sizeof(wchar_t));
-                        RegQueryValueExW(hk2, std::wstring(kRegAvailableVer).c_str(), nullptr, &type2,
-                                         reinterpret_cast<BYTE*>(&cachedVer[0]), &sz2);
-                        while (!cachedVer.empty() && cachedVer.back() == L'\0') cachedVer.pop_back();
-                    }
-                    RegCloseKey(hk2);
-                }
+                std::wstring cachedVer = xisf::regutil::ReadHKCUString(
+                    updateKey.c_str(), std::wstring(kRegAvailableVer).c_str());
                 SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_AVAILABLE,
                                 (cachedVer.empty() ? L"Ready" : cachedVer.c_str()));
                 SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_DETAIL,
@@ -1863,7 +1770,7 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             ListView_InsertColumn(hList, 4, &col);
         }
 
-        RefreshAllPresence();
+        RefreshCatalogListControl();
         RefreshHandlerStatuses();
         UpdateCatalogActionButtons();
         AddTooltips();
@@ -2028,57 +1935,18 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         WORD id   = LOWORD(wParam);
         WORD code = HIWORD(wParam);
         switch (id) {
-        case IDC_BTN_TOGGLE_PROPERTY: {
-            if (g_pending.registerProperty) {
-                g_pending.registerProperty = false;
-                SetProgressText(L"Property Handler registration cancelled.");
-            } else if (IsHandlerRegistered(kPropertyClsid)) {
-                g_pending.curPropertyEnabled = !g_pending.curPropertyEnabled;
-                SetProgressText(g_pending.curPropertyEnabled
-                    ? L"Property Handler will be enabled after Apply."
-                    : L"Property Handler will be disabled after Apply.");
-            } else {
-                g_pending.registerProperty = true;
-                SetProgressText(L"Property Handler will be registered on Apply (requires elevation).");
-            }
-            RefreshHandlerStatuses();
-            UpdatePendingDisplay();
+        case IDC_BTN_TOGGLE_PROPERTY:
+            OnHandlerToggle(g_pending.registerProperty, g_pending.curPropertyEnabled,
+                            kPropertyClsid, L"Property Handler");
             return TRUE;
-        }
-        case IDC_BTN_TOGGLE_PREVIEW: {
-            if (g_pending.registerPreview) {
-                g_pending.registerPreview = false;
-                SetProgressText(L"Preview Handler registration cancelled.");
-            } else if (IsHandlerRegistered(kPreviewClsid)) {
-                g_pending.curPreviewEnabled = !g_pending.curPreviewEnabled;
-                SetProgressText(g_pending.curPreviewEnabled
-                    ? L"Preview Handler will be enabled after Apply."
-                    : L"Preview Handler will be disabled after Apply.");
-            } else {
-                g_pending.registerPreview = true;
-                SetProgressText(L"Preview Handler will be registered on Apply (requires elevation).");
-            }
-            RefreshHandlerStatuses();
-            UpdatePendingDisplay();
+        case IDC_BTN_TOGGLE_PREVIEW:
+            OnHandlerToggle(g_pending.registerPreview, g_pending.curPreviewEnabled,
+                            kPreviewClsid, L"Preview Handler");
             return TRUE;
-        }
-        case IDC_BTN_TOGGLE_FILTER: {
-            if (g_pending.registerFilter) {
-                g_pending.registerFilter = false;
-                SetProgressText(L"Search Filter registration cancelled.");
-            } else if (IsHandlerRegistered(kFilterClsid)) {
-                g_pending.curFilterEnabled = !g_pending.curFilterEnabled;
-                SetProgressText(g_pending.curFilterEnabled
-                    ? L"Search Filter will be enabled after Apply."
-                    : L"Search Filter will be disabled after Apply.");
-            } else {
-                g_pending.registerFilter = true;
-                SetProgressText(L"Search Filter will be registered on Apply (requires elevation).");
-            }
-            RefreshHandlerStatuses();
-            UpdatePendingDisplay();
+        case IDC_BTN_TOGGLE_FILTER:
+            OnHandlerToggle(g_pending.registerFilter, g_pending.curFilterEnabled,
+                            kFilterClsid, L"Search Filter");
             return TRUE;
-        }
         case IDC_BTN_SHOW_TIERS: {
             DialogBoxParamW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDD_TIERS), hDlg,
                 [](HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) -> INT_PTR {
@@ -2221,11 +2089,7 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
                        restart ? L" Restarting Explorer\u2026" : L" Restart Explorer to take effect.");
             SetProgressText(buf);
             if (restart) {
-                static constexpr wchar_t kRestartArgs[] =
-                    L"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "
-                    L"\"Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue; "
-                    L"Start-Sleep -Milliseconds 500; Start-Process explorer.exe\"";
-                ShellExecuteW(hDlg, L"runas", L"powershell.exe", kRestartArgs, nullptr, SW_HIDE);
+                ShellExecuteW(hDlg, L"runas", L"powershell.exe", kRestartExplorerCmd, nullptr, SW_HIDE);
             }
             return TRUE;
         }
@@ -2268,7 +2132,7 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
         int failed = static_cast<int>(lParam);
         SetBusy(false);
         g_opInProgress = false;
-        RefreshAllPresence();
+        RefreshCatalogListControl();
         UpdateCatalogActionButtons();
         if (failed > 0) {
             wchar_t buf[128];
@@ -2328,16 +2192,10 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
             g_pendingUpdatePath = report->downloadedPath;
 
             // Persist the path so it survives app restart.
-            HKEY hk = nullptr;
-            if (RegCreateKeyExW(HKEY_CURRENT_USER, std::wstring(kUpdateRegistryKey).c_str(),
-                                0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE,
-                                nullptr, &hk, nullptr) == ERROR_SUCCESS) {
-                const auto& p = report->downloadedPath;
-                RegSetValueExW(hk, std::wstring(kRegDownloadPath).c_str(), 0, REG_SZ,
-                               reinterpret_cast<const BYTE*>(p.c_str()),
-                               static_cast<DWORD>((p.size() + 1) * sizeof(wchar_t)));
-                RegCloseKey(hk);
-            }
+            xisf::regutil::WriteHKCUString(
+                std::wstring(kUpdateRegistryKey).c_str(),
+                std::wstring(kRegDownloadPath).c_str(),
+                report->downloadedPath.c_str());
 
             SetDlgItemTextW(hDlg, IDC_STATIC_UPDATE_DETAIL,
                             L"Download complete. Click \u2018Launch Installer\u2019 to install.");
@@ -2382,9 +2240,8 @@ std::wstring GetTracePath()
 
 bool RunLogman(const std::wstring& args)
 {
-    std::wstring exe = L"C:\\Windows\\System32\\logman.exe";
     DWORD ec = 1;
-    return RunProcessHiddenAndWait(exe, args, &ec) && ec == 0;
+    return RunProcessHiddenAndWait(kLogmanExe, args, &ec) && ec == 0;
 }
 
 void SetAdvStatus(HWND hDlg, const std::wstring& s)
@@ -2631,7 +2488,7 @@ void OnTraceExportXml(HWND hDlg)
 
         std::wstring args = L"\"" + etl + L"\" -o \"" + xml + L"\" -of XML";
         DWORD ec = 1;
-        result->success = RunProcessHiddenAndWaitTimeout(L"C:\\Windows\\System32\\tracerpt.exe", args, 60000, &ec) && ec == 0;
+        result->success = RunProcessHiddenAndWait(L"C:\\Windows\\System32\\tracerpt.exe", args, &ec, 60000) && ec == 0;
         result->exitCode = ec;
 
         if (!PostMessageW(hDlg, WM_XISF_TRACE_EXPORT_DONE, 0, reinterpret_cast<LPARAM>(result))) {

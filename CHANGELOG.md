@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-05-21
+
 ### Added
 - **Sharpless catalog** (`sharpless.csv`): 313 Sharpless 2 HII regions are now
   installable from the settings app. The file is hosted in this repo's `data/`
@@ -74,5 +76,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no partial files left on disk after a failure.
 - Offline import uses the same SHA-256 verifier as the online path.
 
-[Unreleased]: https://github.com/dennispayne/XISF-Shell-Extensions/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/dennispayne/XISF-Shell-Extensions/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/dennispayne/XISF-Shell-Extensions/compare/v0.1.0...v1.0.3
 [0.1.0]: https://github.com/dennispayne/XISF-Shell-Extensions/releases/tag/v0.1.0

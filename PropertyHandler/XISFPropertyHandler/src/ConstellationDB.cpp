@@ -7,6 +7,7 @@
 // Data is loaded at runtime from constellations.csv (in the catalog directory).
 // If the file is absent, Identify() and FullName() return empty strings.
 #include "ConstellationDB.h"
+#include "StringUtil.h"
 #include <fstream>
 #include <sstream>
 #include <vector>
@@ -49,10 +50,7 @@ static std::string NextField(const std::string& line, size_t& pos)
 // Trim leading/trailing whitespace.
 static std::string Trim(const std::string& s)
 {
-    size_t a = s.find_first_not_of(" \t\r\n");
-    if (a == std::string::npos) return {};
-    size_t b = s.find_last_not_of(" \t\r\n");
-    return s.substr(a, b - a + 1);
+    return xisf::str::Trim(s);
 }
 
 } // namespace

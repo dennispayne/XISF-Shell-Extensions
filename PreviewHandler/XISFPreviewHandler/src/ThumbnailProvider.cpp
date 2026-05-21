@@ -12,7 +12,7 @@
 //
 #include "ThumbnailProvider.h"
 #include "LinearityHeuristic.h"
-#include "PreviewHandlerTelemetry.h"
+#include "PreviewHandlerTraceLogging.h"
 
 #include <shlwapi.h>
 #include <strsafe.h>
@@ -23,39 +23,177 @@
 #include <cstring>
 #include <cstdlib>
 #include <string>
+#include <string_view>
 #include <sstream>
 #include <vector>
 #include <numeric>
 
 extern long g_cDllRef;
 
+// Common XISF location-attribute prefix: "attachment:offset:size".
+static constexpr std::string_view kAttachmentPrefix = "attachment:";
+
+namespace
+{
+    // Per-channel auto-stretch percentile parameters used by the rendering
+    // pipeline. `lo` and `hi` define the 1%–99% clipping range; `median` and
+    // `p95` feed the LinearityHeuristic to decide whether gamma is needed.
+    struct StretchParams { float lo, hi, median, p95; };
+
+    // Minimal attribute scanner reused across image elements. Returns the
+    // raw quoted value of `attr` inside `elemText`, or "" if not present.
+    std::string FindXmlAttr(const std::string& elemText, const std::string& attr)
+    {
+        size_t p = 0;
+        while (p < elemText.size())
+        {
+            size_t ap = elemText.find(attr, p);
+            if (ap == std::string::npos) break;
+            if (ap > 0)
+            {
+                char prev = elemText[ap - 1];
+                if (prev != ' ' && prev != '\t' && prev != '\n' && prev != '\r')
+                { p = ap + attr.size(); continue; }
+            }
+            size_t eq = ap + attr.size();
+            while (eq < elemText.size() && (elemText[eq]==' '||elemText[eq]=='\t')) ++eq;
+            if (eq >= elemText.size() || elemText[eq] != '=') { p = eq; continue; }
+            ++eq;
+            while (eq < elemText.size() && (elemText[eq]==' '||elemText[eq]=='\t')) ++eq;
+            if (eq >= elemText.size()) break;
+            char q = elemText[eq]; if (q!='"' && q!='\'') { p=eq; continue; }
+            ++eq;
+            size_t end = elemText.find(q, eq);
+            if (end == std::string::npos) break;
+            return elemText.substr(eq, end - eq);
+        }
+        return {};
+    }
+
+    // Scan `xml` for all <Image …> elements with location="attachment:…" and
+    // return the body text (attributes only) of the best candidate. Strategy:
+    // prefer id="thumbnail", otherwise pick the largest attachment.
+    // Returns "" if no attachment-backed <Image> element exists.
+    std::string SelectBestImageElement(const std::string& xml)
+    {
+        struct ImageCandidate {
+            std::string elemText;
+            ULONGLONG   attachSize;
+            bool        isThumbnail;
+        };
+        std::vector<ImageCandidate> candidates;
+
+        size_t searchPos = 0;
+        while (true)
+        {
+            size_t imgStart = xml.find("<Image", searchPos);
+            if (imgStart == std::string::npos) break;
+            size_t imgEnd = xml.find('>', imgStart);
+            if (imgEnd == std::string::npos) break;
+            searchPos = imgEnd + 1;
+
+            std::string elem = xml.substr(imgStart + 6, imgEnd - imgStart - 6);
+            std::string loc  = FindXmlAttr(elem, "location");
+            if (loc.compare(0, kAttachmentPrefix.size(), kAttachmentPrefix) != 0) continue;
+
+            std::string id = FindXmlAttr(elem, "id");
+            bool isThumb = (id == "thumbnail" || id == "Thumbnail");
+
+            // Parse attachment size from "attachment:offset:size"
+            ULONGLONG aSize = 0;
+            {
+                const char* p = loc.c_str() + kAttachmentPrefix.size();
+                char* end = nullptr;
+                std::strtoull(p, &end, 10); // skip offset
+                if (end && *end == ':')
+                    aSize = std::strtoull(end + 1, nullptr, 10);
+            }
+            if (aSize == 0) continue;
+
+            candidates.push_back({std::move(elem), aSize, isThumb});
+        }
+
+        if (candidates.empty()) return {};
+
+        size_t bestIdx = 0;
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            if (candidates[i].isThumbnail) { bestIdx = i; break; }
+            if (candidates[i].attachSize > candidates[bestIdx].attachSize)
+                bestIdx = i;
+        }
+        return std::move(candidates[bestIdx].elemText);
+    }
+
+    // Compute per-channel percentile-based stretch parameters and the two
+    // aggregate statistics consumed by the LinearityHeuristic. `thumbCh` is
+    // mutated only via copies — the original samples are preserved.
+    void ComputeStretchParams(const std::vector<std::vector<float>>& thumbCh,
+                              UINT readChannels, size_t thumbPixels,
+                              std::vector<StretchParams>& outStretch,
+                              double& outAggregateMedian,
+                              double& outAggregateP95)
+    {
+        outStretch.assign(readChannels, {});
+        for (UINT ch = 0; ch < readChannels; ++ch)
+        {
+            std::vector<float> sorted(thumbCh[ch]);
+            size_t loIdx = thumbPixels / 100;
+            size_t midIdx = thumbPixels / 2;
+            size_t p95Idx = (thumbPixels * 95) / 100;
+            size_t hiIdx = thumbPixels - thumbPixels / 100 - 1;
+            if (hiIdx <= loIdx) hiIdx = loIdx + 1;
+            if (midIdx <= loIdx) midIdx = loIdx + 1;
+            if (p95Idx <= midIdx) p95Idx = midIdx + 1;
+            if (hiIdx <= midIdx) hiIdx = midIdx + 1;
+            if (p95Idx >= hiIdx) p95Idx = hiIdx - 1;
+            std::nth_element(sorted.begin(), sorted.begin() + loIdx, sorted.end());
+            outStretch[ch].lo = sorted[loIdx];
+            std::nth_element(sorted.begin() + loIdx + 1,
+                             sorted.begin() + midIdx, sorted.end());
+            outStretch[ch].median = sorted[midIdx];
+            std::nth_element(sorted.begin() + midIdx + 1,
+                             sorted.begin() + p95Idx, sorted.end());
+            outStretch[ch].p95 = sorted[p95Idx];
+            std::nth_element(sorted.begin() + p95Idx + 1,
+                             sorted.begin() + hiIdx, sorted.end());
+            outStretch[ch].hi = sorted[hiIdx];
+            if (outStretch[ch].hi <= outStretch[ch].lo)
+                outStretch[ch].hi = outStretch[ch].lo + 1e-6f;
+        }
+
+        // Average rather than max: a stretched RGB image has all channels
+        // elevated while a linear image has all channels near zero, so the
+        // average is a robust separator and tolerates a single noisy channel.
+        double m = 0.0, p = 0.0;
+        for (UINT ch = 0; ch < readChannels; ++ch) m += outStretch[ch].median;
+        for (UINT ch = 0; ch < readChannels; ++ch) p += outStretch[ch].p95;
+        outAggregateMedian = m / readChannels;
+        outAggregateP95    = p / readChannels;
+    }
+}
+
 // Single definition for the Preview Handler test hook.
 extern "C" XISFPreviewHandlerTelemetryHook g_xisfPreviewHandlerTelemetryHook = nullptr;
 
 void WritePreviewHandlerTelemetry(UCHAR level, ULONGLONG keyword, PCWSTR format, ...)
 {
-    const bool hookEnabled = (g_xisfPreviewHandlerTelemetryHook != nullptr);
+    // Each call site already emits a structured ETW event via TraceLoggingWrite
+    // (which requires compile-time literal event names). This helper exists
+    // solely to deliver the same payload — formatted for human reading — to the
+    // in-process test hook so unit tests can assert on emitted events without
+    // attaching a live ETW session.
+    if (!g_xisfPreviewHandlerTelemetryHook) return;
+
     wchar_t buffer[768] = {};
     va_list args;
     va_start(args, format);
     StringCchVPrintfW(buffer, ARRAYSIZE(buffer), format, args);
     va_end(args);
 
-    // EventWriteString accepts runtime level/keyword (TraceLoggingWrite requires
-    // compile-time constants).  Access the underlying REGHANDLE from the
-    // TraceLogging provider to emit a flat string event.
-    EventWriteString(g_hPreviewProvider->RegHandle, level, keyword, buffer);
-
-    if (hookEnabled)
-    {
-        g_xisfPreviewHandlerTelemetryHook(level, keyword, buffer);
-    }
+    g_xisfPreviewHandlerTelemetryHook(level, keyword, buffer);
 }
 
-// ---------------------------------------------------------------------------
 // Constructor / Destructor
-// ---------------------------------------------------------------------------
-
 CThumbnailProvider::CThumbnailProvider()
     : m_cRef(1), m_pStream(nullptr), m_initialized(false)
 {
@@ -68,10 +206,7 @@ CThumbnailProvider::~CThumbnailProvider()
     InterlockedDecrement(&g_cDllRef);
 }
 
-// ---------------------------------------------------------------------------
 // IUnknown
-// ---------------------------------------------------------------------------
-
 IFACEMETHODIMP CThumbnailProvider::QueryInterface(REFIID riid, void** ppv)
 {
     if (!ppv) return E_POINTER;
@@ -100,10 +235,7 @@ IFACEMETHODIMP_(ULONG) CThumbnailProvider::Release()
     return r;
 }
 
-// ---------------------------------------------------------------------------
 // IInitializeWithStream
-// ---------------------------------------------------------------------------
-
 IFACEMETHODIMP CThumbnailProvider::Initialize(IStream* pStream, DWORD /*grfMode*/)
 {
     if (m_initialized)
@@ -112,7 +244,8 @@ IFACEMETHODIMP CThumbnailProvider::Initialize(IStream* pStream, DWORD /*grfMode*
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE),
             TraceLoggingString("AlreadyInitialized", "Stage"));
-        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_LIFECYCLE, L"ThumbnailInitializeFailed Stage=AlreadyInitialized");
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_LIFECYCLE,
+            L"ThumbnailInitializeFailed Stage=AlreadyInitialized");
         return HRESULT_FROM_WIN32(ERROR_ALREADY_INITIALIZED);
     }
     if (!pStream)
@@ -121,7 +254,8 @@ IFACEMETHODIMP CThumbnailProvider::Initialize(IStream* pStream, DWORD /*grfMode*
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE),
             TraceLoggingString("NullStream", "Stage"));
-        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_LIFECYCLE, L"ThumbnailInitializeFailed Stage=NullStream");
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_LIFECYCLE,
+            L"ThumbnailInitializeFailed Stage=NullStream");
         return E_INVALIDARG;
     }
 
@@ -141,10 +275,9 @@ IFACEMETHODIMP CThumbnailProvider::Initialize(IStream* pStream, DWORD /*grfMode*
             TraceLoggingString("ReadPreamble", "Stage"),
             TraceLoggingHResult(hr, "Hr"),
             TraceLoggingUInt32(cbRead, "CbRead"));
-        if (g_xisfPreviewHandlerTelemetryHook) {
-            wchar_t _buf[256]; swprintf_s(_buf, L"ThumbnailInitializeFailed Stage=ReadPreamble HRESULT=0x%08X CbRead=%u", static_cast<unsigned>(hr), cbRead);
-            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, _buf);
-        }
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
+            L"ThumbnailInitializeFailed Stage=ReadPreamble HRESULT=0x%08X CbRead=%u",
+            static_cast<unsigned>(hr), cbRead);
         return E_FAIL;
     }
     if (memcmp(preamble, "XISF0100", 8) != 0)
@@ -153,7 +286,8 @@ IFACEMETHODIMP CThumbnailProvider::Initialize(IStream* pStream, DWORD /*grfMode*
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PARSE),
             TraceLoggingString("InvalidSignature", "Stage"));
-        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, L"ThumbnailInitializeFailed Stage=InvalidSignature");
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
+            L"ThumbnailInitializeFailed Stage=InvalidSignature");
         return E_FAIL;
     }
 
@@ -166,10 +300,8 @@ IFACEMETHODIMP CThumbnailProvider::Initialize(IStream* pStream, DWORD /*grfMode*
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PARSE),
             TraceLoggingString("HeaderLength", "Stage"),
             TraceLoggingUInt32(headerLength, "Length"));
-        if (g_xisfPreviewHandlerTelemetryHook) {
-            wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailInitializeFailed Stage=HeaderLength Length=%u", headerLength);
-            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, _buf);
-        }
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
+            L"ThumbnailInitializeFailed Stage=HeaderLength Length=%u", headerLength);
         return E_FAIL;
     }
 
@@ -184,10 +316,9 @@ IFACEMETHODIMP CThumbnailProvider::Initialize(IStream* pStream, DWORD /*grfMode*
             TraceLoggingHResult(hr, "Hr"),
             TraceLoggingUInt32(cbRead, "CbRead"),
             TraceLoggingUInt32(headerLength, "Expected"));
-        if (g_xisfPreviewHandlerTelemetryHook) {
-            wchar_t _buf[256]; swprintf_s(_buf, L"ThumbnailInitializeFailed Stage=ReadHeader HRESULT=0x%08X CbRead=%u Expected=%u", static_cast<unsigned>(hr), cbRead, headerLength);
-            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, _buf);
-        }
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
+            L"ThumbnailInitializeFailed Stage=ReadHeader HRESULT=0x%08X CbRead=%u Expected=%u",
+            static_cast<unsigned>(hr), cbRead, headerLength);
         return E_FAIL;
     }
 
@@ -198,7 +329,8 @@ IFACEMETHODIMP CThumbnailProvider::Initialize(IStream* pStream, DWORD /*grfMode*
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PARSE),
             TraceLoggingString("ParseXml", "Stage"));
-        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, L"ThumbnailInitializeFailed Stage=ParseXml");
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
+            L"ThumbnailInitializeFailed Stage=ParseXml");
         return E_FAIL;
     }
     m_metadata = std::move(result.metadata);
@@ -207,17 +339,12 @@ IFACEMETHODIMP CThumbnailProvider::Initialize(IStream* pStream, DWORD /*grfMode*
         TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
         TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE),
         TraceLoggingUInt32(headerLength, "HeaderBytes"));
-    if (g_xisfPreviewHandlerTelemetryHook) {
-        wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailInitialized HeaderBytes=%u", headerLength);
-        g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_LIFECYCLE, _buf);
-    }
+    WritePreviewHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_LIFECYCLE,
+        L"ThumbnailInitialized HeaderBytes=%u", headerLength);
     return S_OK;
 }
 
-// ---------------------------------------------------------------------------
 // IThumbnailProvider
-// ---------------------------------------------------------------------------
-
 IFACEMETHODIMP CThumbnailProvider::GetThumbnail(UINT cx, HBITMAP* phbmp,
                                                    WTS_ALPHATYPE* pdwAlpha)
 {
@@ -243,37 +370,33 @@ IFACEMETHODIMP CThumbnailProvider::GetThumbnail(UINT cx, HBITMAP* phbmp,
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
             TraceLoggingUInt32(cx, "RequestedSize"),
             TraceLoggingInt64(durationMs, "DurationMs"));
-        if (g_xisfPreviewHandlerTelemetryHook) {
-            wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailFailed RequestedSize=%u DurationMs=%lld", cx, durationMs);
-            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_ERROR, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
-        }
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_ERROR, XISF_PREVIEW_KEYWORD_THUMBNAIL,
+            L"ThumbnailFailed RequestedSize=%u DurationMs=%lld", cx, durationMs);
         return E_FAIL;
     }
 
-    { UINT32 _placeholder = usedPlaceholder ? 1u : 0u;
-    TraceLoggingWrite(g_hPreviewProvider, "ThumbnailCompleted",
-        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
-        TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
-        TraceLoggingUInt32(cx, "RequestedSize"),
-        TraceLoggingBoolean(_placeholder, "UsedPlaceholder"),
-        TraceLoggingInt64(durationMs, "DurationMs"));
-    if (g_xisfPreviewHandlerTelemetryHook) {
-        wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailCompleted RequestedSize=%u UsedPlaceholder=%u DurationMs=%lld", cx, _placeholder, durationMs);
-        g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
-    }}
+    {
+        const UINT32 placeholderFlag = usedPlaceholder ? 1u : 0u;
+        TraceLoggingWrite(g_hPreviewProvider, "ThumbnailCompleted",
+            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
+            TraceLoggingUInt32(cx, "RequestedSize"),
+            TraceLoggingBoolean(placeholderFlag, "UsedPlaceholder"),
+            TraceLoggingInt64(durationMs, "DurationMs"));
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_THUMBNAIL,
+            L"ThumbnailCompleted RequestedSize=%u UsedPlaceholder=%u DurationMs=%lld",
+            cx, placeholderFlag, durationMs);
+    }
 
     *phbmp    = hbmp;
     *pdwAlpha = WTSAT_UNKNOWN;
     return S_OK;
 }
 
-// ---------------------------------------------------------------------------
 // CreatePreviewBitmap
 //
-// Attempts to read raw UInt16 pixel data from the XISF attachment, auto-stretch,
-// scale to cx×cx, and return a 24-bit DIB.
-// ---------------------------------------------------------------------------
-
+// Attempts to read raw pixel data from the XISF attachment, auto-stretch,
+// scale to fit cx, and return a 24-bit DIB.
 HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
 {
     m_histogram.Reset();
@@ -283,111 +406,38 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
             TraceLoggingString("NotInitialized", "Stage"));
-        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, L"ThumbnailDecodeFailed Stage=NotInitialized");
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
+            L"ThumbnailDecodeFailed Stage=NotInitialized");
         return nullptr;
     }
 
     const std::string& xml = m_metadata.xmlHeader;
 
-    // Find the <Image …> element and extract geometry and location attributes.
-    // We reuse the same minimal attribute scanner from XISFParser.
-    auto findAttr = [&](const std::string& elemText,
-                        const std::string& attr) -> std::string
-    {
-        size_t p = 0;
-        while (p < elemText.size())
-        {
-            size_t ap = elemText.find(attr, p);
-            if (ap == std::string::npos) break;
-            if (ap > 0)
-            {
-                char prev = elemText[ap - 1];
-                if (prev != ' ' && prev != '\t' && prev != '\n' && prev != '\r')
-                { p = ap + attr.size(); continue; }
-            }
-            size_t eq = ap + attr.size();
-            while (eq < elemText.size() && (elemText[eq]==' '||elemText[eq]=='\t')) ++eq;
-            if (eq >= elemText.size() || elemText[eq] != '=') { p = eq; continue; }
-            ++eq;
-            while (eq < elemText.size() && (elemText[eq]==' '||elemText[eq]=='\t')) ++eq;
-            if (eq >= elemText.size()) break;
-            char q = elemText[eq]; if (q!='"' && q!='\'') { p=eq; continue; }
-            ++eq;
-            size_t end = elemText.find(q, eq);
-            if (end == std::string::npos) break;
-            return elemText.substr(eq, end - eq);
-        }
-        return {};
-    };
-
     // Locate the best <Image> element for thumbnailing.
-    // Strategy: prefer id="thumbnail", then largest attachment image.
-    struct ImageCandidate {
-        std::string elemText;
-        ULONGLONG   attachSize;
-        bool        isThumbnail;
-    };
-    std::vector<ImageCandidate> candidates;
-
-    size_t searchPos = 0;
-    while (true)
+    std::string imgElem = SelectBestImageElement(xml);
+    if (imgElem.empty())
     {
-        size_t imgStart = xml.find("<Image", searchPos);
-        if (imgStart == std::string::npos) break;
-        size_t imgEnd = xml.find('>', imgStart);
-        if (imgEnd == std::string::npos) break;
-        searchPos = imgEnd + 1;
-
-        std::string elem = xml.substr(imgStart + 6, imgEnd - imgStart - 6);
-        std::string loc  = findAttr(elem, "location");
-        if (loc.compare(0, 11, "attachment:") != 0) continue; // skip non-attachment
-
-        std::string id   = findAttr(elem, "id");
-        bool isThumb = (id == "thumbnail" || id == "Thumbnail");
-
-        // Parse attachment size from "attachment:offset:size"
-        ULONGLONG aSize = 0;
-        {
-            const char* p = loc.c_str() + 11;
-            char* end = nullptr;
-            std::strtoull(p, &end, 10); // skip offset
-            if (end && *end == ':')
-                aSize = std::strtoull(end + 1, nullptr, 10);
-        }
-        if (aSize == 0) continue;
-
-        candidates.push_back({std::move(elem), aSize, isThumb});
-    }
-
-    if (candidates.empty()) {
         TraceLoggingWrite(g_hPreviewProvider, "ThumbnailDecodeFailed",
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
             TraceLoggingString("NoAttachmentImage", "Stage"));
-        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, L"ThumbnailDecodeFailed Stage=NoAttachmentImage");
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
+            L"ThumbnailDecodeFailed Stage=NoAttachmentImage");
         return nullptr;
     }
 
-    // Pick best: embedded thumbnail first, then largest image
-    size_t bestIdx = 0;
-    for (size_t i = 0; i < candidates.size(); ++i) {
-        if (candidates[i].isThumbnail) { bestIdx = i; break; }
-        if (candidates[i].attachSize > candidates[bestIdx].attachSize)
-            bestIdx = i;
-    }
-    const std::string& imgElem = candidates[bestIdx].elemText;
-
-    std::string geometry  = findAttr(imgElem, "geometry");
-    std::string location  = findAttr(imgElem, "location");
-    std::string sampleFmt = findAttr(imgElem, "sampleFormat");
-    std::string colorSpace = findAttr(imgElem, "colorSpace");
+    std::string geometry   = FindXmlAttr(imgElem, "geometry");
+    std::string location   = FindXmlAttr(imgElem, "location");
+    std::string sampleFmt  = FindXmlAttr(imgElem, "sampleFormat");
+    std::string colorSpace = FindXmlAttr(imgElem, "colorSpace");
 
     if (geometry.empty() || location.empty()) {
         TraceLoggingWrite(g_hPreviewProvider, "ThumbnailDecodeFailed",
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
             TraceLoggingString("MissingGeometryOrLocation", "Stage"));
-        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, L"ThumbnailDecodeFailed Stage=MissingGeometryOrLocation");
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
+            L"ThumbnailDecodeFailed Stage=MissingGeometryOrLocation");
         return nullptr;
     }
 
@@ -411,18 +461,17 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
             TraceLoggingUInt32(imgW, "Width"),
             TraceLoggingUInt32(imgH, "Height"),
             TraceLoggingUInt32(imgC, "Channels"));
-        if (g_xisfPreviewHandlerTelemetryHook) {
-            wchar_t _buf[256]; swprintf_s(_buf, L"ThumbnailDecodeFailed Stage=InvalidGeometry Width=%u Height=%u Channels=%u", imgW, imgH, imgC);
-            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
-        }
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
+            L"ThumbnailDecodeFailed Stage=InvalidGeometry Width=%u Height=%u Channels=%u",
+            imgW, imgH, imgC);
         return nullptr;
     }
 
     // Parse location: "attachment:offset:size"
     ULONGLONG offset = 0, size = 0;
-    if (location.compare(0, 11, "attachment:") == 0)
+    if (location.compare(0, kAttachmentPrefix.size(), kAttachmentPrefix) == 0)
     {
-        const char* p = location.c_str() + 11;
+        const char* p = location.c_str() + kAttachmentPrefix.size();
         char* end = nullptr;
         offset = std::strtoull(p, &end, 10);
         if (end && *end == ':')
@@ -433,7 +482,8 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
             TraceLoggingString("ZeroAttachmentSize", "Stage"));
-        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, L"ThumbnailDecodeFailed Stage=ZeroAttachmentSize");
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
+            L"ThumbnailDecodeFailed Stage=ZeroAttachmentSize");
         return nullptr;
     }
 
@@ -453,10 +503,9 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
             TraceLoggingString("AttachmentTooSmall", "Stage"),
             TraceLoggingUInt64(expected, "Expected"),
             TraceLoggingUInt64(size, "Actual"));
-        if (g_xisfPreviewHandlerTelemetryHook) {
-            wchar_t _buf[256]; swprintf_s(_buf, L"ThumbnailDecodeFailed Stage=AttachmentTooSmall Expected=%llu Actual=%llu", expected, size);
-            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
-        }
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
+            L"ThumbnailDecodeFailed Stage=AttachmentTooSmall Expected=%llu Actual=%llu",
+            expected, size);
         return nullptr;
     }
 
@@ -470,10 +519,9 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
             TraceLoggingString("ExceedsMemoryGuard", "Stage"),
             TraceLoggingUInt64(static_cast<ULONGLONG>(readBytes), "ReadBytes"));
-        if (g_xisfPreviewHandlerTelemetryHook) {
-            wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailDecodeFailed Stage=ExceedsMemoryGuard ReadBytes=%llu", static_cast<unsigned long long>(readBytes));
-            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
-        }
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
+            L"ThumbnailDecodeFailed Stage=ExceedsMemoryGuard ReadBytes=%llu",
+            static_cast<unsigned long long>(readBytes));
         return nullptr;
     }
 
@@ -583,10 +631,8 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
                     TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
                     TraceLoggingString("SeekFailed", "Stage"),
                     TraceLoggingUInt32(ch, "Channel"));
-                if (g_xisfPreviewHandlerTelemetryHook) {
-                    wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailDecodeFailed Stage=SeekFailed Channel=%u", ch);
-                    g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
-                }
+                WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
+                    L"ThumbnailDecodeFailed Stage=SeekFailed Channel=%u", ch);
                 return nullptr;
             }
 
@@ -599,10 +645,9 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
                     TraceLoggingString("ReadFailed", "Stage"),
                     TraceLoggingUInt32(ch, "Channel"),
                     TraceLoggingUInt32(runReadBytes, "Bytes"));
-                if (g_xisfPreviewHandlerTelemetryHook) {
-                    wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailDecodeFailed Stage=ReadFailed Channel=%u Bytes=%lu", ch, runReadBytes);
-                    g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
-                }
+                WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
+                    L"ThumbnailDecodeFailed Stage=ReadFailed Channel=%u Bytes=%lu",
+                    ch, runReadBytes);
                 return nullptr;
             }
             if (cbRead < runReadBytes) {
@@ -613,10 +658,9 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
                     TraceLoggingUInt32(ch, "Channel"),
                     TraceLoggingUInt32(runReadBytes, "Expected"),
                     TraceLoggingUInt32(cbRead, "Actual"));
-                if (g_xisfPreviewHandlerTelemetryHook) {
-                    wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailDecodeFailed Stage=ShortRead Channel=%u Expected=%lu Actual=%lu", ch, runReadBytes, cbRead);
-                    g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
-                }
+                WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
+                    L"ThumbnailDecodeFailed Stage=ShortRead Channel=%u Expected=%lu Actual=%lu",
+                    ch, runReadBytes, cbRead);
                 return nullptr;
             }
 
@@ -684,51 +728,14 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
     }
 
     // Per-channel percentile auto-stretch (1%–99%) plus 50th/95th-percentile
-    // sample for the LinearityHeuristic.
-    // For mono, one stretch. For RGB, independent per-channel stretch preserves
-    // color balance from any palette (Hubble SHO, HOO, LRGB, natural color, etc.)
-    struct StretchParams { float lo, hi, median, p95; };
-    std::vector<StretchParams> stretch(readChannels);
-    for (UINT ch = 0; ch < readChannels; ++ch)
-    {
-        std::vector<float> sorted(thumbCh[ch]);
-        size_t loIdx = thumbPixels / 100;
-        size_t midIdx = thumbPixels / 2;
-        size_t p95Idx = (thumbPixels * 95) / 100;
-        size_t hiIdx = thumbPixels - thumbPixels / 100 - 1;
-        if (hiIdx <= loIdx) hiIdx = loIdx + 1;
-        if (midIdx <= loIdx) midIdx = loIdx + 1;
-        if (p95Idx <= midIdx) p95Idx = midIdx + 1;
-        if (hiIdx <= midIdx) hiIdx = midIdx + 1;
-        if (p95Idx >= hiIdx) p95Idx = hiIdx - 1;
-        std::nth_element(sorted.begin(), sorted.begin() + loIdx, sorted.end());
-        stretch[ch].lo = sorted[loIdx];
-        std::nth_element(sorted.begin() + loIdx + 1,
-                         sorted.begin() + midIdx, sorted.end());
-        stretch[ch].median = sorted[midIdx];
-        std::nth_element(sorted.begin() + midIdx + 1,
-                         sorted.begin() + p95Idx, sorted.end());
-        stretch[ch].p95 = sorted[p95Idx];
-        std::nth_element(sorted.begin() + p95Idx + 1,
-                         sorted.begin() + hiIdx, sorted.end());
-        stretch[ch].hi = sorted[hiIdx];
-        if (stretch[ch].hi <= stretch[ch].lo)
-            stretch[ch].hi = stretch[ch].lo + 1e-6f;
-        }
-
-    // Aggregate per-channel medians so the LinearityHeuristic sees a single
-    // "where does the bulk of the data sit?" number. Average rather than max:
-    // a stretched RGB image has all channels elevated, while a linear image
-    // has all channels near zero, so the average is a robust separator and
-    // tolerates a single noisy channel without flipping the verdict.
+    // sample for the LinearityHeuristic. For mono, one stretch. For RGB,
+    // independent per-channel stretch preserves color balance from any palette
+    // (Hubble SHO, HOO, LRGB, natural color, etc.).
+    std::vector<StretchParams> stretch;
     double aggregateMedian = 0.0;
     double aggregateP95 = 0.0;
-    for (UINT ch = 0; ch < readChannels; ++ch)
-        aggregateMedian += stretch[ch].median;
-    for (UINT ch = 0; ch < readChannels; ++ch)
-        aggregateP95 += stretch[ch].p95;
-    aggregateMedian /= readChannels;
-    aggregateP95 /= readChannels;
+    ComputeStretchParams(thumbCh, readChannels, thumbPixels,
+                         stretch, aggregateMedian, aggregateP95);
 
     // Determine if data is linear and needs gamma correction for display.
     // See src/LinearityHeuristic.h for the threshold and rationale.
@@ -790,10 +797,9 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
             TraceLoggingString("CreateCompatibleBitmap", "Stage"),
             TraceLoggingUInt32(thumbW, "Width"),
             TraceLoggingUInt32(thumbH, "Height"));
-        if (g_xisfPreviewHandlerTelemetryHook) {
-            wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailDecodeFailed Stage=CreateCompatibleBitmap Width=%u Height=%u", thumbW, thumbH);
-            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
-        }
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_THUMBNAIL,
+            L"ThumbnailDecodeFailed Stage=CreateCompatibleBitmap Width=%u Height=%u",
+            thumbW, thumbH);
         DeleteDC(hdcMem);
         ReleaseDC(nullptr, hdcScreen);
         return nullptr;
@@ -811,68 +817,66 @@ HBITMAP CThumbnailProvider::CreatePreviewBitmap(UINT cx)
     DeleteDC(hdcMem);
     ReleaseDC(nullptr, hdcScreen);
 
-    { const char* _fmt = sampleFmt.empty() ? "UInt16" : sampleFmt.c_str();
-    TraceLoggingWrite(g_hPreviewProvider, "ThumbnailDecoded",
-        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
-        TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
-        TraceLoggingUInt32(thumbW, "ThumbW"),
-        TraceLoggingUInt32(thumbH, "ThumbH"),
-        TraceLoggingUInt32(imgW, "ImgW"),
-        TraceLoggingUInt32(imgH, "ImgH"),
-        TraceLoggingUInt32(imgC, "Channels"),
-        TraceLoggingString(_fmt, "SampleFormat"));
-    if (g_xisfPreviewHandlerTelemetryHook) {
-        wchar_t _buf[256]; swprintf_s(_buf, L"ThumbnailDecoded ThumbW=%u ThumbH=%u ImgW=%u ImgH=%u Channels=%u SampleFormat=%hs", thumbW, thumbH, imgW, imgH, imgC, _fmt);
-        g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
-    }}
+    {
+        const char* sampleFmtCStr = sampleFmt.empty() ? "UInt16" : sampleFmt.c_str();
+        TraceLoggingWrite(g_hPreviewProvider, "ThumbnailDecoded",
+            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
+            TraceLoggingUInt32(thumbW, "ThumbW"),
+            TraceLoggingUInt32(thumbH, "ThumbH"),
+            TraceLoggingUInt32(imgW, "ImgW"),
+            TraceLoggingUInt32(imgH, "ImgH"),
+            TraceLoggingUInt32(imgC, "Channels"),
+            TraceLoggingString(sampleFmtCStr, "SampleFormat"));
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_THUMBNAIL,
+            L"ThumbnailDecoded ThumbW=%u ThumbH=%u ImgW=%u ImgH=%u Channels=%u SampleFormat=%hs",
+            thumbW, thumbH, imgW, imgH, imgC, sampleFmtCStr);
+    }
 
     m_histogram.Commit();
 
-    // Compute summary statistics for the histogram telemetry event.
-    uint32_t maxBinValue = 0;
-    uint64_t totalPixelCount = 0;
-    for (uint32_t c = 0; c < m_histogram.channelCount; ++c)
+    // The histogram summary stats (maxBinValue + totalPixelCount) are only
+    // consumed by the verbose ETW telemetry event below, so skip the scan
+    // entirely unless someone is listening.
+    if (TraceLoggingProviderEnabled(g_hPreviewProvider, TRACE_LEVEL_VERBOSE, 0) ||
+        g_xisfPreviewHandlerTelemetryHook)
     {
-        for (uint32_t b = 0; b < HistogramData::kBinCount; ++b)
+        uint32_t maxBinValue = 0;
+        uint64_t totalPixelCount = 0;
+        for (uint32_t c = 0; c < m_histogram.channelCount; ++c)
         {
-            uint32_t v = m_histogram.bins[c][b];
-            if (v > maxBinValue) maxBinValue = v;
-            totalPixelCount += v;
+            for (uint32_t b = 0; b < HistogramData::kBinCount; ++b)
+            {
+                uint32_t v = m_histogram.bins[c][b];
+                if (v > maxBinValue) maxBinValue = v;
+                totalPixelCount += v;
+            }
         }
-    }
 
-    TraceLoggingWrite(g_hPreviewProvider, "HistogramCompleted",
-        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
-        TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
-        TraceLoggingUInt32(m_histogram.channelCount, "ChannelCount"),
-        TraceLoggingUInt32(maxBinValue, "MaxBinValue"),
-        TraceLoggingUInt64(totalPixelCount, "TotalPixelCount"));
-    if (g_xisfPreviewHandlerTelemetryHook) {
-        wchar_t _buf[256]; swprintf_s(_buf, L"HistogramCompleted ChannelCount=%u MaxBinValue=%u TotalPixelCount=%llu",
-            m_histogram.channelCount, maxBinValue, static_cast<unsigned long long>(totalPixelCount));
-        g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_THUMBNAIL, _buf);
+        TraceLoggingWrite(g_hPreviewProvider, "HistogramCompleted",
+            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_THUMBNAIL),
+            TraceLoggingUInt32(m_histogram.channelCount, "ChannelCount"),
+            TraceLoggingUInt32(maxBinValue, "MaxBinValue"),
+            TraceLoggingUInt64(totalPixelCount, "TotalPixelCount"));
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_THUMBNAIL,
+            L"HistogramCompleted ChannelCount=%u MaxBinValue=%u TotalPixelCount=%llu",
+            m_histogram.channelCount, maxBinValue,
+            static_cast<unsigned long long>(totalPixelCount));
     }
 
     return hbmp;
 }
 
-// ---------------------------------------------------------------------------
-// CreatePlaceholderBitmap
-// ---------------------------------------------------------------------------
-//
-// Draws a dark-blue thumbnail with XISF metadata text.
-// ---------------------------------------------------------------------------
-
+// CreatePlaceholderBitmap — dark-blue thumbnail with XISF metadata text.
 HBITMAP CThumbnailProvider::CreatePlaceholderBitmap(UINT cx)
 {
     TraceLoggingWrite(g_hPreviewProvider, "ThumbnailPlaceholderUsed",
         TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
         TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_FALLBACK),
         TraceLoggingUInt32(cx, "RequestedSize"));
-    if (g_xisfPreviewHandlerTelemetryHook) {
-        wchar_t _buf[128]; swprintf_s(_buf, L"ThumbnailPlaceholderUsed RequestedSize=%u", cx);
-        g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_FALLBACK, _buf);
-    }
+    WritePreviewHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_FALLBACK,
+        L"ThumbnailPlaceholderUsed RequestedSize=%u", cx);
     HDC hdcScreen = GetDC(nullptr);
     HDC hdcMem    = CreateCompatibleDC(hdcScreen);
     HBITMAP hbmp  = CreateCompatibleBitmap(hdcScreen, cx, cx);

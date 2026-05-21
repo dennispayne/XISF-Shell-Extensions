@@ -12,7 +12,7 @@
 
 #include "ThumbnailProvider.h"
 #include "PreviewHandler.h"
-#include "PreviewHandlerTelemetry.h"
+#include "PreviewHandlerTraceLogging.h"
 #include "HandlerSettings.h"
 
 // {9C76E8AD-4E85-5F30-B00D-3C7D1AB5F6E0}
@@ -32,10 +32,7 @@ static const wchar_t kPreviewClsidStr[] = L"{AD87F6CE-5B03-6E41-C11E-4DB2AC06F5F
 TRACELOGGING_DEFINE_PROVIDER(g_hPreviewProvider, "XISF-PreviewHandler",
     (0x4fd34fd0, 0x08b3, 0x5d9a, 0x8d, 0x77, 0xb9, 0xd6, 0x70, 0x5d, 0x6b, 0x75));
 
-// ---------------------------------------------------------------------------
-// Minimal IClassFactory wrapper — templated to avoid duplication
-// ---------------------------------------------------------------------------
-
+// Minimal IClassFactory wrapper — templated to avoid duplication.
 template <typename T>
 class CSimpleFactory : public IClassFactory
 {
@@ -93,10 +90,6 @@ private:
     long m_cRef;
 };
 
-// ---------------------------------------------------------------------------
-// DllMain
-// ---------------------------------------------------------------------------
-
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID /*lpReserved*/)
 {
     if (dwReason == DLL_PROCESS_ATTACH)
@@ -105,37 +98,27 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID /*lpReserved*/)
         DisableThreadLibraryCalls(hModule);
         TraceLoggingRegister(g_hPreviewProvider);
         TraceLoggingWrite(g_hPreviewProvider, "PreviewHandlerDllAttach",
-            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingLevel(TRACE_LEVEL_VERBOSE),
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE));
-        if (g_xisfPreviewHandlerTelemetryHook) {
-            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_LIFECYCLE, L"PreviewHandlerDllAttach");
-        }
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_VERBOSE, XISF_PREVIEW_KEYWORD_LIFECYCLE,
+            L"PreviewHandlerDllAttach");
     }
     else if (dwReason == DLL_PROCESS_DETACH)
     {
         TraceLoggingWrite(g_hPreviewProvider, "PreviewHandlerDllDetach",
-            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingLevel(TRACE_LEVEL_VERBOSE),
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE));
-        if (g_xisfPreviewHandlerTelemetryHook) {
-            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_LIFECYCLE, L"PreviewHandlerDllDetach");
-        }
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_VERBOSE, XISF_PREVIEW_KEYWORD_LIFECYCLE,
+            L"PreviewHandlerDllDetach");
         TraceLoggingUnregister(g_hPreviewProvider);
     }
     return TRUE;
 }
 
-// ---------------------------------------------------------------------------
-// DllCanUnloadNow
-// ---------------------------------------------------------------------------
-
 STDAPI DllCanUnloadNow()
 {
     return (g_cDllRef == 0) ? S_OK : S_FALSE;
 }
-
-// ---------------------------------------------------------------------------
-// DllGetClassObject
-// ---------------------------------------------------------------------------
 
 STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void** ppv)
 {
@@ -143,14 +126,12 @@ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void** ppv)
     *ppv = nullptr;
 
     TraceLoggingWrite(g_hPreviewProvider, "PreviewHandlerDllGetClassObject",
-        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingLevel(TRACE_LEVEL_VERBOSE),
         TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE),
         TraceLoggingGuid(rclsid, "CLSID"),
         TraceLoggingGuid(riid, "IID"));
-    if (g_xisfPreviewHandlerTelemetryHook) {
-        g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION,
-            XISF_PREVIEW_KEYWORD_LIFECYCLE, L"PreviewHandlerDllGetClassObject");
-    }
+    WritePreviewHandlerTelemetry(TRACE_LEVEL_VERBOSE, XISF_PREVIEW_KEYWORD_LIFECYCLE,
+        L"PreviewHandlerDllGetClassObject");
 
     if (IsEqualCLSID(rclsid, CLSID_XISFThumbnailProvider))
     {
@@ -173,10 +154,7 @@ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void** ppv)
     return CLASS_E_CLASSNOTAVAILABLE;
 }
 
-// ---------------------------------------------------------------------------
 // Registry helpers
-// ---------------------------------------------------------------------------
-
 static HRESULT SetRegSZValue(HKEY hRoot, const wchar_t* subKey,
                               const wchar_t* valueName, const wchar_t* data)
 {
@@ -210,10 +188,6 @@ static HRESULT RegisterClsid(const wchar_t* clsidStr, const wchar_t* friendlyNam
 
     return SetRegSZValue(HKEY_CLASSES_ROOT, szInProc, L"ThreadingModel", L"Apartment");
 }
-
-// ---------------------------------------------------------------------------
-// DllRegisterServer
-// ---------------------------------------------------------------------------
 
 STDAPI DllRegisterServer()
 {
@@ -255,10 +229,6 @@ STDAPI DllRegisterServer()
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return S_OK;
 }
-
-// ---------------------------------------------------------------------------
-// DllUnregisterServer
-// ---------------------------------------------------------------------------
 
 STDAPI DllUnregisterServer()
 {

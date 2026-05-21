@@ -49,35 +49,6 @@ static std::string ComputeDecBand(double decDegrees)
     return buf;
 }
 
-static void AddString(std::vector<ComputedPropertyEntry>& out, const PROPERTYKEY& key, const std::string& val)
-{
-    if (val.empty()) return;
-    ComputedPropertyEntry e;
-    e.key = key;
-    e.type = ComputedPropertyEntry::Type::String;
-    e.stringValue = val;
-    out.push_back(std::move(e));
-}
-
-static void AddDouble(std::vector<ComputedPropertyEntry>& out, const PROPERTYKEY& key, double val)
-{
-    ComputedPropertyEntry e;
-    e.key = key;
-    e.type = ComputedPropertyEntry::Type::Double;
-    e.doubleValue = val;
-    out.push_back(std::move(e));
-}
-
-static void AddStringList(std::vector<ComputedPropertyEntry>& out, const PROPERTYKEY& key, const std::vector<std::string>& vals)
-{
-    if (vals.empty()) return;
-    ComputedPropertyEntry e;
-    e.key = key;
-    e.type = ComputedPropertyEntry::Type::StringList;
-    e.stringListValue = vals;
-    out.push_back(std::move(e));
-}
-
 static bool TryParse(const std::string& raw, double* out)
 {
     if (raw.empty()) return false;
@@ -184,11 +155,16 @@ static void EnsureConstellationLoaded()
 // Main entry point
 // ---------------------------------------------------------------------------
 
-std::vector<ComputedPropertyEntry> PopulateComputedProperties(
-    const ComputedPropertyInputs& inputs)
+void PopulateComputedProperties(const ComputedPropertyInputs& inputs,
+                                const ComputedPropertySink& sink)
 {
-    std::vector<ComputedPropertyEntry> result;
-    result.reserve(16);
+    auto emitString = [&](const PROPERTYKEY& key, const std::string& val) {
+        if (val.empty()) return;
+        if (sink.addString) sink.addString(key, val);
+    };
+    auto emitDouble = [&](const PROPERTYKEY& key, double val) {
+        if (sink.addDouble) sink.addDouble(key, val);
+    };
 
     // Resolve coordinates: prefer object coords over telescope center
     double computedRA = inputs.hasObjRA ? inputs.objRaDeg : inputs.raDeg;
@@ -199,12 +175,12 @@ std::vector<ComputedPropertyEntry> PopulateComputedProperties(
 
     // RA Hour band
     if (inputs.hasObjRA || inputs.hasRA) {
-        AddString(result, PKEY_XISF_RAHour, ComputeRAHour(computedRA));
+        emitString(PKEY_XISF_RAHour, ComputeRAHour(computedRA));
     }
 
     // Dec Band
     if (inputs.hasObjDec || inputs.hasDec) {
-        AddString(result, PKEY_XISF_DecBand, ComputeDecBand(computedDec));
+        emitString(PKEY_XISF_DecBand, ComputeDecBand(computedDec));
     }
 
     // Constellation — requires runtime-loaded constellations.csv
@@ -214,7 +190,7 @@ std::vector<ComputedPropertyEntry> PopulateComputedProperties(
         constellation = ConstellationDB::Identify(computedRA, computedDec);
         if (!constellation.empty()) {
             std::string fullName = ConstellationDB::FullName(constellation);
-            AddString(result, PKEY_XISF_Constellation,
+            emitString(PKEY_XISF_Constellation,
                       fullName.empty() ? constellation : fullName);
         }
     }
@@ -228,33 +204,31 @@ std::vector<ComputedPropertyEntry> PopulateComputedProperties(
         std::string sampleFormat = (sfIt != inputs.metadata.imageAttributes.end()) ? sfIt->second : "";
         std::string colorSpace   = (csIt != inputs.metadata.imageAttributes.end()) ? csIt->second : "";
 
-        // Emit the property when we have any signal to base it on:
-        // either pixel statistics, or at least one of the image attributes.
         if (inputs.hasPixelMedian || !sampleFormat.empty() || !colorSpace.empty()) {
             const bool isLinear = xisf::DetermineIsLinear(
                 inputs.hasPixelMedian, inputs.pixelMedian, inputs.pixelP95,
                 sampleFormat, colorSpace);
-            AddString(result, PKEY_XISF_DataState, isLinear ? "Linear" : "Non-Linear");
+            emitString(PKEY_XISF_DataState, isLinear ? "Linear" : "Non-Linear");
         }
     }
 
     // System.Photo projection (orthogonal to tier, controlled by its own flag)
     UINT32 projectionPropCount = 0;
     if (inputs.projectionEnabled) {
-        if (inputs.hasExposure) { AddDouble(result, PKEY_Photo_ExposureTime, inputs.exposureTime); ++projectionPropCount; }
-        if (!inputs.cameraModel.empty()) { AddString(result, PKEY_Photo_CameraModel, inputs.cameraModel); ++projectionPropCount; }
-        if (inputs.hasFocalLength) { AddDouble(result, PKEY_Photo_FocalLength, inputs.focalLength); ++projectionPropCount; }
-        if (inputs.hasFNumber) { AddDouble(result, PKEY_Photo_FNumber, inputs.fNumber); ++projectionPropCount; }
+        if (inputs.hasExposure) { emitDouble(PKEY_Photo_ExposureTime, inputs.exposureTime); ++projectionPropCount; }
+        if (!inputs.cameraModel.empty()) { emitString(PKEY_Photo_CameraModel, inputs.cameraModel); ++projectionPropCount; }
+        if (inputs.hasFocalLength) { emitDouble(PKEY_Photo_FocalLength, inputs.focalLength); ++projectionPropCount; }
+        if (inputs.hasFNumber) { emitDouble(PKEY_Photo_FNumber, inputs.fNumber); ++projectionPropCount; }
     }
 
-    WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PROJECTION,
+    WritePropertyHandlerTelemetry(TRACE_LEVEL_VERBOSE, XISF_ETW_KEYWORD_PROJECTION,
         L"ProjectionEvaluated Enabled=%u ProjectedPropertyCount=%u",
         inputs.projectionEnabled ? 1u : 0u, projectionPropCount);
 
     // --- Full tier: DSO search, matched objects, keywords ---
 
     std::string matchedObjectsStr;
-    decltype(s_dsoCatalog->ConeSearch(0, 0, 0)) coneResults;
+    std::vector<ConeSearchResult> coneResults;
 
     if (IsDSOSearchEnabled(inputs.tier)) {
         EnsureCatalogLoaded();
@@ -310,7 +284,7 @@ std::vector<ComputedPropertyEntry> PopulateComputedProperties(
                     if (i > 0) matchedObjectsStr += "; ";
                     matchedObjectsStr += matchedNames[i];
                 }
-                AddString(result, PKEY_XISF_MatchedObjects, matchedObjectsStr);
+                emitString(PKEY_XISF_MatchedObjects, matchedObjectsStr);
             }
         }
     }
@@ -340,10 +314,8 @@ std::vector<ComputedPropertyEntry> PopulateComputedProperties(
     if (!keywords.empty()) {
         std::sort(keywords.begin(), keywords.end());
         keywords.erase(std::unique(keywords.begin(), keywords.end()), keywords.end());
-        AddStringList(result, PKEY_Keywords, keywords);
+        if (sink.addStringList) sink.addStringList(PKEY_Keywords, keywords);
     }
-
-    return result;
 }
 
 } // namespace xisf

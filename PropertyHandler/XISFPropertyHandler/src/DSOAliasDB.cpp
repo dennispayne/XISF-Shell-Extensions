@@ -1,5 +1,6 @@
 // DSOAliasDB.cpp — Implementation of the Deep Sky Object alias database (Property Handler)
 #include "DSOAliasDB.h"
+#include "StringUtil.h"
 
 #include <fstream>
 #include <sstream>
@@ -76,10 +77,7 @@ void DSOAliasDB::BuildIndex()
 
 std::string DSOAliasDB::ToLower(const std::string& s)
 {
-    std::string result = s;
-    std::transform(result.begin(), result.end(), result.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return result;
+    return xisf::str::ToLower(s);
 }
 
 // ---------------------------------------------------------------------------

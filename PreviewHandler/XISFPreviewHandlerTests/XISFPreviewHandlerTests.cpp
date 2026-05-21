@@ -19,7 +19,7 @@
 #include "XISFParser.h"
 #include "PreviewHandler.h"
 #include "ThumbnailProvider.h"
-#include "PreviewHandlerTelemetry.h"
+#include "PreviewHandlerTraceLogging.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 

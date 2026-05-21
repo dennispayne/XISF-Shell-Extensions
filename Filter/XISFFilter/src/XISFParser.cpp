@@ -10,9 +10,11 @@
 
 namespace xisf {
 
-// ---------------------------------------------------------------------------
+static inline bool IsWhitespace(char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
 // XISFRawMetadata helpers
-// ---------------------------------------------------------------------------
 
 void XISFRawMetadata::buildIndices() {
     fitsIndex_.clear();
@@ -47,9 +49,7 @@ std::string XISFRawMetadata::getPropertyValue(const std::string& id) const {
     return {};
 }
 
-// ---------------------------------------------------------------------------
 // XISFRawMetadata::GetSearchableTextChunks — produce wide-string text for IFilter
-// ---------------------------------------------------------------------------
 
 static std::wstring Utf8ToWide(const std::string& s) {
     if (s.empty()) return {};
@@ -101,9 +101,7 @@ std::vector<std::wstring> XISFRawMetadata::GetSearchableTextChunks() const {
     return chunks;
 }
 
-// ---------------------------------------------------------------------------
 // XISFParser::ParseFile
-// ---------------------------------------------------------------------------
 
 ParseResult XISFParser::ParseFile(const std::string& filePath) {
     ParseResult result;
@@ -158,17 +156,9 @@ ParseResult XISFParser::ParseFile(const std::string& filePath) {
     return ParseXMLString(xml);
 }
 
-// ---------------------------------------------------------------------------
-// XISFParser::ParseXMLString
-// ---------------------------------------------------------------------------
-
 ParseResult XISFParser::ParseXMLString(const std::string& xmlContent) {
     return ExtractMetadataFromXML(xmlContent);
 }
-
-// ---------------------------------------------------------------------------
-// XISFParser::ExtractMetadataFromXML
-// ---------------------------------------------------------------------------
 
 ParseResult XISFParser::ExtractMetadataFromXML(const std::string& xml) {
     ParseResult result;
@@ -219,9 +209,50 @@ ParseResult XISFParser::ExtractMetadataFromXML(const std::string& xml) {
     return result;
 }
 
-// ---------------------------------------------------------------------------
-// XISFParser::FindElements
-// ---------------------------------------------------------------------------
+std::size_t XISFParser::FindElementEnd(const std::string& xml, std::size_t start, bool& selfClosing) {
+    selfClosing = false;
+    std::size_t search = start;
+    while (search < xml.size()) {
+        std::size_t gtPos = xml.find('>', search);
+        if (gtPos == std::string::npos) return std::string::npos;
+
+        if (gtPos > 0 && xml[gtPos - 1] == '/') {
+            selfClosing = true;
+            return gtPos;
+        }
+
+        bool inSingleQuote = false;
+        bool inDoubleQuote = false;
+        for (std::size_t k = search; k < gtPos; ++k) {
+            char c = xml[k];
+            if (c == '\'' && !inDoubleQuote) inSingleQuote = !inSingleQuote;
+            else if (c == '"' && !inSingleQuote) inDoubleQuote = !inDoubleQuote;
+        }
+        if (!inSingleQuote && !inDoubleQuote) {
+            return gtPos;
+        }
+        search = gtPos + 1;
+    }
+    return std::string::npos;
+}
+
+std::unordered_map<std::string, std::string>
+XISFParser::BuildAttributeMap(const std::string& attrText) {
+    static const char* kCommonAttrs[] = {
+        "name", "value", "comment",   // FITSKeyword
+        "id",   "type",               // Property
+        "geometry", "sampleFormat", "colorSpace", "location" // Image
+    };
+
+    std::unordered_map<std::string, std::string> attrMap;
+    for (const char* attr : kCommonAttrs) {
+        std::string val = GetAttribute(attrText, attr);
+        if (!val.empty() || attrText.find(std::string(attr) + "=") != std::string::npos) {
+            attrMap[attr] = val;
+        }
+    }
+    return attrMap;
+}
 
 std::vector<std::unordered_map<std::string, std::string>>
 XISFParser::FindElements(const std::string& xml, const std::string& tagName) {
@@ -231,7 +262,6 @@ XISFParser::FindElements(const std::string& xml, const std::string& tagName) {
     std::size_t pos = 0;
 
     while (pos < xml.size()) {
-        // Locate the next occurrence of <tagName.
         std::size_t tagStart = xml.find(openTag, pos);
         if (tagStart == std::string::npos) break;
 
@@ -240,83 +270,29 @@ XISFParser::FindElements(const std::string& xml, const std::string& tagName) {
         std::size_t afterTagName = tagStart + openTag.size();
         if (afterTagName < xml.size()) {
             char next = xml[afterTagName];
-            if (next != ' ' && next != '\t' && next != '\n' && next != '\r'
-                && next != '/' && next != '>') {
+            if (!IsWhitespace(next) && next != '/' && next != '>') {
                 pos = afterTagName;
                 continue;
             }
         }
 
-        // Find the end of this element (self-closing '/>' or '>').
-        std::size_t elementEnd = std::string::npos;
         bool selfClosing = false;
-
-        std::size_t search = afterTagName;
-        while (search < xml.size()) {
-            std::size_t gtPos   = xml.find('>', search);
-            if (gtPos == std::string::npos) break;
-
-            if (gtPos > 0 && xml[gtPos - 1] == '/') {
-                // Self-closing element.
-                elementEnd  = gtPos;
-                selfClosing = true;
-                break;
-            } else {
-                // Could be an attribute value containing '>' — only treat as
-                // element end if we are not inside a quoted string.
-                // Walk from search to gtPos counting quote state.
-                bool inSingleQuote = false;
-                bool inDoubleQuote = false;
-                for (std::size_t k = search; k < gtPos; ++k) {
-                    char c = xml[k];
-                    if (c == '\'' && !inDoubleQuote) inSingleQuote = !inSingleQuote;
-                    else if (c == '"' && !inSingleQuote) inDoubleQuote = !inDoubleQuote;
-                }
-                if (!inSingleQuote && !inDoubleQuote) {
-                    elementEnd  = gtPos;
-                    selfClosing = false;
-                    break;
-                }
-                search = gtPos + 1;
-            }
-        }
-
+        std::size_t elementEnd = FindElementEnd(xml, afterTagName, selfClosing);
         if (elementEnd == std::string::npos) {
             pos = afterTagName;
             continue;
         }
 
-        // Extract the text spanning from after '<tagName' up to (not including)
-        // the closing '>' or '/>'.
         std::size_t attrStart = afterTagName;
         std::size_t attrEnd   = selfClosing ? elementEnd - 1 : elementEnd;
         std::string attrText  = xml.substr(attrStart, attrEnd - attrStart);
 
-        // Common attributes for the known element types.
-        static const char* kCommonAttrs[] = {
-            "name", "value", "comment",   // FITSKeyword
-            "id",   "type",               // Property
-            "geometry", "sampleFormat", "colorSpace", "location" // Image
-        };
-
-        std::unordered_map<std::string, std::string> attrMap;
-        for (const char* attr : kCommonAttrs) {
-            std::string val = GetAttribute(attrText, attr);
-            if (!val.empty() || attrText.find(std::string(attr) + "=") != std::string::npos) {
-                attrMap[attr] = val;
-            }
-        }
-
-        results.push_back(std::move(attrMap));
+        results.push_back(BuildAttributeMap(attrText));
         pos = elementEnd + 1;
     }
 
     return results;
 }
-
-// ---------------------------------------------------------------------------
-// XISFParser::GetAttribute
-// ---------------------------------------------------------------------------
 
 static std::string DecodeXMLEntities(const std::string& s) {
     std::string result;
@@ -347,7 +323,7 @@ std::string XISFParser::GetAttribute(const std::string& elementText,
         // or start of string) so we don't match 'myname' when looking for 'name'.
         if (namePos > 0) {
             char before = elementText[namePos - 1];
-            if (before != ' ' && before != '\t' && before != '\n' && before != '\r') {
+            if (!IsWhitespace(before)) {
                 pos = namePos + attrName.size();
                 continue;
             }
@@ -356,9 +332,7 @@ std::string XISFParser::GetAttribute(const std::string& elementText,
         std::size_t afterName = namePos + attrName.size();
 
         // Skip whitespace after the attribute name.
-        while (afterName < elementText.size() &&
-               (elementText[afterName] == ' ' || elementText[afterName] == '\t' ||
-                elementText[afterName] == '\n' || elementText[afterName] == '\r')) {
+        while (afterName < elementText.size() && IsWhitespace(elementText[afterName])) {
             ++afterName;
         }
 
@@ -369,9 +343,7 @@ std::string XISFParser::GetAttribute(const std::string& elementText,
         ++afterName; // skip '='
 
         // Skip whitespace after '='.
-        while (afterName < elementText.size() &&
-               (elementText[afterName] == ' ' || elementText[afterName] == '\t' ||
-                elementText[afterName] == '\n' || elementText[afterName] == '\r')) {
+        while (afterName < elementText.size() && IsWhitespace(elementText[afterName])) {
             ++afterName;
         }
 

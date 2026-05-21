@@ -9,6 +9,7 @@
 #include <vector>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include "XISFParser.h"
 #include "HandlerSettings.h"
 
@@ -136,9 +137,16 @@ private:
     void AddUInt32Prop(const PROPERTYKEY& key, uint32_t value);
     void AddDateTimeProp(const PROPERTYKEY& key, const std::string& isoDate);
     void AddStringListProp(const PROPERTYKEY& key, const std::vector<std::string>& values);
+    // Helpers for the common "fetch FITS-or-XISF-property, parse, add" pattern.
+    // Returns true if a value was added.
+    bool TryAddDoubleProp(const PROPERTYKEY& key, const char* fitsKey, const char* propId);
+    bool TryAddUInt32Prop(const PROPERTYKEY& key, const char* fitsKey, const char* propId);
+    bool TryAddStringProp(const PROPERTYKEY& key, const char* fitsKey, const char* propId);
+    // Resolve focal length in millimeters, preferring FITS FOCALLEN (mm) and
+    // falling back to the XISF Instrument:Telescope:FocalLength property (meters).
+    std::optional<double> TryResolveFocalLengthMM() const;
     std::string GetFITSOrProp(const std::string& fitsKey, const std::string& propId) const;
     bool TryParseDouble(const std::string& raw, double* out) const;
     std::string TrimValue(const std::string& raw) const;
-    static std::wstring Utf8ToWide(const std::string& raw);
     static bool ParseISO8601(const std::string& iso, FILETIME* ft);
 };

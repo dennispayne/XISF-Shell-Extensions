@@ -4,7 +4,7 @@
 // XISF metadata as formatted text on a dark background.
 //
 #include "PreviewHandler.h"
-#include "PreviewHandlerTelemetry.h"
+#include "PreviewHandlerTraceLogging.h"
 #include "ThumbnailProvider.h"
 
 #include <shlwapi.h>
@@ -16,16 +16,86 @@
 extern long      g_cDllRef;
 extern HINSTANCE g_hInst;
 
-// ---------------------------------------------------------------------------
 // Window class name
-// ---------------------------------------------------------------------------
-
 const wchar_t CPreviewHandler::kClassName[] = L"XISFPreviewHandlerWnd";
 
-// ---------------------------------------------------------------------------
-// Constructor / Destructor
-// ---------------------------------------------------------------------------
+namespace
+{
+    // Draw the title bar, divider, and all metadata fields. Advances `y`
+    // through each line and leaves the HDC's text color in a caller-defined
+    // state (caller is responsible for font lifetime of `regularFont`).
+    void PaintMetadataFields(HDC hdc, const RECT& rcClient, int x, int& y,
+                             int lineH, int margin,
+                             const xisf::XISFRawMetadata& md,
+                             const LOGFONTW& lf, COLORREF clrText,
+                             HFONT regularFont)
+    {
+        auto DrawField = [&](const wchar_t* label, const std::string& value)
+        {
+            if (value.empty()) return;
 
+            ::SetTextColor(hdc, RGB(100, 180, 255));
+            int labelLen = static_cast<int>(wcslen(label));
+            TextOutW(hdc, x, y, label, labelLen);
+
+            SIZE labelSz{};
+            GetTextExtentPoint32W(hdc, label, labelLen, &labelSz);
+
+            ::SetTextColor(hdc, clrText);
+            wchar_t wVal[512] = {};
+            MultiByteToWideChar(CP_UTF8, 0, value.c_str(),
+                                static_cast<int>(value.size()), wVal, 511);
+            TextOutW(hdc, x + labelSz.cx, y, wVal,
+                     static_cast<int>(wcslen(wVal)));
+            y += lineH;
+        };
+
+        // Title
+        ::SetTextColor(hdc, RGB(200, 230, 255));
+        HFONT hBold = CreateFontW(lf.lfHeight - 2, 0, 0, 0, FW_BOLD,
+                                  FALSE, FALSE, FALSE,
+                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                                  CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                                  DEFAULT_PITCH | FF_SWISS, lf.lfFaceName);
+        SelectObject(hdc, hBold);
+        TextOutW(hdc, x, y, L"XISF File Metadata", 18);
+        y += lineH + 8;
+        SelectObject(hdc, regularFont); // restore regular font
+
+        // Divider line
+        HPEN hPen = CreatePen(PS_SOLID, 1, RGB(60, 80, 140));
+        HGDIOBJ hOldPen = SelectObject(hdc, hPen);
+        MoveToEx(hdc, x, y, nullptr);
+        LineTo(hdc, rcClient.right - margin, y);
+        SelectObject(hdc, hOldPen);
+        DeleteObject(hPen);
+        y += 8;
+
+        DrawField(L"Object:      ", md.getFITSValue("OBJECT"));
+        DrawField(L"Exposure:    ", md.getFITSValue("EXPTIME") +
+                  (md.getFITSValue("EXPTIME").empty() ? "" : " s"));
+        DrawField(L"Filter:      ", md.getFITSValue("FILTER"));
+        DrawField(L"Telescope:   ", md.getFITSValue("TELESCOP"));
+        DrawField(L"Camera:      ", md.getFITSValue("INSTRUME"));
+        {
+            std::string temp = md.getFITSValue("CCD-TEMP");
+            if (!temp.empty()) temp += " \xC2\xB0""C"; // UTF-8 degree symbol
+            DrawField(L"Temperature: ", temp);
+        }
+        DrawField(L"Observer:    ", md.getFITSValue("OBSERVER"));
+        DrawField(L"Gain:        ", md.getFITSValue("GAIN"));
+
+        // XISF Properties (if any FITS keywords are absent)
+        DrawField(L"Exp (prop):  ",
+                  md.getPropertyValue("Instrument:ExposureTime"));
+        DrawField(L"Filter (p):  ",
+                  md.getPropertyValue("Instrument:Filter:Name"));
+
+        DeleteObject(hBold);
+    }
+}
+
+// Constructor / Destructor
 CPreviewHandler::CPreviewHandler()
     : m_cRef(1)
     , m_hwndParent(nullptr)
@@ -71,10 +141,7 @@ CPreviewHandler::~CPreviewHandler()
     InterlockedDecrement(&g_cDllRef);
 }
 
-// ---------------------------------------------------------------------------
 // IUnknown
-// ---------------------------------------------------------------------------
-
 IFACEMETHODIMP CPreviewHandler::QueryInterface(REFIID riid, void** ppv)
 {
     if (!ppv) return E_POINTER;
@@ -105,10 +172,7 @@ IFACEMETHODIMP_(ULONG) CPreviewHandler::Release()
     return r;
 }
 
-// ---------------------------------------------------------------------------
 // IInitializeWithStream
-// ---------------------------------------------------------------------------
-
 IFACEMETHODIMP CPreviewHandler::Initialize(IStream* pStream, DWORD /*grfMode*/)
 {
     if (m_initialized)
@@ -117,7 +181,8 @@ IFACEMETHODIMP CPreviewHandler::Initialize(IStream* pStream, DWORD /*grfMode*/)
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE),
             TraceLoggingString("AlreadyInitialized", "Stage"));
-        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_LIFECYCLE, L"PreviewInitializeFailed Stage=AlreadyInitialized");
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_LIFECYCLE,
+            L"PreviewInitializeFailed Stage=AlreadyInitialized");
         return HRESULT_FROM_WIN32(ERROR_ALREADY_INITIALIZED);
     }
     if (!pStream)
@@ -126,7 +191,8 @@ IFACEMETHODIMP CPreviewHandler::Initialize(IStream* pStream, DWORD /*grfMode*/)
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE),
             TraceLoggingString("NullStream", "Stage"));
-        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_LIFECYCLE, L"PreviewInitializeFailed Stage=NullStream");
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_LIFECYCLE,
+            L"PreviewInitializeFailed Stage=NullStream");
         return E_INVALIDARG;
     }
 
@@ -141,10 +207,9 @@ IFACEMETHODIMP CPreviewHandler::Initialize(IStream* pStream, DWORD /*grfMode*/)
             TraceLoggingString("ReadPreamble", "Stage"),
             TraceLoggingHResult(hr, "Hr"),
             TraceLoggingUInt32(cbRead, "CbRead"));
-        if (g_xisfPreviewHandlerTelemetryHook) {
-            wchar_t _buf[256]; swprintf_s(_buf, L"PreviewInitializeFailed Stage=ReadPreamble HRESULT=0x%08X CbRead=%u", static_cast<unsigned>(hr), cbRead);
-            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, _buf);
-        }
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
+            L"PreviewInitializeFailed Stage=ReadPreamble HRESULT=0x%08X CbRead=%u",
+            static_cast<unsigned>(hr), cbRead);
         return E_FAIL;
     }
     if (memcmp(preamble, "XISF0100", 8) != 0)
@@ -153,7 +218,8 @@ IFACEMETHODIMP CPreviewHandler::Initialize(IStream* pStream, DWORD /*grfMode*/)
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PARSE),
             TraceLoggingString("InvalidSignature", "Stage"));
-        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, L"PreviewInitializeFailed Stage=InvalidSignature");
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
+            L"PreviewInitializeFailed Stage=InvalidSignature");
         return E_FAIL;
     }
 
@@ -166,10 +232,8 @@ IFACEMETHODIMP CPreviewHandler::Initialize(IStream* pStream, DWORD /*grfMode*/)
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PARSE),
             TraceLoggingString("HeaderLength", "Stage"),
             TraceLoggingUInt32(headerLength, "Length"));
-        if (g_xisfPreviewHandlerTelemetryHook) {
-            wchar_t _buf[128]; swprintf_s(_buf, L"PreviewInitializeFailed Stage=HeaderLength Length=%u", headerLength);
-            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, _buf);
-        }
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
+            L"PreviewInitializeFailed Stage=HeaderLength Length=%u", headerLength);
         return E_FAIL;
     }
 
@@ -184,10 +248,9 @@ IFACEMETHODIMP CPreviewHandler::Initialize(IStream* pStream, DWORD /*grfMode*/)
             TraceLoggingHResult(hr, "Hr"),
             TraceLoggingUInt32(cbRead, "CbRead"),
             TraceLoggingUInt32(headerLength, "Expected"));
-        if (g_xisfPreviewHandlerTelemetryHook) {
-            wchar_t _buf[256]; swprintf_s(_buf, L"PreviewInitializeFailed Stage=ReadHeader HRESULT=0x%08X CbRead=%u Expected=%u", static_cast<unsigned>(hr), cbRead, headerLength);
-            g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, _buf);
-        }
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
+            L"PreviewInitializeFailed Stage=ReadHeader HRESULT=0x%08X CbRead=%u Expected=%u",
+            static_cast<unsigned>(hr), cbRead, headerLength);
         return E_FAIL;
     }
 
@@ -198,7 +261,8 @@ IFACEMETHODIMP CPreviewHandler::Initialize(IStream* pStream, DWORD /*grfMode*/)
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PARSE),
             TraceLoggingString("ParseXml", "Stage"));
-        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE, L"PreviewInitializeFailed Stage=ParseXml");
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PARSE,
+            L"PreviewInitializeFailed Stage=ParseXml");
         return E_FAIL;
     }
     m_metadata = std::move(result.metadata);
@@ -212,17 +276,12 @@ IFACEMETHODIMP CPreviewHandler::Initialize(IStream* pStream, DWORD /*grfMode*/)
         TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
         TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE),
         TraceLoggingUInt32(headerLength, "HeaderBytes"));
-    if (g_xisfPreviewHandlerTelemetryHook) {
-        wchar_t _buf[128]; swprintf_s(_buf, L"PreviewInitialized HeaderBytes=%u", headerLength);
-        g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_LIFECYCLE, _buf);
-    }
+    WritePreviewHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_LIFECYCLE,
+        L"PreviewInitialized HeaderBytes=%u", headerLength);
     return S_OK;
 }
 
-// ---------------------------------------------------------------------------
 // IPreviewHandler
-// ---------------------------------------------------------------------------
-
 IFACEMETHODIMP CPreviewHandler::SetWindow(HWND hwnd, const RECT* prc)
 {
     if (!hwnd || !prc) return E_INVALIDARG;
@@ -266,7 +325,8 @@ IFACEMETHODIMP CPreviewHandler::DoPreview()
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PREVIEW),
             TraceLoggingString("MissingParentWindow", "Stage"));
-        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PREVIEW, L"DoPreviewFailed Stage=MissingParentWindow");
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PREVIEW,
+            L"DoPreviewFailed Stage=MissingParentWindow");
         return E_FAIL;
     }
 
@@ -307,7 +367,8 @@ IFACEMETHODIMP CPreviewHandler::DoPreview()
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PREVIEW),
             TraceLoggingString("CreatePreviewWindow", "Stage"));
-        if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PREVIEW, L"DoPreviewFailed Stage=CreatePreviewWindow");
+        WritePreviewHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_PREVIEW_KEYWORD_PREVIEW,
+            L"DoPreviewFailed Stage=CreatePreviewWindow");
         return E_FAIL;
     }
 
@@ -316,7 +377,8 @@ IFACEMETHODIMP CPreviewHandler::DoPreview()
     TraceLoggingWrite(g_hPreviewProvider, "PreviewDisplayed",
         TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
         TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_PREVIEW));
-    if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_PREVIEW, L"PreviewDisplayed");
+    WritePreviewHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_PREVIEW,
+        L"PreviewDisplayed");
     return S_OK;
 }
 
@@ -341,7 +403,8 @@ IFACEMETHODIMP CPreviewHandler::Unload()
     TraceLoggingWrite(g_hPreviewProvider, "PreviewUnloaded",
         TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
         TraceLoggingKeyword(XISF_PREVIEW_KEYWORD_LIFECYCLE));
-    if (g_xisfPreviewHandlerTelemetryHook) g_xisfPreviewHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_LIFECYCLE, L"PreviewUnloaded");
+    WritePreviewHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_PREVIEW_KEYWORD_LIFECYCLE,
+        L"PreviewUnloaded");
     return S_OK;
 }
 
@@ -365,10 +428,7 @@ IFACEMETHODIMP CPreviewHandler::TranslateAccelerator(MSG* pmsg)
     return S_FALSE;
 }
 
-// ---------------------------------------------------------------------------
 // IPreviewHandlerVisuals
-// ---------------------------------------------------------------------------
-
 IFACEMETHODIMP CPreviewHandler::SetBackgroundColor(COLORREF color)
 {
     m_clrBackground = color;
@@ -391,10 +451,7 @@ IFACEMETHODIMP CPreviewHandler::SetTextColor(COLORREF color)
     return S_OK;
 }
 
-// ---------------------------------------------------------------------------
 // Window management
-// ---------------------------------------------------------------------------
-
 void CPreviewHandler::CreatePreviewWindow()
 {
     if (m_hwndPreview) return;
@@ -424,10 +481,7 @@ void CPreviewHandler::UpdatePreviewWindow()
         InvalidateRect(m_hwndPreview, nullptr, TRUE);
 }
 
-// ---------------------------------------------------------------------------
 // Window procedure
-// ---------------------------------------------------------------------------
-
 LRESULT CALLBACK CPreviewHandler::PreviewWndProc(HWND hwnd, UINT msg,
                                                    WPARAM wp, LPARAM lp)
 {
@@ -514,79 +568,12 @@ LRESULT CALLBACK CPreviewHandler::PreviewWndProc(HWND hwnd, UINT msg,
         }
 
         // ----- Section 3: Metadata text -----
-
-        // Helper: draw a label (accent colour) + value (body colour) on one line
-        auto DrawField = [&](const wchar_t* label, const std::string& value)
-        {
-            if (value.empty()) return;
-
-            // Label in accent colour
-            ::SetTextColor(hdc, RGB(100, 180, 255));
-            int labelLen = static_cast<int>(wcslen(label));
-            TextOutW(hdc, x, y, label, labelLen);
-
-            // Measure label width to place value after it
-            SIZE labelSz{};
-            GetTextExtentPoint32W(hdc, label, labelLen, &labelSz);
-
-            // Value in body colour
-            ::SetTextColor(hdc, pThis->m_clrText);
-            wchar_t wVal[512] = {};
-            MultiByteToWideChar(CP_UTF8, 0, value.c_str(),
-                                static_cast<int>(value.size()), wVal, 511);
-            TextOutW(hdc, x + labelSz.cx, y, wVal,
-                     static_cast<int>(wcslen(wVal)));
-            y += lineH;
-        };
-
-        // Title
-        ::SetTextColor(hdc, RGB(200, 230, 255));
-        HFONT hBold = CreateFontW(pThis->m_lf.lfHeight - 2, 0, 0, 0, FW_BOLD,
-                                  FALSE, FALSE, FALSE,
-                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                                  CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                                  DEFAULT_PITCH | FF_SWISS,
-                                  pThis->m_lf.lfFaceName);
-        SelectObject(hdc, hBold);
-        TextOutW(hdc, x, y, L"XISF File Metadata", 18);
-        y += lineH + 8;
-        SelectObject(hdc, hFont); // restore regular font
-
-        // Divider line
-        HPEN hPen = CreatePen(PS_SOLID, 1, RGB(60, 80, 140));
-        HGDIOBJ hOldPen = SelectObject(hdc, hPen);
-        MoveToEx(hdc, x, y, nullptr);
-        LineTo(hdc, rcClient.right - margin, y);
-        SelectObject(hdc, hOldPen);
-        DeleteObject(hPen);
-        y += 8;
-
-        // Metadata fields
-        const auto& md = pThis->m_metadata;
-
-        DrawField(L"Object:      ", md.getFITSValue("OBJECT"));
-        DrawField(L"Exposure:    ", md.getFITSValue("EXPTIME") +
-                  (md.getFITSValue("EXPTIME").empty() ? "" : " s"));
-        DrawField(L"Filter:      ", md.getFITSValue("FILTER"));
-        DrawField(L"Telescope:   ", md.getFITSValue("TELESCOP"));
-        DrawField(L"Camera:      ", md.getFITSValue("INSTRUME"));
-        {
-            std::string temp = md.getFITSValue("CCD-TEMP");
-            if (!temp.empty()) temp += " \xC2\xB0""C"; // UTF-8 degree symbol
-            DrawField(L"Temperature: ", temp);
-        }
-        DrawField(L"Observer:    ", md.getFITSValue("OBSERVER"));
-        DrawField(L"Gain:        ", md.getFITSValue("GAIN"));
-
-        // XISF Properties (if any FITS keywords are absent)
-        DrawField(L"Exp (prop):  ",
-                  md.getPropertyValue("Instrument:ExposureTime"));
-        DrawField(L"Filter (p):  ",
-                  md.getPropertyValue("Instrument:Filter:Name"));
+        PaintMetadataFields(hdc, rcClient, x, y, lineH, margin,
+                            pThis->m_metadata, pThis->m_lf, pThis->m_clrText,
+                            hFont);
 
         SelectObject(hdc, hOldFont);
         DeleteObject(hFont);
-        DeleteObject(hBold);
 
         EndPaint(hwnd, &ps);
         return 0;
@@ -598,10 +585,7 @@ LRESULT CALLBACK CPreviewHandler::PreviewWndProc(HWND hwnd, UINT msg,
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
-// ---------------------------------------------------------------------------
 // Histogram rendering (pure GDI)
-// ---------------------------------------------------------------------------
-
 void CPreviewHandler::PaintHistogram(HDC hdc, const RECT& rcArea,
                                      const HistogramData& hist)
 {

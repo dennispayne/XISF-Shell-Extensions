@@ -2,6 +2,7 @@
 #include "CatalogInstaller.h"
 #include "Sha256.h"
 #include "Paths.h"
+#include "WinHttpHelpers.h"
 
 #include <windows.h>
 #include <winhttp.h>
@@ -25,41 +26,8 @@ namespace {
 
 constexpr DWORD kIoBufSize = 64 * 1024;
 
-// Split https://host/path into host + path. Returns false on malformed URL.
-bool CrackUrl(std::wstring_view url, std::wstring& host, std::wstring& pathAndQuery)
-{
-    URL_COMPONENTS uc{};
-    uc.dwStructSize      = sizeof(uc);
-    uc.dwSchemeLength    = static_cast<DWORD>(-1);
-    uc.dwHostNameLength  = static_cast<DWORD>(-1);
-    uc.dwUrlPathLength   = static_cast<DWORD>(-1);
-    uc.dwExtraInfoLength = static_cast<DWORD>(-1);
-
-    if (!WinHttpCrackUrl(url.data(), static_cast<DWORD>(url.size()), 0, &uc))
-        return false;
-
-    if (uc.nScheme != INTERNET_SCHEME_HTTPS) return false; // HTTPS only
-    if (!uc.lpszHostName || uc.dwHostNameLength == 0) return false;
-
-    host.assign(uc.lpszHostName, uc.dwHostNameLength);
-    pathAndQuery.assign(uc.lpszUrlPath, uc.dwUrlPathLength);
-    if (uc.lpszExtraInfo && uc.dwExtraInfoLength > 0)
-        pathAndQuery.append(uc.lpszExtraInfo, uc.dwExtraInfoLength);
-    return !host.empty();
-}
-
-// RAII for HINTERNET.
-struct InetHandle {
-    HINTERNET h = nullptr;
-    InetHandle() = default;
-    explicit InetHandle(HINTERNET x) : h(x) {}
-    ~InetHandle() { if (h) WinHttpCloseHandle(h); }
-    InetHandle(const InetHandle&) = delete;
-    InetHandle& operator=(const InetHandle&) = delete;
-    InetHandle(InetHandle&& o) noexcept : h(o.h) { o.h = nullptr; }
-    InetHandle& operator=(InetHandle&& o) noexcept { if (this != &o) { if (h) WinHttpCloseHandle(h); h = o.h; o.h = nullptr; } return *this; }
-    explicit operator bool() const { return h != nullptr; }
-};
+using xisf::winhttp::InetHandle;
+using xisf::winhttp::CrackUrl;
 
 std::wstring MakeTempPath(const std::wstring& targetPath)
 {
@@ -716,11 +684,8 @@ Report InstallFromPinnedUrl(const catalogspec::CatalogSource& src,
                                     WINHTTP_NO_PROXY_BYPASS, 0));
     if (!hSession) { rep.result = Result::HttpOpenFailed; return rep; }
 
-    // Enforce modern TLS only (12 and 13 where available). No fallback to old protocols.
-    DWORD secureProtocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
-#ifdef WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3
-    secureProtocols |= WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
-#endif
+    // Enforce modern TLS only. Centralized in WinHttpHelpers.h.
+    DWORD secureProtocols = xisf::winhttp::kTlsProtocols;
     WinHttpSetOption(hSession.h, WINHTTP_OPTION_SECURE_PROTOCOLS,
                      &secureProtocols, sizeof(secureProtocols));
 

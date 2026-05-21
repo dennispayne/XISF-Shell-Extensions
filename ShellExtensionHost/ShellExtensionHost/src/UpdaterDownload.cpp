@@ -2,6 +2,7 @@
 #include "UpdaterDownload.h"
 #include "UpdaterSpec.h"
 #include "Sha256.h"
+#include "WinHttpHelpers.h"
 
 #include <windows.h>
 #include <winhttp.h>
@@ -26,30 +27,11 @@ namespace {
 
 constexpr DWORD kIoBuf = 64 * 1024;
 
-struct InetHandle {
-    HINTERNET h = nullptr;
-    explicit InetHandle(HINTERNET x = nullptr) : h(x) {}
-    ~InetHandle() { if (h) WinHttpCloseHandle(h); }
-    InetHandle(const InetHandle&) = delete;
-    InetHandle& operator=(const InetHandle&) = delete;
-    explicit operator bool() const { return h != nullptr; }
-};
+using xisf::winhttp::InetHandle;
 
 bool CrackUrlDl(const std::wstring& url, std::wstring& host, std::wstring& path)
 {
-    URL_COMPONENTS uc{};
-    uc.dwStructSize      = sizeof(uc);
-    uc.dwSchemeLength    = static_cast<DWORD>(-1);
-    uc.dwHostNameLength  = static_cast<DWORD>(-1);
-    uc.dwUrlPathLength   = static_cast<DWORD>(-1);
-    uc.dwExtraInfoLength = static_cast<DWORD>(-1);
-    if (!WinHttpCrackUrl(url.c_str(), static_cast<DWORD>(url.size()), 0, &uc)) return false;
-    if (uc.nScheme != INTERNET_SCHEME_HTTPS) return false;
-    host.assign(uc.lpszHostName, uc.dwHostNameLength);
-    path.assign(uc.lpszUrlPath, uc.dwUrlPathLength);
-    if (uc.lpszExtraInfo && uc.dwExtraInfoLength > 0)
-        path.append(uc.lpszExtraInfo, uc.dwExtraInfoLength);
-    return !host.empty();
+    return xisf::winhttp::CrackUrl(url, host, path);
 }
 
 bool IsAllowedDownloadHost(const std::wstring& host)
@@ -80,7 +62,7 @@ HINTERNET OpenHttpsGet(const std::wstring& url, InetHandle& hSession,
                                   WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                   WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
         if (!hSession) { errorDetail = L"WinHttpOpen failed"; return nullptr; }
-        DWORD tlsProtos = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
+        DWORD tlsProtos = xisf::winhttp::kTlsProtocols;
         WinHttpSetOption(hSession.h, WINHTTP_OPTION_SECURE_PROTOCOLS, &tlsProtos, sizeof(tlsProtos));
     }
 

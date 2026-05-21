@@ -41,27 +41,40 @@ static const wchar_t kPersistentHandlerClsidStr[] = L"{C5F8A3B2-4E9D-5067-AB2C-7
 // IID_IFilter {89BCB740-6119-101A-BCB7-00DD010655AF}
 static const wchar_t kIIDFilterStr[] = L"{89BCB740-6119-101A-BCB7-00DD010655AF}";
 
+static constexpr const wchar_t* kContentIndexerExtPath =
+    L"SOFTWARE\\Microsoft\\Windows Search\\ContentIndexer\\Extensions\\.xisf";
+static constexpr const wchar_t* kApprovedShellExtPath =
+    L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Approved";
+
+static void FormatClsidPath(const wchar_t* guid, wchar_t* out, size_t outSize) {
+    swprintf_s(out, outSize, L"CLSID\\%s", guid);
+}
+
+static bool IsOurRegistryValue(HKEY root, const wchar_t* subkey,
+                                const wchar_t* valueName, const wchar_t* expected) {
+    HKEY hKey = nullptr;
+    if (RegOpenKeyExW(root, subkey, 0, KEY_READ, &hKey) != ERROR_SUCCESS)
+        return false;
+    wchar_t buf[64] = {};
+    DWORD cb = sizeof(buf);
+    LONG g = RegGetValueW(hKey, nullptr, valueName, RRF_RT_REG_SZ, nullptr, buf, &cb);
+    RegCloseKey(hKey);
+    return (g == ERROR_SUCCESS && _wcsicmp(buf, expected) == 0);
+}
+
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID) {
     if (dwReason == DLL_PROCESS_ATTACH) {
         g_hInst = hModule;
         DisableThreadLibraryCalls(hModule);
         TraceLoggingRegister(g_hFilterProvider);
         TraceLoggingWrite(g_hFilterProvider, "FilterDllAttach",
-            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingLevel(TRACE_LEVEL_VERBOSE),
             TraceLoggingKeyword(XISF_FILTER_KEYWORD_LIFECYCLE));
-        if (g_xisfFilterTelemetryHook) {
-            g_xisfFilterTelemetryHook(TRACE_LEVEL_INFORMATION,
-                XISF_FILTER_KEYWORD_LIFECYCLE, L"FilterDllAttach");
-        }
     }
     else if (dwReason == DLL_PROCESS_DETACH) {
         TraceLoggingWrite(g_hFilterProvider, "FilterDllDetach",
-            TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+            TraceLoggingLevel(TRACE_LEVEL_VERBOSE),
             TraceLoggingKeyword(XISF_FILTER_KEYWORD_LIFECYCLE));
-        if (g_xisfFilterTelemetryHook) {
-            g_xisfFilterTelemetryHook(TRACE_LEVEL_INFORMATION,
-                XISF_FILTER_KEYWORD_LIFECYCLE, L"FilterDllDetach");
-        }
         TraceLoggingUnregister(g_hFilterProvider);
     }
     return TRUE;
@@ -74,14 +87,10 @@ STDAPI DllGetClassObject(_In_ REFCLSID rclsid, _In_ REFIID riid, _Outptr_ void**
     *ppv = nullptr;
 
     TraceLoggingWrite(g_hFilterProvider, "FilterDllGetClassObject",
-        TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
+        TraceLoggingLevel(TRACE_LEVEL_VERBOSE),
         TraceLoggingKeyword(XISF_FILTER_KEYWORD_LIFECYCLE),
         TraceLoggingGuid(rclsid, "CLSID"),
         TraceLoggingGuid(riid, "IID"));
-    if (g_xisfFilterTelemetryHook) {
-        g_xisfFilterTelemetryHook(TRACE_LEVEL_INFORMATION,
-            XISF_FILTER_KEYWORD_LIFECYCLE, L"FilterDllGetClassObject");
-    }
 
     if (!IsEqualCLSID(rclsid, CLSID_XISFFilter)) return CLASS_E_CLASSNOTAVAILABLE;
     CClassFactory* pf = new (std::nothrow) CClassFactory();
@@ -91,9 +100,7 @@ STDAPI DllGetClassObject(_In_ REFCLSID rclsid, _In_ REFIID riid, _Outptr_ void**
     return hr;
 }
 
-// ---------------------------------------------------------------------------
 // Registry helpers
-// ---------------------------------------------------------------------------
 
 static HRESULT SetRegSZValue(HKEY hRoot, const wchar_t* subKey,
                               const wchar_t* valueName, const wchar_t* data) {
@@ -108,10 +115,6 @@ static HRESULT SetRegSZValue(HKEY hRoot, const wchar_t* subKey,
     return HRESULT_FROM_WIN32(lr);
 }
 
-// ---------------------------------------------------------------------------
-// DllRegisterServer
-// ---------------------------------------------------------------------------
-
 STDAPI DllRegisterServer(void) {
     wchar_t szDllPath[MAX_PATH] = {};
     if (!GetModuleFileNameW(g_hInst, szDllPath, ARRAYSIZE(szDllPath)))
@@ -119,13 +122,11 @@ STDAPI DllRegisterServer(void) {
 
     HRESULT hr = S_OK;
 
-    // HKCR\CLSID\{filter-clsid} = "XISF Search Filter"
     wchar_t szClsidRoot[128];
-    swprintf_s(szClsidRoot, L"CLSID\\%s", kFilterClsidStr);
+    FormatClsidPath(kFilterClsidStr, szClsidRoot, ARRAYSIZE(szClsidRoot));
     hr = SetRegSZValue(HKEY_CLASSES_ROOT, szClsidRoot, nullptr, L"XISF Search Filter");
     if (FAILED(hr)) return SELFREG_E_CLASS;
 
-    // HKCR\CLSID\{filter-clsid}\InProcServer32 = <dll-path>
     wchar_t szInProc[256];
     swprintf_s(szInProc, L"CLSID\\%s\\InProcServer32", kFilterClsidStr);
     hr = SetRegSZValue(HKEY_CLASSES_ROOT, szInProc, nullptr, szDllPath);
@@ -133,94 +134,61 @@ STDAPI DllRegisterServer(void) {
     hr = SetRegSZValue(HKEY_CLASSES_ROOT, szInProc, L"ThreadingModel", L"Both");
     if (FAILED(hr)) return SELFREG_E_CLASS;
 
-    // HKCR\CLSID\{persistent-handler-guid} = "XISF Persistent Handler"
     wchar_t szPHRoot[128];
-    swprintf_s(szPHRoot, L"CLSID\\%s", kPersistentHandlerClsidStr);
+    FormatClsidPath(kPersistentHandlerClsidStr, szPHRoot, ARRAYSIZE(szPHRoot));
     hr = SetRegSZValue(HKEY_CLASSES_ROOT, szPHRoot, nullptr, L"XISF Persistent Handler");
     if (FAILED(hr)) return SELFREG_E_CLASS;
 
-    // HKCR\CLSID\{persistent-handler-guid}\PersistentAddinsRegistered\{IID_IFilter} = {filter-clsid}
     wchar_t szPAR[512];
     swprintf_s(szPAR, L"CLSID\\%s\\PersistentAddinsRegistered\\%s",
                kPersistentHandlerClsidStr, kIIDFilterStr);
     hr = SetRegSZValue(HKEY_CLASSES_ROOT, szPAR, nullptr, kFilterClsidStr);
     if (FAILED(hr)) return SELFREG_E_CLASS;
 
-    // HKCR\.xisf\PersistentHandler = {persistent-handler-guid}
     hr = SetRegSZValue(HKEY_CLASSES_ROOT, L".xisf\\PersistentHandler",
                         nullptr, kPersistentHandlerClsidStr);
     if (FAILED(hr)) return SELFREG_E_CLASS;
 
-    // HKLM\SOFTWARE\Microsoft\Windows Search\ContentIndexer\Extensions\.xisf = {filter-clsid}
-    hr = SetRegSZValue(HKEY_LOCAL_MACHINE,
-        L"SOFTWARE\\Microsoft\\Windows Search\\ContentIndexer\\Extensions\\.xisf",
-        nullptr, kFilterClsidStr);
+    hr = SetRegSZValue(HKEY_LOCAL_MACHINE, kContentIndexerExtPath,
+                        nullptr, kFilterClsidStr);
     if (FAILED(hr)) return SELFREG_E_CLASS;
 
     // Approved Shell Extensions list — required when EnforceShellExtensionSecurity GPO is set.
-    hr = SetRegSZValue(HKEY_LOCAL_MACHINE,
-        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Approved",
-        kFilterClsidStr, L"XISF Search Filter");
+    hr = SetRegSZValue(HKEY_LOCAL_MACHINE, kApprovedShellExtPath,
+                        kFilterClsidStr, L"XISF Search Filter");
     if (FAILED(hr)) return SELFREG_E_CLASS;
 
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return S_OK;
 }
 
-// ---------------------------------------------------------------------------
-// DllUnregisterServer
-// ---------------------------------------------------------------------------
-
 STDAPI DllUnregisterServer(void) {
     // Only remove .xisf\PersistentHandler if its default value is OUR
     // persistent handler GUID. Other XISF tooling (e.g. PixInsight) may
     // install a different IFilter chain and we must not nuke theirs.
-    {
-        HKEY hPH = nullptr;
-        if (RegOpenKeyExW(HKEY_CLASSES_ROOT, L".xisf\\PersistentHandler",
-                          0, KEY_READ, &hPH) == ERROR_SUCCESS) {
-            wchar_t buf[64] = {};
-            DWORD cb = sizeof(buf);
-            LONG g = RegGetValueW(hPH, nullptr, nullptr, RRF_RT_REG_SZ, nullptr, buf, &cb);
-            RegCloseKey(hPH);
-            if (g == ERROR_SUCCESS && _wcsicmp(buf, kPersistentHandlerClsidStr) == 0) {
-                RegDeleteTreeW(HKEY_CLASSES_ROOT, L".xisf\\PersistentHandler");
-            }
-        }
+    if (IsOurRegistryValue(HKEY_CLASSES_ROOT, L".xisf\\PersistentHandler",
+                           nullptr, kPersistentHandlerClsidStr)) {
+        RegDeleteTreeW(HKEY_CLASSES_ROOT, L".xisf\\PersistentHandler");
     }
 
-    // Remove persistent handler CLSID
     wchar_t szPHRoot[128];
-    swprintf_s(szPHRoot, L"CLSID\\%s", kPersistentHandlerClsidStr);
+    FormatClsidPath(kPersistentHandlerClsidStr, szPHRoot, ARRAYSIZE(szPHRoot));
     RegDeleteTreeW(HKEY_CLASSES_ROOT, szPHRoot);
 
-    // Remove filter CLSID
     wchar_t szClsidRoot[128];
-    swprintf_s(szClsidRoot, L"CLSID\\%s", kFilterClsidStr);
+    FormatClsidPath(kFilterClsidStr, szClsidRoot, ARRAYSIZE(szClsidRoot));
     RegDeleteTreeW(HKEY_CLASSES_ROOT, szClsidRoot);
 
     // Remove Windows Search indexer extension only if it currently points at our filter.
-    {
-        HKEY hExt = nullptr;
-        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-            L"SOFTWARE\\Microsoft\\Windows Search\\ContentIndexer\\Extensions\\.xisf",
-            0, KEY_READ, &hExt) == ERROR_SUCCESS) {
-            wchar_t buf[64] = {};
-            DWORD cb = sizeof(buf);
-            LONG g = RegGetValueW(hExt, nullptr, nullptr, RRF_RT_REG_SZ, nullptr, buf, &cb);
-            RegCloseKey(hExt);
-            if (g == ERROR_SUCCESS && _wcsicmp(buf, kFilterClsidStr) == 0) {
-                RegDeleteTreeW(HKEY_LOCAL_MACHINE,
-                    L"SOFTWARE\\Microsoft\\Windows Search\\ContentIndexer\\Extensions\\.xisf");
-            }
-        }
+    if (IsOurRegistryValue(HKEY_LOCAL_MACHINE, kContentIndexerExtPath,
+                           nullptr, kFilterClsidStr)) {
+        RegDeleteTreeW(HKEY_LOCAL_MACHINE, kContentIndexerExtPath);
     }
 
     // Remove from Approved Shell Extensions list.
     {
         HKEY hApproved = nullptr;
-        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-            L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Approved",
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, kApprovedShellExtPath,
             0, KEY_SET_VALUE, &hApproved) == ERROR_SUCCESS) {
             RegDeleteValueW(hApproved, kFilterClsidStr);
             RegCloseKey(hApproved);

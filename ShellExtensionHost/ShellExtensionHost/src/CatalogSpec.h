@@ -2,23 +2,17 @@
 //
 // SECURITY MODEL
 // --------------
-// We download catalog files ONLY from fixed URLs pinned to an immutable git
-// commit SHA at raw.githubusercontent.com. The SHA-256 of the bytes at that
-// commit is compiled in below and verified after every download (and every
-// offline file import that uses the verified path). Any mismatch is fatal:
-// the candidate file is deleted and the install aborts.
+// Catalog files are downloaded ONLY from URLs pinned to an immutable git commit
+// at raw.githubusercontent.com. The SHA-256 of the bytes at that commit is
+// compiled in below and verified after every download (and every offline file
+// import that uses the verified path). Any mismatch is fatal: the candidate
+// file is deleted and the install aborts.
 //
-// To rotate to a newer OpenNGC snapshot:
-//   1. Pick a commit SHA on https://github.com/mattiaverga/OpenNGC
-//   2. Download each file at that commit and recompute SHA-256
-//   3. Update kOpenNGCCommit and the kExpectedSha256 entries below
-//   4. Bump CHANGELOG.md and version.json
-//
-// Sharpless/constellations are generated at runtime from public VizieR sources.
-// Their source hash display is "N/A" because the upstream response is dynamic.
+// Sharpless/constellations are generated at runtime from public VizieR sources;
+// their source hash display is "N/A" because the upstream response is dynamic.
 //
 // DO NOT add URLs pointing to mutable refs (branches, tags). A pinned commit
-// SHA is cryptographically stable; master / main is not.
+// SHA is cryptographically stable; master/main is not.
 #pragma once
 
 #include <cstddef>

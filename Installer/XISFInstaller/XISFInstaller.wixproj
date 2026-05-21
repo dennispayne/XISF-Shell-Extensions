@@ -15,7 +15,7 @@
          NB.GV's $(BuildVersionSimple), and finally fall back to a default. -->
     <ProductVersion Condition="'$(XISFVersion)' != ''">$(XISFVersion)</ProductVersion>
     <ProductVersion Condition="'$(ProductVersion)' == '' and '$(BuildVersionSimple)' != ''">$(BuildVersionSimple)</ProductVersion>
-    <ProductVersion Condition="'$(ProductVersion)' == ''">0.1.0</ProductVersion>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">1.0.3</ProductVersion>
     <DefineConstants>ProductVersion=$(ProductVersion)</DefineConstants>
   </PropertyGroup>
 

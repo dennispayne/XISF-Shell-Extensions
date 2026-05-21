@@ -49,6 +49,7 @@
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)..\..\Shared\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
@@ -67,6 +68,7 @@
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)..\..\Shared\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -88,16 +90,17 @@
     <ClCompile Include="src\HandlerSettings.cpp" />
     <ClCompile Include="src\ThumbnailProvider.cpp" />
     <ClCompile Include="src\PreviewHandler.cpp" />
-    <ClCompile Include="src\XISFParser.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\HandlerSettings.h" />
-    <ClInclude Include="src\LinearityHeuristic.h" />
-    <ClInclude Include="src\PreviewHandlerTelemetry.h" />
     <ClInclude Include="src\PreviewHandlerTraceLogging.h" />
     <ClInclude Include="src\ThumbnailProvider.h" />
     <ClInclude Include="src\PreviewHandler.h" />
-    <ClInclude Include="src\XISFParser.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Shared\Shared.vcxproj">
+      <Project>{D5C8E1A2-3F4B-4A6E-9C7D-1B2E3F4A5B6C}</Project>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <None Include="src\XISFPreviewHandler.def" />

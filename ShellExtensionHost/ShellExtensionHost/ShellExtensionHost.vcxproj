@@ -89,6 +89,8 @@
     <ClCompile Include="src\Sha256.cpp" />
     <ClCompile Include="src\UpdaterCheck.cpp" />
     <ClCompile Include="src\UpdaterDownload.cpp" />
+    <ClCompile Include="src\WinHttpHelpers.cpp" />
+    <ClCompile Include="src\RegistryHelpers.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\CatalogInstaller.h" />
@@ -102,6 +104,8 @@
     <ClInclude Include="src\UpdaterDownload.h" />
     <ClInclude Include="src\UpdaterInternals.h" />
     <ClInclude Include="src\UpdaterSpec.h" />
+    <ClInclude Include="src\WinHttpHelpers.h" />
+    <ClInclude Include="src\RegistryHelpers.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="src\ShellExtensionHost.rc" />

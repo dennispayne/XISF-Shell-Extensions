@@ -58,7 +58,7 @@
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <Optimization>Disabled</Optimization>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(ProjectDir)..\PropertyHandler\XISFPropertyHandler\src;$(ProjectDir)..\PreviewHandler\XISFPreviewHandler\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(ProjectDir)..\PropertyHandler\XISFPropertyHandler\src;$(ProjectDir)..\PreviewHandler\XISFPreviewHandler\src;$(MSBuildThisFileDirectory)..\Shared\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -78,7 +78,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(ProjectDir)..\PropertyHandler\XISFPropertyHandler\src;$(ProjectDir)..\PreviewHandler\XISFPreviewHandler\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(ProjectDir)..\PropertyHandler\XISFPropertyHandler\src;$(ProjectDir)..\PreviewHandler\XISFPreviewHandler\src;$(MSBuildThisFileDirectory)..\Shared\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -91,7 +91,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="InitializePerf.cpp" />
-    <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\XISFParser.cpp" />
+    <ClCompile Include="..\Shared\src\XISFParser.cpp" />
     <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\DSOAliasDB.cpp" />
     <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\ComputedProperties.cpp" />
     <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\PixelStatistics.cpp" />
@@ -99,6 +99,7 @@
     <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\HandlerSettings.cpp" />
     <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\DSOCatalog.cpp" />
     <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\ConstellationDB.cpp" />
+    <ClCompile Include="..\PropertyHandler\XISFPropertyHandler\src\StringUtil.cpp" />
     <ClCompile Include="ConcurrencyStress.cpp" />
     <ClCompile Include="MemoryLeakTest.cpp" />
     <ClCompile Include="ParserPerf.cpp" />

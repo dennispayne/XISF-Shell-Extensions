@@ -1,6 +1,7 @@
 // UpdaterCheck.cpp - GitHub releases API check for self-update pipeline.
 #include "UpdaterCheck.h"
 #include "UpdaterSpec.h"
+#include "WinHttpHelpers.h"
 
 #ifndef XISF_VERSION_TEXT
 #define XISF_VERSION_TEXT 0.1.0.0
@@ -24,35 +25,8 @@ namespace xisf::updater {
 
 namespace {
 
-// ── WinHTTP helpers ──────────────────────────────────────────────────────────
-
-struct InetHandle {
-    HINTERNET h = nullptr;
-    explicit InetHandle(HINTERNET x = nullptr) : h(x) {}
-    ~InetHandle() { if (h) WinHttpCloseHandle(h); }
-    InetHandle(const InetHandle&) = delete;
-    InetHandle& operator=(const InetHandle&) = delete;
-    InetHandle(InetHandle&& o) noexcept : h(o.h) { o.h = nullptr; }
-    explicit operator bool() const { return h != nullptr; }
-};
-
-bool CrackUrl(const std::wstring& url, std::wstring& host, std::wstring& path)
-{
-    URL_COMPONENTS uc{};
-    uc.dwStructSize      = sizeof(uc);
-    uc.dwSchemeLength    = static_cast<DWORD>(-1);
-    uc.dwHostNameLength  = static_cast<DWORD>(-1);
-    uc.dwUrlPathLength   = static_cast<DWORD>(-1);
-    uc.dwExtraInfoLength = static_cast<DWORD>(-1);
-    if (!WinHttpCrackUrl(url.c_str(), static_cast<DWORD>(url.size()), 0, &uc))
-        return false;
-    if (uc.nScheme != INTERNET_SCHEME_HTTPS) return false;
-    host.assign(uc.lpszHostName, uc.dwHostNameLength);
-    path.assign(uc.lpszUrlPath, uc.dwUrlPathLength);
-    if (uc.lpszExtraInfo && uc.dwExtraInfoLength > 0)
-        path.append(uc.lpszExtraInfo, uc.dwExtraInfoLength);
-    return !host.empty();
-}
+using xisf::winhttp::InetHandle;
+using xisf::winhttp::CrackUrl;
 
 bool IsAllowedHost(const std::wstring& host)
 {
@@ -87,7 +61,7 @@ int FetchHttps(const std::wstring& url,
                                     WINHTTP_NO_PROXY_BYPASS, 0));
     if (!hSession) { errorDetail = L"WinHttpOpen failed"; return 0; }
 
-    DWORD tlsProtos = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
+    DWORD tlsProtos = xisf::winhttp::kTlsProtocols;
     WinHttpSetOption(hSession.h, WINHTTP_OPTION_SECURE_PROTOCOLS, &tlsProtos, sizeof(tlsProtos));
 
     InetHandle hConn(WinHttpConnect(hSession.h, host.c_str(), INTERNET_DEFAULT_HTTPS_PORT, 0));

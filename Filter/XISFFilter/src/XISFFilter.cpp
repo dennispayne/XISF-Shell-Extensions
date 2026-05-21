@@ -19,10 +19,6 @@ static const GUID s_PSGUID_XISF =
     { 0x7C54FA8B, 0x9D63, 0x4C10, { 0x8F, 0xBE, 0x1A, 0x5A, 0x0F, 0x9A, 0x3B, 0x2E } };
 static const ULONG PID_XISF_DATASTATE = 55;
 
-// ---------------------------------------------------------------------------
-// Constructor
-// ---------------------------------------------------------------------------
-
 CXISFFilter::CXISFFilter()
     : m_cRef(1)
     , m_currentChunk(0)
@@ -33,10 +29,6 @@ CXISFFilter::CXISFFilter()
 {
     InterlockedIncrement(&g_cDllRef);
 }
-
-// ---------------------------------------------------------------------------
-// IUnknown
-// ---------------------------------------------------------------------------
 
 IFACEMETHODIMP CXISFFilter::QueryInterface(REFIID riid, void** ppv)
 {
@@ -88,20 +80,12 @@ IFACEMETHODIMP_(ULONG) CXISFFilter::Release()
     return cRef;
 }
 
-// ---------------------------------------------------------------------------
-// IPersist
-// ---------------------------------------------------------------------------
-
 IFACEMETHODIMP CXISFFilter::GetClassID(CLSID* pClassID)
 {
     if (!pClassID) return E_POINTER;
     *pClassID = CLSID_XISFFilter;
     return S_OK;
 }
-
-// ---------------------------------------------------------------------------
-// IPersistStream
-// ---------------------------------------------------------------------------
 
 IFACEMETHODIMP CXISFFilter::IsDirty()
 {
@@ -113,19 +97,8 @@ IFACEMETHODIMP CXISFFilter::Load(IStream* pStm)
     return ParseFromStream(pStm);
 }
 
-IFACEMETHODIMP CXISFFilter::Save(IStream*, BOOL)
-{
-    return E_NOTIMPL;
-}
-
-IFACEMETHODIMP CXISFFilter::GetSizeMax(ULARGE_INTEGER*)
-{
-    return E_NOTIMPL;
-}
-
-// ---------------------------------------------------------------------------
-// IPersistFile
-// ---------------------------------------------------------------------------
+IFACEMETHODIMP CXISFFilter::Save(IStream*, BOOL) { return E_NOTIMPL; }
+IFACEMETHODIMP CXISFFilter::GetSizeMax(ULARGE_INTEGER*) { return E_NOTIMPL; }
 
 IFACEMETHODIMP CXISFFilter::Load(LPCOLESTR pszFileName, DWORD /*dwMode*/)
 {
@@ -146,31 +119,13 @@ IFACEMETHODIMP CXISFFilter::Load(LPCOLESTR pszFileName, DWORD /*dwMode*/)
 
     m_textChunks = result.metadata.GetSearchableTextChunks();
     PopulateDerivedValues(result);
-    m_currentChunk = 0;
-    m_currentOffset = 0;
-    m_pendingDataStateValue = false;
-    m_initialized = false;
+    ResetState();
     return S_OK;
 }
 
-IFACEMETHODIMP CXISFFilter::Save(LPCOLESTR, BOOL)
-{
-    return E_NOTIMPL;
-}
-
-IFACEMETHODIMP CXISFFilter::SaveCompleted(LPCOLESTR)
-{
-    return E_NOTIMPL;
-}
-
-IFACEMETHODIMP CXISFFilter::GetCurFile(LPOLESTR*)
-{
-    return E_NOTIMPL;
-}
-
-// ---------------------------------------------------------------------------
-// IFilter
-// ---------------------------------------------------------------------------
+IFACEMETHODIMP CXISFFilter::Save(LPCOLESTR, BOOL) { return E_NOTIMPL; }
+IFACEMETHODIMP CXISFFilter::SaveCompleted(LPCOLESTR) { return E_NOTIMPL; }
+IFACEMETHODIMP CXISFFilter::GetCurFile(LPOLESTR*) { return E_NOTIMPL; }
 
 IFACEMETHODIMP CXISFFilter::Init(ULONG /*grfFlags*/, ULONG cAttributes,
                                   const FULLPROPSPEC* /*aAttributes*/,
@@ -186,9 +141,7 @@ IFACEMETHODIMP CXISFFilter::Init(ULONG /*grfFlags*/, ULONG cAttributes,
     if (pFlags)
         *pFlags = 0;
 
-    m_currentChunk = 0;
-    m_currentOffset = 0;
-    m_pendingDataStateValue = false;
+    ResetState();
     m_initialized = true;
 
     WriteFilterTelemetry(TRACE_LEVEL_INFORMATION, XISF_FILTER_KEYWORD_FILTER,
@@ -240,8 +193,10 @@ IFACEMETHODIMP CXISFFilter::GetChunk(STAT_CHUNK* pStat)
 
     m_currentOffset = 0;
 
-    WriteFilterTelemetry(TRACE_LEVEL_VERBOSE, XISF_FILTER_KEYWORD_FILTER,
-                          L"FilterChunkEmitted chunkId=%lu", pStat->idChunk);
+    if (TraceLoggingProviderEnabled(g_hFilterProvider, TRACE_LEVEL_VERBOSE, 0)) {
+        WriteFilterTelemetry(TRACE_LEVEL_VERBOSE, XISF_FILTER_KEYWORD_FILTER,
+                              L"FilterChunkEmitted chunkId=%lu", pStat->idChunk);
+    }
 
     return S_OK;
 }
@@ -341,14 +296,15 @@ IFACEMETHODIMP CXISFFilter::GetValue(PROPVARIANT** ppPropValue)
     return S_OK;
 }
 
-IFACEMETHODIMP CXISFFilter::BindRegion(FILTERREGION, REFIID, void**)
-{
-    return E_NOTIMPL;
-}
+IFACEMETHODIMP CXISFFilter::BindRegion(FILTERREGION, REFIID, void**) { return E_NOTIMPL; }
 
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
+void CXISFFilter::ResetState()
+{
+    m_currentChunk = 0;
+    m_currentOffset = 0;
+    m_pendingDataStateValue = false;
+    m_initialized = false;
+}
 
 HRESULT CXISFFilter::ParseFromStream(IStream* pStm)
 {
@@ -400,9 +356,6 @@ HRESULT CXISFFilter::ParseFromStream(IStream* pStm)
 
     m_textChunks = result.metadata.GetSearchableTextChunks();
     PopulateDerivedValues(result);
-    m_currentChunk = 0;
-    m_currentOffset = 0;
-    m_pendingDataStateValue = false;
-    m_initialized = false;
+    ResetState();
     return S_OK;
 }

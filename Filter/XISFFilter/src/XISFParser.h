@@ -102,6 +102,15 @@ private:
     /// (the raw text between < and >).
     static std::string GetAttribute(const std::string& elementText,
                                     const std::string& attrName);
+
+    /// Returns the position of the '>' that ends the opening tag starting at `start`.
+    /// Handles attribute values containing '>' inside quoted strings.
+    static std::size_t FindElementEnd(const std::string& xml, std::size_t start, bool& selfClosing);
+
+    /// Build an attribute map for the known XISF element attributes from the
+    /// raw text between '<tagName' and the closing '>' / '/>'.
+    static std::unordered_map<std::string, std::string>
+        BuildAttributeMap(const std::string& attrText);
 };
 
 } // namespace xisf

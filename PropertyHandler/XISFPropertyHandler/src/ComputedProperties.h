@@ -3,6 +3,7 @@
 // beyond simple metadata extraction from the XML header.
 #pragma once
 
+#include <functional>
 #include <string>
 #include <vector>
 #include <cstdint>
@@ -54,21 +55,19 @@ struct ComputedPropertyInputs {
     double pixelP95 = 0.0;
 };
 
-// A single computed property value ready to be added to the property store.
-struct ComputedPropertyEntry {
-    PROPERTYKEY key;
-    enum class Type { String, Double, UInt32, StringList } type;
-    std::string stringValue;
-    double doubleValue = 0.0;
-    uint32_t uint32Value = 0;
-    std::vector<std::string> stringListValue;
+// Sink interface for emitting computed property values directly to a property
+// store, removing the intermediate vector-of-variants previously used.
+struct ComputedPropertySink {
+    std::function<void(const PROPERTYKEY&, const std::string&)>              addString;
+    std::function<void(const PROPERTYKEY&, double)>                          addDouble;
+    std::function<void(const PROPERTYKEY&, uint32_t)>                        addUInt32;
+    std::function<void(const PROPERTYKEY&, const std::vector<std::string>&)> addStringList;
 };
 
-// Compute all tier-gated derived properties. Returns a flat list of entries
-// to be added to the property store. This function is pure — no COM state,
-// no IStream, no side effects beyond catalog loading (which is thread-safe
-// via call_once internally).
-std::vector<ComputedPropertyEntry> PopulateComputedProperties(
-    const ComputedPropertyInputs& inputs);
+// Compute all tier-gated derived properties and emit them through the sink.
+// Pure with respect to COM state — no IStream, no side effects beyond catalog
+// loading (which is thread-safe via call_once internally).
+void PopulateComputedProperties(const ComputedPropertyInputs& inputs,
+                                const ComputedPropertySink& sink);
 
 } // namespace xisf

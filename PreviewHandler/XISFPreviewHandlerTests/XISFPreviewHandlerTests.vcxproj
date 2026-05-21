@@ -51,7 +51,7 @@
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <Optimization>Disabled</Optimization>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(ProjectDir)..\XISFPreviewHandler\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(ProjectDir)..\XISFPreviewHandler\src;$(MSBuildThisFileDirectory)..\..\Shared\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -71,7 +71,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(ProjectDir)..\XISFPreviewHandler\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VCInstallDir)Auxiliary\VS\UnitTest\include;$(ProjectDir)..\XISFPreviewHandler\src;$(MSBuildThisFileDirectory)..\..\Shared\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -84,7 +84,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="XISFPreviewHandlerTests.cpp" />
-    <ClCompile Include="..\XISFPreviewHandler\src\XISFParser.cpp" />
+    <ClCompile Include="..\..\Shared\src\XISFParser.cpp" />
     <ClCompile Include="..\XISFPreviewHandler\src\PreviewHandler.cpp" />
     <ClCompile Include="..\XISFPreviewHandler\src\ThumbnailProvider.cpp" />
   </ItemGroup>

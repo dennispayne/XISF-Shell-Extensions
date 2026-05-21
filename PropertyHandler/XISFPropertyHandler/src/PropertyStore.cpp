@@ -93,15 +93,6 @@ IFACEMETHODIMP CXISFPropertyHandler::QueryInterface(REFIID riid, void** ppv) {
 IFACEMETHODIMP_(ULONG) CXISFPropertyHandler::AddRef() { return InterlockedIncrement(&m_cRef); }
 IFACEMETHODIMP_(ULONG) CXISFPropertyHandler::Release() { ULONG c = InterlockedDecrement(&m_cRef); if (c == 0) delete this; return c; }
 
-std::wstring CXISFPropertyHandler::Utf8ToWide(const std::string& raw) {
-    if (raw.empty()) return {};
-    int len = MultiByteToWideChar(CP_UTF8, 0, raw.c_str(), -1, nullptr, 0);
-    if (len <= 0) return {};
-    std::wstring result(static_cast<size_t>(len - 1), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, raw.c_str(), -1, &result[0], len);
-    return result;
-}
-
 std::string CXISFPropertyHandler::TrimValue(const std::string& raw) const {
     size_t s = raw.find_first_not_of(" \t\r\n");
     if (s == std::string::npos) return {};
@@ -134,6 +125,41 @@ std::string CXISFPropertyHandler::GetFITSOrProp(const std::string& fitsKey, cons
 }
 
 void CXISFPropertyHandler::SetDSODatabasePath(const std::wstring& path) { s_dsoDbPath = path; }
+
+bool CXISFPropertyHandler::TryAddDoubleProp(const PROPERTYKEY& key, const char* fitsKey, const char* propId) {
+    std::string raw = GetFITSOrProp(fitsKey, propId);
+    double v;
+    if (!TryParseDouble(raw, &v)) return false;
+    AddDoubleProp(key, v);
+    return true;
+}
+
+bool CXISFPropertyHandler::TryAddUInt32Prop(const PROPERTYKEY& key, const char* fitsKey, const char* propId) {
+    std::string raw = GetFITSOrProp(fitsKey, propId);
+    double v;
+    if (!TryParseDouble(raw, &v)) return false;
+    AddUInt32Prop(key, static_cast<uint32_t>(v));
+    return true;
+}
+
+bool CXISFPropertyHandler::TryAddStringProp(const PROPERTYKEY& key, const char* fitsKey, const char* propId) {
+    std::string raw = GetFITSOrProp(fitsKey, propId);
+    if (raw.empty()) return false;
+    AddStringProp(key, raw);
+    return true;
+}
+
+std::optional<double> CXISFPropertyHandler::TryResolveFocalLengthMM() const {
+    std::string flRaw = m_metadata.getFITSValue("FOCALLEN");
+    double v;
+    if (!flRaw.empty()) {
+        if (TryParseDouble(flRaw, &v)) return v;
+        return std::nullopt;
+    }
+    std::string flProp = m_metadata.getPropertyValue("Instrument:Telescope:FocalLength");
+    if (TryParseDouble(flProp, &v)) return v * 1000.0;
+    return std::nullopt;
+}
 
 void CXISFPropertyHandler::AddStringProp(const PROPERTYKEY& key, const std::string& value) {
     if (value.empty()) return;
@@ -192,13 +218,12 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
         TraceLoggingLevel(TRACE_LEVEL_INFORMATION),
         TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE),
         TraceLoggingUInt32(grfMode, "Mode"));
-    if (g_xisfPropertyHandlerTelemetryHook) {
-        wchar_t _buf[256]; swprintf_s(_buf, L"PropertyStoreInitializeStart Mode=%u", grfMode);
-        g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_LIFECYCLE, _buf);
-    }
+    WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_LIFECYCLE,
+        L"PropertyStoreInitializeStart Mode=%u", grfMode);
 
     if (m_initialized) {
-        { HRESULT _hr = HRESULT_FROM_WIN32(ERROR_ALREADY_INITIALIZED); ULONGLONG _dur = GetTickCount64() - initStart;
+        const HRESULT _hr = HRESULT_FROM_WIN32(ERROR_ALREADY_INITIALIZED);
+        const ULONGLONG _dur = GetTickCount64() - initStart;
         TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeFailed",
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE),
@@ -206,14 +231,12 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
             TraceLoggingHResult(_hr, "Hr"),
             TraceLoggingUInt32(grfMode, "Mode"),
             TraceLoggingUInt64(_dur, "DurationMs"));
-        if (g_xisfPropertyHandlerTelemetryHook) {
-            wchar_t _buf[256]; swprintf_s(_buf, L"PropertyStoreInitializeFailed Stage=AlreadyInitialized Hr=0x%08X Mode=%u DurationMs=%llu", _hr, grfMode, _dur);
-            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, _buf);
-        }}
-        return HRESULT_FROM_WIN32(ERROR_ALREADY_INITIALIZED);
+        WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE,
+            L"PropertyStoreInitializeFailed Stage=AlreadyInitialized Hr=0x%08X Mode=%u DurationMs=%llu", _hr, grfMode, _dur);
+        return _hr;
     }
     if (grfMode & (STGM_READWRITE | STGM_WRITE)) {
-        { ULONGLONG _dur = GetTickCount64() - initStart;
+        const ULONGLONG _dur = GetTickCount64() - initStart;
         TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeFailed",
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE),
@@ -221,14 +244,12 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
             TraceLoggingHResult(STG_E_ACCESSDENIED, "Hr"),
             TraceLoggingUInt32(grfMode, "Mode"),
             TraceLoggingUInt64(_dur, "DurationMs"));
-        if (g_xisfPropertyHandlerTelemetryHook) {
-            wchar_t _buf[256]; swprintf_s(_buf, L"PropertyStoreInitializeFailed Stage=WriteModeRejected Hr=0x%08X Mode=%u DurationMs=%llu", STG_E_ACCESSDENIED, grfMode, _dur);
-            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, _buf);
-        }}
+        WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE,
+            L"PropertyStoreInitializeFailed Stage=WriteModeRejected Hr=0x%08X Mode=%u DurationMs=%llu", STG_E_ACCESSDENIED, grfMode, _dur);
         return STG_E_ACCESSDENIED;
     }
     if (!pStream) {
-        { ULONGLONG _dur = GetTickCount64() - initStart;
+        const ULONGLONG _dur = GetTickCount64() - initStart;
         TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeFailed",
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE),
@@ -236,10 +257,8 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
             TraceLoggingHResult(E_POINTER, "Hr"),
             TraceLoggingUInt32(grfMode, "Mode"),
             TraceLoggingUInt64(_dur, "DurationMs"));
-        if (g_xisfPropertyHandlerTelemetryHook) {
-            wchar_t _buf[256]; swprintf_s(_buf, L"PropertyStoreInitializeFailed Stage=NullStream Hr=0x%08X Mode=%u DurationMs=%llu", E_POINTER, grfMode, _dur);
-            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, _buf);
-        }}
+        WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE,
+            L"PropertyStoreInitializeFailed Stage=NullStream Hr=0x%08X Mode=%u DurationMs=%llu", E_POINTER, grfMode, _dur);
         return E_POINTER;
     }
 
@@ -247,7 +266,8 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
     ULONG cbRead = 0;
     HRESULT hr = ReadAll(pStream, preamble, 16, &cbRead);
     if (FAILED(hr) || cbRead < 16) {
-        { HRESULT _hr = FAILED(hr) ? hr : E_FAIL; ULONGLONG _dur = GetTickCount64() - initStart;
+        const HRESULT _hr = FAILED(hr) ? hr : E_FAIL;
+        const ULONGLONG _dur = GetTickCount64() - initStart;
         TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeFailed",
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE),
@@ -256,14 +276,13 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
             TraceLoggingUInt32(grfMode, "Mode"),
             TraceLoggingUInt32(cbRead, "BytesRead"),
             TraceLoggingUInt64(_dur, "DurationMs"));
-        if (g_xisfPropertyHandlerTelemetryHook) {
-            wchar_t _buf[384]; swprintf_s(_buf, L"PropertyStoreInitializeFailed Stage=ReadPreamble Hr=0x%08X Mode=%u BytesRead=%u DurationMs=%llu", _hr, grfMode, cbRead, _dur);
-            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, _buf);
-        }}
+        WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE,
+            L"PropertyStoreInitializeFailed Stage=ReadPreamble Hr=0x%08X Mode=%u BytesRead=%u DurationMs=%llu", _hr, grfMode, cbRead, _dur);
         return E_FAIL;
     }
     if (memcmp(preamble, "XISF0100", 8) != 0) {
-        { HRESULT _hr = HRESULT_FROM_WIN32(ERROR_INVALID_DATA); ULONGLONG _dur = GetTickCount64() - initStart;
+        const HRESULT _hr = HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+        const ULONGLONG _dur = GetTickCount64() - initStart;
         TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeFailed",
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE),
@@ -272,17 +291,16 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
             TraceLoggingUInt32(grfMode, "Mode"),
             TraceLoggingUInt32(cbRead, "BytesRead"),
             TraceLoggingUInt64(_dur, "DurationMs"));
-        if (g_xisfPropertyHandlerTelemetryHook) {
-            wchar_t _buf[384]; swprintf_s(_buf, L"PropertyStoreInitializeFailed Stage=InvalidSignature Hr=0x%08X Mode=%u BytesRead=%u DurationMs=%llu", _hr, grfMode, cbRead, _dur);
-            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, _buf);
-        }}
+        WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE,
+            L"PropertyStoreInitializeFailed Stage=InvalidSignature Hr=0x%08X Mode=%u BytesRead=%u DurationMs=%llu", _hr, grfMode, cbRead, _dur);
         return E_FAIL;
     }
 
     UINT32 headerLength = 0;
     memcpy(&headerLength, preamble + 8, sizeof(UINT32));
     if (headerLength == 0 || headerLength > xisf::XISFParser::kMaxHeaderBytes) {
-        { HRESULT _hr = HRESULT_FROM_WIN32(ERROR_INVALID_DATA); ULONGLONG _dur = GetTickCount64() - initStart;
+        const HRESULT _hr = HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+        const ULONGLONG _dur = GetTickCount64() - initStart;
         TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeFailed",
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE),
@@ -291,17 +309,16 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
             TraceLoggingUInt32(grfMode, "Mode"),
             TraceLoggingUInt32(headerLength, "HeaderBytes"),
             TraceLoggingUInt64(_dur, "DurationMs"));
-        if (g_xisfPropertyHandlerTelemetryHook) {
-            wchar_t _buf[384]; swprintf_s(_buf, L"PropertyStoreInitializeFailed Stage=HeaderLength Hr=0x%08X Mode=%u HeaderBytes=%u DurationMs=%llu", _hr, grfMode, headerLength, _dur);
-            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, _buf);
-        }}
+        WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE,
+            L"PropertyStoreInitializeFailed Stage=HeaderLength Hr=0x%08X Mode=%u HeaderBytes=%u DurationMs=%llu", _hr, grfMode, headerLength, _dur);
         return E_FAIL;
     }
 
     std::vector<char> xmlBuf(headerLength + 1, 0);
     hr = ReadAll(pStream, xmlBuf.data(), headerLength, &cbRead);
     if (FAILED(hr) || cbRead < headerLength) {
-        { HRESULT _hr = FAILED(hr) ? hr : E_FAIL; ULONGLONG _dur = GetTickCount64() - initStart;
+        const HRESULT _hr = FAILED(hr) ? hr : E_FAIL;
+        const ULONGLONG _dur = GetTickCount64() - initStart;
         TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeFailed",
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE),
@@ -311,17 +328,15 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
             TraceLoggingUInt32(cbRead, "BytesRead"),
             TraceLoggingUInt32(headerLength, "HeaderBytes"),
             TraceLoggingUInt64(_dur, "DurationMs"));
-        if (g_xisfPropertyHandlerTelemetryHook) {
-            wchar_t _buf[384]; swprintf_s(_buf, L"PropertyStoreInitializeFailed Stage=ReadHeader Hr=0x%08X Mode=%u BytesRead=%u HeaderBytes=%u DurationMs=%llu", _hr, grfMode, cbRead, headerLength, _dur);
-            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, _buf);
-        }}
+        WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE,
+            L"PropertyStoreInitializeFailed Stage=ReadHeader Hr=0x%08X Mode=%u BytesRead=%u HeaderBytes=%u DurationMs=%llu", _hr, grfMode, cbRead, headerLength, _dur);
         return E_FAIL;
     }
 
     std::string xml(xmlBuf.data(), headerLength);
     auto result = xisf::XISFParser::ParseXMLString(xml);
     if (!result.ok()) {
-        { ULONGLONG _dur = GetTickCount64() - initStart;
+        const ULONGLONG _dur = GetTickCount64() - initStart;
         TraceLoggingWrite(g_hPropertyProvider, "PropertyStoreInitializeFailed",
             TraceLoggingLevel(TRACE_LEVEL_WARNING),
             TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE),
@@ -330,10 +345,8 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
             TraceLoggingUInt32(grfMode, "Mode"),
             TraceLoggingUInt32(headerLength, "HeaderBytes"),
             TraceLoggingUInt64(_dur, "DurationMs"));
-        if (g_xisfPropertyHandlerTelemetryHook) {
-            wchar_t _buf[384]; swprintf_s(_buf, L"PropertyStoreInitializeFailed Stage=ParseXml Hr=0x%08X Mode=%u HeaderBytes=%u DurationMs=%llu", E_FAIL, grfMode, headerLength, _dur);
-            g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE, _buf);
-        }}
+        WritePropertyHandlerTelemetry(TRACE_LEVEL_WARNING, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PARSE,
+            L"PropertyStoreInitializeFailed Stage=ParseXml Hr=0x%08X Mode=%u HeaderBytes=%u DurationMs=%llu", E_FAIL, grfMode, headerLength, _dur);
         return E_FAIL;
     }
     m_metadata = std::move(result.metadata);
@@ -348,10 +361,9 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
         TraceLoggingUInt32(_fitsCount, "FitsKeywordCount"),
         TraceLoggingUInt32(_propCount, "XisfPropertyCount"),
         TraceLoggingUInt64(_dur, "DurationMs"));
-    if (g_xisfPropertyHandlerTelemetryHook) {
-        wchar_t _buf[384]; swprintf_s(_buf, L"PropertyStoreMetadataParsed HeaderBytes=%u FitsKeywordCount=%u XisfPropertyCount=%u DurationMs=%llu", headerLength, _fitsCount, _propCount, _dur);
-        g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PARSE | XISF_ETW_KEYWORD_PERF, _buf);
-    }}
+    WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PARSE | XISF_ETW_KEYWORD_PERF,
+        L"PropertyStoreMetadataParsed HeaderBytes=%u FitsKeywordCount=%u XisfPropertyCount=%u DurationMs=%llu", headerLength, _fitsCount, _propCount, _dur);
+    }
 
     // Read feature tier and projection flag per-Initialize (not cached)
     const xisf::FeatureTier tier = xisf::GetFeatureTier();
@@ -363,10 +375,9 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
         TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE),
         TraceLoggingUInt32(_tier, "Tier"),
         TraceLoggingBoolean(_proj, "ProjectionEnabled"));
-    if (g_xisfPropertyHandlerTelemetryHook) {
-        wchar_t _buf[128]; swprintf_s(_buf, L"FeatureTierLoaded Tier=%u ProjectionEnabled=%u", _tier, _proj);
-        g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_LIFECYCLE, _buf);
-    }}
+    WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_LIFECYCLE,
+        L"FeatureTierLoaded Tier=%u ProjectionEnabled=%u", _tier, _proj);
+    }
 
     {
         std::lock_guard<std::mutex> lock(m_propertyLock);
@@ -417,10 +428,9 @@ IFACEMETHODIMP CXISFPropertyHandler::Initialize(IStream* pStream, DWORD grfMode)
         TraceLoggingKeyword(XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PERF),
         TraceLoggingUInt32(_propCount, "PropertyCount"),
         TraceLoggingUInt64(_dur, "DurationMs"));
-    if (g_xisfPropertyHandlerTelemetryHook) {
-        wchar_t _buf[256]; swprintf_s(_buf, L"PropertyStoreInitializeCompleted PropertyCount=%u DurationMs=%llu", _propCount, _dur);
-        g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PERF, _buf);
-    }}
+    WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_LIFECYCLE | XISF_ETW_KEYWORD_PERF,
+        L"PropertyStoreInitializeCompleted PropertyCount=%u DurationMs=%llu", _propCount, _dur);
+    }
     return S_OK;
 }
 
@@ -441,13 +451,9 @@ void CXISFPropertyHandler::PopulateProperties(xisf::FeatureTier tier, bool proje
     if (!cam.empty()) AddStringProp(PKEY_XISF_CameraModel, cam);
 
     // Focal Length (FITS in mm, Property in meters)
-    std::string flRaw = m_metadata.getFITSValue("FOCALLEN");
-    double focalLength = 0; bool hasFL = false;
-    if (!flRaw.empty()) { hasFL = TryParseDouble(flRaw, &focalLength); }
-    else {
-        std::string flProp = m_metadata.getPropertyValue("Instrument:Telescope:FocalLength");
-        double flM; if (TryParseDouble(flProp, &flM)) { focalLength = flM * 1000.0; hasFL = true; }
-    }
+    auto focalLengthOpt = TryResolveFocalLengthMM();
+    double focalLength = focalLengthOpt.value_or(0.0);
+    bool hasFL = focalLengthOpt.has_value();
     if (hasFL) AddDoubleProp(PKEY_XISF_FocalLength, focalLength);
 
     // F-Number
@@ -473,20 +479,16 @@ void CXISFPropertyHandler::PopulateProperties(xisf::FeatureTier tier, bool proje
     if (!imgType.empty()) AddStringProp(PKEY_XISF_ImageType, imgType);
 
     // Gain (UInt32)
-    std::string gainRaw = GetFITSOrProp("GAIN", "Instrument:Camera:Gain");
-    double gainD; if (TryParseDouble(gainRaw, &gainD)) AddUInt32Prop(PKEY_XISF_Gain, static_cast<uint32_t>(gainD));
+    TryAddUInt32Prop(PKEY_XISF_Gain, "GAIN", "Instrument:Camera:Gain");
 
     // Offset (UInt32)
-    std::string offsetRaw = GetFITSOrProp("OFFSET", "Instrument:Camera:Offset");
-    double offD; if (TryParseDouble(offsetRaw, &offD)) AddUInt32Prop(PKEY_XISF_Offset, static_cast<uint32_t>(offD));
+    TryAddUInt32Prop(PKEY_XISF_Offset, "OFFSET", "Instrument:Camera:Offset");
 
     // Sensor Temperature
-    std::string sensorT = GetFITSOrProp("CCD-TEMP", "Instrument:Sensor:Temperature");
-    double sTemp; if (TryParseDouble(sensorT, &sTemp)) AddDoubleProp(PKEY_XISF_SensorTemperature, sTemp);
+    TryAddDoubleProp(PKEY_XISF_SensorTemperature, "CCD-TEMP", "Instrument:Sensor:Temperature");
 
     // Telescope
-    std::string tel = GetFITSOrProp("TELESCOP", "Instrument:Telescope:Name");
-    if (!tel.empty()) AddStringProp(PKEY_XISF_Telescope, tel);
+    TryAddStringProp(PKEY_XISF_Telescope, "TELESCOP", "Instrument:Telescope:Name");
 
     // Binning
     std::string binX = m_metadata.getFITSValue("XBINNING");
@@ -511,46 +513,34 @@ void CXISFPropertyHandler::PopulateProperties(xisf::FeatureTier tier, bool proje
     if (hasDec) AddDoubleProp(PKEY_XISF_Dec, decDeg);
 
     // Set Temperature
-    std::string setT = GetFITSOrProp("SET-TEMP", "Instrument:Camera:SetTemperature");
-    double setTemp; if (TryParseDouble(setT, &setTemp)) AddDoubleProp(PKEY_XISF_SetTemp, setTemp);
+    TryAddDoubleProp(PKEY_XISF_SetTemp, "SET-TEMP", "Instrument:Camera:SetTemperature");
 
     // Pixel Size
     std::string pxRaw = GetFITSOrProp("XPIXSZ", "Instrument:Sensor:XPixelSize");
     double pxSize; if (TryParseDouble(pxRaw, &pxSize)) AddDoubleProp(PKEY_XISF_PixelSize, pxSize);
 
     // Readout Mode
-    std::string rdMode = GetFITSOrProp("READOUTM", "Instrument:Camera:ReadoutMode");
-    if (!rdMode.empty()) AddStringProp(PKEY_XISF_ReadoutMode, rdMode);
+    TryAddStringProp(PKEY_XISF_ReadoutMode, "READOUTM", "Instrument:Camera:ReadoutMode");
 
     // Bayer Pattern
-    std::string bayer = GetFITSOrProp("BAYERPAT", "Instrument:Sensor:BayerPattern");
-    if (!bayer.empty()) AddStringProp(PKEY_XISF_BayerPattern, bayer);
+    TryAddStringProp(PKEY_XISF_BayerPattern, "BAYERPAT", "Instrument:Sensor:BayerPattern");
 
     // Site coordinates
-    std::string latRaw = GetFITSOrProp("SITELAT", "Observation:Location:Latitude");
-    double lat; if (TryParseDouble(latRaw, &lat)) AddDoubleProp(PKEY_XISF_SiteLatitude, lat);
-    std::string lonRaw = GetFITSOrProp("SITELONG", "Observation:Location:Longitude");
-    double lon; if (TryParseDouble(lonRaw, &lon)) AddDoubleProp(PKEY_XISF_SiteLongitude, lon);
-    std::string elevRaw = GetFITSOrProp("SITEELEV", "Observation:Location:Elevation");
-    double elev; if (TryParseDouble(elevRaw, &elev)) AddDoubleProp(PKEY_XISF_SiteElevation, elev);
+    TryAddDoubleProp(PKEY_XISF_SiteLatitude, "SITELAT", "Observation:Location:Latitude");
+    TryAddDoubleProp(PKEY_XISF_SiteLongitude, "SITELONG", "Observation:Location:Longitude");
+    TryAddDoubleProp(PKEY_XISF_SiteElevation, "SITEELEV", "Observation:Location:Elevation");
 
     // Altitude, Azimuth, Airmass
-    std::string altRaw = GetFITSOrProp("CENTALT", "Observation:Center:Alt");
-    double alt; if (TryParseDouble(altRaw, &alt)) AddDoubleProp(PKEY_XISF_Altitude, alt);
-    std::string azRaw = GetFITSOrProp("CENTAZ", "Observation:Center:Az");
-    double az; if (TryParseDouble(azRaw, &az)) AddDoubleProp(PKEY_XISF_Azimuth, az);
-    std::string amRaw = GetFITSOrProp("AIRMASS", "Observation:Airmass");
-    double am; if (TryParseDouble(amRaw, &am)) AddDoubleProp(PKEY_XISF_Airmass, am);
+    TryAddDoubleProp(PKEY_XISF_Altitude, "CENTALT", "Observation:Center:Alt");
+    TryAddDoubleProp(PKEY_XISF_Azimuth, "CENTAZ", "Observation:Center:Az");
+    TryAddDoubleProp(PKEY_XISF_Airmass, "AIRMASS", "Observation:Airmass");
 
     // Pier Side
-    std::string pier = GetFITSOrProp("PIERSIDE", "Instrument:Telescope:PierSide");
-    if (!pier.empty()) AddStringProp(PKEY_XISF_PierSide, pier);
+    TryAddStringProp(PKEY_XISF_PierSide, "PIERSIDE", "Instrument:Telescope:PierSide");
 
     // Object RA/Dec (formatted strings for display)
-    std::string objRA = GetFITSOrProp("OBJCTRA", "Observation:Object:RA");
-    if (!objRA.empty()) AddStringProp(PKEY_XISF_ObjectRA, objRA);
-    std::string objDec = GetFITSOrProp("OBJCTDEC", "Observation:Object:Dec");
-    if (!objDec.empty()) AddStringProp(PKEY_XISF_ObjectDec, objDec);
+    TryAddStringProp(PKEY_XISF_ObjectRA, "OBJCTRA", "Observation:Object:RA");
+    TryAddStringProp(PKEY_XISF_ObjectDec, "OBJCTDEC", "Observation:Object:Dec");
 
     // Object RA/Dec as numeric degrees
     double objRaDeg = 0, objDecDeg = 0;
@@ -558,56 +548,37 @@ void CXISFPropertyHandler::PopulateProperties(xisf::FeatureTier tier, bool proje
     bool hasObjDec = TryParseDouble(m_metadata.getPropertyValue("Observation:Object:Dec"), &objDecDeg);
 
     // Rotation
-    std::string rotRaw = GetFITSOrProp("ROTATANG", "Instrument:Rotator:Angle");
-    double rot; if (TryParseDouble(rotRaw, &rot)) AddDoubleProp(PKEY_XISF_Rotation, rot);
+    TryAddDoubleProp(PKEY_XISF_Rotation, "ROTATANG", "Instrument:Rotator:Angle");
 
     // Focuser
-    std::string focName = GetFITSOrProp("FOCNAME", "Instrument:Focuser:Name");
-    if (!focName.empty()) AddStringProp(PKEY_XISF_FocuserName, focName);
-    std::string focPos = GetFITSOrProp("FOCPOS", "Instrument:Focuser:Position");
-    double fpD; if (TryParseDouble(focPos, &fpD)) AddUInt32Prop(PKEY_XISF_FocuserPosition, static_cast<uint32_t>(fpD));
-    std::string focTemp = GetFITSOrProp("FOCTEMP", "Instrument:Focuser:Temperature");
-    double ft; if (TryParseDouble(focTemp, &ft)) AddDoubleProp(PKEY_XISF_FocuserTemp, ft);
+    TryAddStringProp(PKEY_XISF_FocuserName, "FOCNAME", "Instrument:Focuser:Name");
+    TryAddUInt32Prop(PKEY_XISF_FocuserPosition, "FOCPOS", "Instrument:Focuser:Position");
+    TryAddDoubleProp(PKEY_XISF_FocuserTemp, "FOCTEMP", "Instrument:Focuser:Temperature");
 
     // Rotator
-    std::string rotName = GetFITSOrProp("ROTNAME", "Instrument:Rotator:Name");
-    if (!rotName.empty()) AddStringProp(PKEY_XISF_RotatorName, rotName);
-    std::string rotAng = GetFITSOrProp("ROTATOR", "Instrument:Rotator:MechanicalAngle");
-    double ra2; if (TryParseDouble(rotAng, &ra2)) AddDoubleProp(PKEY_XISF_RotatorAngle, ra2);
+    TryAddStringProp(PKEY_XISF_RotatorName, "ROTNAME", "Instrument:Rotator:Name");
+    TryAddDoubleProp(PKEY_XISF_RotatorAngle, "ROTATOR", "Instrument:Rotator:MechanicalAngle");
 
     // Filter Wheel
-    std::string fw = GetFITSOrProp("FWHEEL", "Instrument:FilterWheel:Name");
-    if (!fw.empty()) AddStringProp(PKEY_XISF_FilterWheel, fw);
+    TryAddStringProp(PKEY_XISF_FilterWheel, "FWHEEL", "Instrument:FilterWheel:Name");
 
     // Weather
-    std::string dpRaw = GetFITSOrProp("DEWPOINT", "Weather:DewPoint");
-    double dp; if (TryParseDouble(dpRaw, &dp)) AddDoubleProp(PKEY_XISF_DewPoint, dp);
-    std::string humRaw = GetFITSOrProp("HUMIDITY", "Weather:Humidity");
-    double hum; if (TryParseDouble(humRaw, &hum)) AddDoubleProp(PKEY_XISF_Humidity, hum);
-    std::string ambRaw = GetFITSOrProp("AMBTEMP", "Weather:Temperature");
-    double ambT; if (TryParseDouble(ambRaw, &ambT)) AddDoubleProp(PKEY_XISF_AmbientTemp, ambT);
+    TryAddDoubleProp(PKEY_XISF_DewPoint, "DEWPOINT", "Weather:DewPoint");
+    TryAddDoubleProp(PKEY_XISF_Humidity, "HUMIDITY", "Weather:Humidity");
+    TryAddDoubleProp(PKEY_XISF_AmbientTemp, "AMBTEMP", "Weather:Temperature");
 
     // Weather — extended
-    std::string starFwhmRaw = GetFITSOrProp("STARFWHM", "Weather:StarFWHM");
-    double starFwhm; if (TryParseDouble(starFwhmRaw, &starFwhm)) AddDoubleProp(PKEY_XISF_StarFWHM, starFwhm);
-    std::string sqmRaw = GetFITSOrProp("MPSAS", "Weather:SkyQuality");
-    double sqm; if (TryParseDouble(sqmRaw, &sqm)) AddDoubleProp(PKEY_XISF_SkyQuality, sqm);
-    std::string skyBrtRaw = GetFITSOrProp("SKYBRGHT", "Weather:SkyBrightness");
-    double skyBrt; if (TryParseDouble(skyBrtRaw, &skyBrt)) AddDoubleProp(PKEY_XISF_SkyBrightness, skyBrt);
-    std::string cloudRaw = GetFITSOrProp("CLOUDCVR", "Weather:CloudCover");
-    double cloud; if (TryParseDouble(cloudRaw, &cloud)) AddDoubleProp(PKEY_XISF_CloudCover, cloud);
-    std::string pressRaw = GetFITSOrProp("PRESSURE", "Weather:Pressure");
-    double press; if (TryParseDouble(pressRaw, &press)) AddDoubleProp(PKEY_XISF_Pressure, press);
-    std::string skyTempRaw = GetFITSOrProp("SKYTEMP", "Weather:SkyTemperature");
-    double skyTemp; if (TryParseDouble(skyTempRaw, &skyTemp)) AddDoubleProp(PKEY_XISF_SkyTemp, skyTemp);
-    std::string windRaw = GetFITSOrProp("WINDSPD", "Weather:WindSpeed");
-    double wind; if (TryParseDouble(windRaw, &wind)) AddDoubleProp(PKEY_XISF_WindSpeed, wind);
+    TryAddDoubleProp(PKEY_XISF_StarFWHM, "STARFWHM", "Weather:StarFWHM");
+    TryAddDoubleProp(PKEY_XISF_SkyQuality, "MPSAS", "Weather:SkyQuality");
+    TryAddDoubleProp(PKEY_XISF_SkyBrightness, "SKYBRGHT", "Weather:SkyBrightness");
+    TryAddDoubleProp(PKEY_XISF_CloudCover, "CLOUDCVR", "Weather:CloudCover");
+    TryAddDoubleProp(PKEY_XISF_Pressure, "PRESSURE", "Weather:Pressure");
+    TryAddDoubleProp(PKEY_XISF_SkyTemp, "SKYTEMP", "Weather:SkyTemperature");
+    TryAddDoubleProp(PKEY_XISF_WindSpeed, "WINDSPD", "Weather:WindSpeed");
 
     // Guiding RMS
-    std::string guideRARaw = GetFITSOrProp("GUIDERA", "Guider:RMS:RA");
-    double guideRA; if (TryParseDouble(guideRARaw, &guideRA)) AddDoubleProp(PKEY_XISF_GuideRA, guideRA);
-    std::string guideDecRaw = GetFITSOrProp("GUIDEDEC", "Guider:RMS:Dec");
-    double guideDec; if (TryParseDouble(guideDecRaw, &guideDec)) AddDoubleProp(PKEY_XISF_GuideDec, guideDec);
+    TryAddDoubleProp(PKEY_XISF_GuideRA, "GUIDERA", "Guider:RMS:RA");
+    TryAddDoubleProp(PKEY_XISF_GuideDec, "GUIDEDEC", "Guider:RMS:Dec");
 
     // Date Local
     std::string dateLocal = GetFITSOrProp("DATE-LOC", "Observation:Time:Local");
@@ -678,23 +649,13 @@ void CXISFPropertyHandler::PopulateProperties(xisf::FeatureTier tier, bool proje
             pixelStats.available, pixelStats.median, pixelStats.p95
         };
 
-        auto computed = xisf::PopulateComputedProperties(inputs);
-        for (auto& entry : computed) {
-            switch (entry.type) {
-            case xisf::ComputedPropertyEntry::Type::String:
-                AddStringProp(entry.key, entry.stringValue);
-                break;
-            case xisf::ComputedPropertyEntry::Type::Double:
-                AddDoubleProp(entry.key, entry.doubleValue);
-                break;
-            case xisf::ComputedPropertyEntry::Type::UInt32:
-                AddUInt32Prop(entry.key, entry.uint32Value);
-                break;
-            case xisf::ComputedPropertyEntry::Type::StringList:
-                AddStringListProp(entry.key, entry.stringListValue);
-                break;
-            }
-        }
+        xisf::ComputedPropertySink sink{
+            [this](const PROPERTYKEY& k, const std::string& v) { AddStringProp(k, v); },
+            [this](const PROPERTYKEY& k, double v) { AddDoubleProp(k, v); },
+            [this](const PROPERTYKEY& k, uint32_t v) { AddUInt32Prop(k, v); },
+            [this](const PROPERTYKEY& k, const std::vector<std::string>& v) { AddStringListProp(k, v); }
+        };
+        xisf::PopulateComputedProperties(inputs, sink);
     }
 
     { UINT32 _propCount = static_cast<UINT32>(m_properties.size());
@@ -706,10 +667,9 @@ void CXISFPropertyHandler::PopulateProperties(xisf::FeatureTier tier, bool proje
         TraceLoggingUInt32(_propCount, "PropertyCount"),
         TraceLoggingUInt32(_tier, "FeatureTier"),
         TraceLoggingUInt64(_dur, "DurationMs"));
-    if (g_xisfPropertyHandlerTelemetryHook) {
-        wchar_t _buf[256]; swprintf_s(_buf, L"PropertyPopulation PropertyCount=%u FeatureTier=%u DurationMs=%llu", _propCount, _tier, _dur);
-        g_xisfPropertyHandlerTelemetryHook(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PARSE | XISF_ETW_KEYWORD_PERF, _buf);
-    }}
+    WritePropertyHandlerTelemetry(TRACE_LEVEL_INFORMATION, XISF_ETW_KEYWORD_PARSE | XISF_ETW_KEYWORD_PERF,
+        L"PropertyPopulation PropertyCount=%u FeatureTier=%u DurationMs=%llu", _propCount, _tier, _dur);
+    }
 }
 
 IFACEMETHODIMP CXISFPropertyHandler::GetCount(DWORD* cProps) {

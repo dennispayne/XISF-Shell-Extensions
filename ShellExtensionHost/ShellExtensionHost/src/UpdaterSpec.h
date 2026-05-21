@@ -2,16 +2,11 @@
 //
 // SECURITY MODEL
 // --------------
-// Updates are fetched only from the pinned GitHub repo via the releases/latest
-// API. The MSI URL must match the expected host. The SHA-256 of the MSI is
-// verified against SHA256SUMS.txt that is downloaded alongside the MSI.
-//
-// Authenticode signer pinning is opt-in: set kExpectedSignerThumbprint to a
-// non-empty SHA-1 thumbprint (40 lower-case hex chars) once the MSI is signed.
-// An empty thumbprint disables signer pinning (acceptable until a signing
-// certificate is obtained).
-//
-// Downgrades are blocked by default.
+// Updates are fetched only from the pinned GitHub repo via releases/latest.
+// The MSI URL must match the allow-listed host; the SHA-256 of the MSI is
+// verified against SHA256SUMS.txt fetched alongside it. Authenticode signer
+// pinning is opt-in (empty kExpectedSignerThumbprint = disabled). Downgrades
+// are blocked by default.
 #pragma once
 
 #include <cstdint>
