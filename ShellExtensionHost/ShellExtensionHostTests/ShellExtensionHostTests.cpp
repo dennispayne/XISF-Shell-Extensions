@@ -72,6 +72,7 @@ namespace
     std::string ReadUtf8File(const std::wstring& path)
     {
         std::ifstream in(std::filesystem::path(path), std::ios::binary);
+        Assert::IsTrue(in.is_open(), L"expected catalog artifact to be readable");
         return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
     }
 }
