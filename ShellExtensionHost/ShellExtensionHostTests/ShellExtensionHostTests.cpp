@@ -679,7 +679,10 @@ namespace ShellExtensionHostTests_CatalogInstaller
             return sc;
         }
 
-        SyntheticCatalog MakePinnedDownloadSource(const CatalogSource& base, const wchar_t* stem, const wchar_t* urlOverride = nullptr)
+        SyntheticCatalog MakePinnedDownloadSource(const CatalogSource& base,
+                                                  const wchar_t* stem,
+                                                  const wchar_t* urlOverride = nullptr,
+                                                  bool keepCanonicalFileName = false)
         {
             SyntheticCatalog sc;
             wchar_t unique[96]{};
@@ -688,7 +691,7 @@ namespace ShellExtensionHostTests_CatalogInstaller
                           static_cast<unsigned long long>(GetTickCount64()),
                           GetCurrentThreadId());
             sc.displayName = std::wstring(base.displayName);
-            sc.fileName = unique;
+            sc.fileName = keepCanonicalFileName ? std::wstring(base.fileName) : std::wstring(unique);
             sc.url = urlOverride ? std::wstring(urlOverride) : std::wstring(base.url);
             sc.hash = std::wstring(base.expectedSha256);
             sc.sourceUrl = std::wstring(base.sourceUrl);
@@ -783,7 +786,7 @@ namespace ShellExtensionHostTests_CatalogInstaller
 
         TEST_METHOD(InstallFromPinnedUrl_DownloadsSharplessCatalogEndToEnd)
         {
-            auto sc = MakePinnedDownloadSource(kSharpless, L"xisf-download-sharpless");
+            auto sc = MakePinnedDownloadSource(kSharpless, L"xisf-download-sharpless", nullptr, true);
             CleanupInstalled(sc);
 
             Report r = InstallFromPinnedUrl(sc.src, nullptr, nullptr);
@@ -805,7 +808,7 @@ namespace ShellExtensionHostTests_CatalogInstaller
 
         TEST_METHOD(InstallFromPinnedUrl_DownloadsConstellationsCatalogEndToEnd)
         {
-            auto sc = MakePinnedDownloadSource(kConstellations, L"xisf-download-constellations");
+            auto sc = MakePinnedDownloadSource(kConstellations, L"xisf-download-constellations", nullptr, true);
             CleanupInstalled(sc);
 
             Report r = InstallFromPinnedUrl(sc.src, nullptr, nullptr);
@@ -829,7 +832,7 @@ namespace ShellExtensionHostTests_CatalogInstaller
 
         TEST_METHOD(InstallFromPinnedUrl_DownloadedConstellationsTempArtifactSupportsLookups)
         {
-            auto sc = MakePinnedDownloadSource(kConstellations, L"xisf-download-constellations-temp");
+            auto sc = MakePinnedDownloadSource(kConstellations, L"xisf-download-constellations-temp", nullptr, true);
             CleanupInstalled(sc);
 
             Report r = InstallFromPinnedUrl(sc.src, nullptr, nullptr);
