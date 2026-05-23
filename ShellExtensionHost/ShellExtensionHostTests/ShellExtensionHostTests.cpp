@@ -29,6 +29,7 @@
 #include "HandlerDllPath.h"
 #include "UpdaterSpec.h"
 #include "UpdaterInternals.h"
+#include "ConstellationDB.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -66,6 +67,12 @@ namespace
             if (ca != cb) return false;
         }
         return true;
+    }
+
+    std::string ReadUtf8File(const std::wstring& path)
+    {
+        std::ifstream in(std::filesystem::path(path), std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
     }
 }
 
@@ -771,6 +778,87 @@ namespace ShellExtensionHostTests_CatalogInstaller
 
             auto dest = xisf::paths::CatalogFile(sc.fileName.c_str());
             Assert::AreEqual<DWORD>(INVALID_FILE_ATTRIBUTES, GetFileAttributesW(dest.c_str()));
+        }
+
+        TEST_METHOD(InstallFromPinnedUrl_DownloadsSharplessCatalogEndToEnd)
+        {
+            auto sc = MakePinnedDownloadSource(kSharpless, L"xisf-download-sharpless");
+            CleanupInstalled(sc);
+
+            Report r = InstallFromPinnedUrl(sc.src, nullptr, nullptr);
+            Assert::IsTrue(r.result == Result::Ok,
+                           (std::wstring(L"downloaded Sharpless catalog should install successfully: ") + r.errorDetail).c_str());
+
+            auto installed = xisf::paths::CatalogFile(sc.fileName.c_str());
+            auto contents = ReadUtf8File(installed);
+            Assert::IsFalse(contents.empty(), L"Sharpless download should produce a transformed catalog file");
+            Assert::IsTrue(contents.rfind("Name;Type;RA;Dec;Const;", 0) == 0,
+                           L"Sharpless download should be transformed into OpenNGC-style CSV");
+
+            Presence p = Probe(sc.src);
+            Assert::IsTrue(p.state == PresenceState::PresentVerified,
+                           L"downloaded Sharpless catalog should probe as present");
+
+            CleanupInstalled(sc);
+        }
+
+        TEST_METHOD(InstallFromPinnedUrl_DownloadsConstellationsCatalogEndToEnd)
+        {
+            auto sc = MakePinnedDownloadSource(kConstellations, L"xisf-download-constellations");
+            CleanupInstalled(sc);
+
+            Report r = InstallFromPinnedUrl(sc.src, nullptr, nullptr);
+            Assert::IsTrue(r.result == Result::Ok,
+                           (std::wstring(L"downloaded constellation catalog should install successfully: ") + r.errorDetail).c_str());
+
+            auto installed = xisf::paths::CatalogFile(sc.fileName.c_str());
+            auto contents = ReadUtf8File(installed);
+            Assert::IsFalse(contents.empty(), L"Constellation download should produce a transformed catalog file");
+            Assert::IsTrue(contents.find("N,Ori,Orion") != std::string::npos,
+                           L"Constellation download should contain translated abbreviation/name rows");
+            Assert::IsTrue(contents.find('\t') == std::string::npos,
+                           L"Constellation download should be transformed out of VizieR TSV format");
+
+            Presence p = Probe(sc.src);
+            Assert::IsTrue(p.state == PresenceState::PresentVerified,
+                           L"downloaded constellation catalog should probe as present");
+
+            CleanupInstalled(sc);
+        }
+
+        TEST_METHOD(InstallFromPinnedUrl_DownloadedConstellationsTempArtifactSupportsLookups)
+        {
+            auto sc = MakePinnedDownloadSource(kConstellations, L"xisf-download-constellations-temp");
+            CleanupInstalled(sc);
+
+            Report r = InstallFromPinnedUrl(sc.src, nullptr, nullptr);
+            Assert::IsTrue(r.result == Result::Ok,
+                           (std::wstring(L"downloaded constellation catalog should install successfully: ") + r.errorDetail).c_str());
+
+            auto installed = xisf::paths::CatalogFile(sc.fileName.c_str());
+            auto tempArtifact = WriteTempFile({});
+            Assert::IsTrue(CopyFileW(installed.c_str(), tempArtifact.c_str(), FALSE) != 0,
+                           L"downloaded constellation catalog should copy to a temp artifact");
+
+            CleanupInstalled(sc);
+            Assert::AreEqual<DWORD>(INVALID_FILE_ATTRIBUTES, GetFileAttributesW(installed.c_str()));
+
+            const auto tempArtifactPath = std::filesystem::path(tempArtifact).string();
+            Assert::IsTrue(xisf::ConstellationDB::LoadFromCSV(tempArtifactPath),
+                           L"downloaded temp artifact should load into ConstellationDB");
+
+            Assert::AreEqual(std::string("Boo"), xisf::ConstellationDB::Identify(232.661, 39.582),
+                             L"downloaded temp artifact should keep the Bootes regression fix.");
+            Assert::AreEqual(std::string("UMi"), xisf::ConstellationDB::Identify(359.456, 89.863),
+                             L"downloaded temp artifact should still cover polar coordinates.");
+            Assert::AreEqual(std::string("Ser"), xisf::ConstellationDB::Identify(274.7000, -13.7830),
+                             L"M 16 should map to Serpens from the downloaded temp artifact.");
+            Assert::AreEqual(std::string("And"), xisf::ConstellationDB::Identify(10.6847, 41.2692),
+                             L"M 31 should map to Andromeda from the downloaded temp artifact.");
+            Assert::AreEqual(std::string("Ori"), xisf::ConstellationDB::Identify(83.8221, -5.3911),
+                             L"Orion Nebula should map to Orion from the downloaded temp artifact.");
+
+            DeleteFileW(tempArtifact.c_str());
         }
 
         TEST_METHOD(InstallFromLocalFile_HashMismatch_Rejected_NoInstall)
