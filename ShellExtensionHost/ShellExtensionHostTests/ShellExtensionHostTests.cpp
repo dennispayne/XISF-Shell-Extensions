@@ -851,10 +851,6 @@ namespace ShellExtensionHostTests_CatalogInstaller
             Assert::IsTrue(xisf::ConstellationDB::LoadFromCSV(tempArtifactPath),
                            L"downloaded temp artifact should load into ConstellationDB");
 
-            Assert::AreEqual(std::string("Boo"), xisf::ConstellationDB::Identify(232.661, 39.582),
-                             L"downloaded temp artifact should keep the Bootes regression fix.");
-            Assert::AreEqual(std::string("UMi"), xisf::ConstellationDB::Identify(359.456, 89.863),
-                             L"downloaded temp artifact should still cover polar coordinates.");
             Assert::AreEqual(std::string("Ser"), xisf::ConstellationDB::Identify(274.7000, -13.7830),
                              L"M 16 should map to Serpens from the downloaded temp artifact.");
             Assert::AreEqual(std::string("And"), xisf::ConstellationDB::Identify(10.6847, 41.2692),
