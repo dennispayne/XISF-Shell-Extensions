@@ -218,6 +218,7 @@ void UpdateCatalogActionButtons();
 void RemoveImportedSourcePath(std::wstring_view fileName);
 void RefreshCatalogListControl();
 bool IsMutableCatalogSource(const catalogspec::CatalogSource& src);
+bool ShouldSkipSilentCatalogInstall(const catalogspec::CatalogSource& src, installer::PresenceState state);
 bool TryReadRegisteredDllPath(const wchar_t* clsid, std::wstring& out);
 INT_PTR CALLBACK AdvancedDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam);
 void OnCheckForUpdates();
@@ -561,8 +562,7 @@ int RunSilentCatalogInstall()
     int failures = 0;
     for (const auto* src : catalogspec::kAllCatalogs) {
         auto p = installer::Probe(*src);
-        if (!IsMutableCatalogSource(*src) &&
-            p.state == installer::PresenceState::PresentVerified)
+        if (ShouldSkipSilentCatalogInstall(*src, p.state))
             continue;
 
         installer::Report rep = installer::InstallFromPinnedUrl(
@@ -967,6 +967,11 @@ bool IsCatalogInstalled(const catalogspec::CatalogSource& src)
 bool IsMutableCatalogSource(const catalogspec::CatalogSource& src)
 {
     return _wcsicmp(src.sourceHashDisplay.data(), catalogspec::kSourceHashNA.data()) == 0;
+}
+
+bool ShouldSkipSilentCatalogInstall(const catalogspec::CatalogSource& src, installer::PresenceState state)
+{
+    return !IsMutableCatalogSource(src) && state == installer::PresenceState::PresentVerified;
 }
 
 bool IsCatalogUpToDate(const catalogspec::CatalogSource& src)

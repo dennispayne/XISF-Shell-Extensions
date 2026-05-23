@@ -187,6 +187,7 @@ public class MsiTests
     [TestMethod]
     public void CatalogDownload_CustomActionRunsAfterSearchPathSetup()
     {
+        const int sequenceColumn = 2; // InstallExecuteSequence.Action, Condition, Sequence
         var rows = QueryTable("InstallExecuteSequence")
             .Where(r =>
                 string.Equals(r[0], "CA_AddSearchPath", StringComparison.Ordinal) ||
@@ -203,8 +204,8 @@ public class MsiTests
         if (rows.TryGetValue("CA_AddSearchPath", out var addSearchPath))
         {
             Assert.IsTrue(
-                int.TryParse(rows["CA_SilentCatalogInstall"][2], out var silentSequence) &&
-                int.TryParse(addSearchPath[2], out var addSearchSequence) &&
+                int.TryParse(rows["CA_SilentCatalogInstall"][sequenceColumn], out var silentSequence) &&
+                int.TryParse(addSearchPath[sequenceColumn], out var addSearchSequence) &&
                 silentSequence > addSearchSequence,
                 "CA_SilentCatalogInstall must run after CA_AddSearchPath when both are scheduled.");
         }

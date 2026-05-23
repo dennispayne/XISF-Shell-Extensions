@@ -749,10 +749,14 @@ namespace ShellExtensionHostTests_CatalogInstaller
 
         TEST_METHOD(InstallFromPinnedUrl_NetworkFailureDoesNotInstallCatalog)
         {
+            const std::wstring missingAddendumUrl =
+                std::wstring(L"https://raw.githubusercontent.com/mattiaverga/OpenNGC/") +
+                std::wstring(kOpenNGCCommit) +
+                L"/database_files/does-not-exist.csv";
             auto sc = MakePinnedDownloadSource(
                 kAddendum,
                 L"xisf-download-missing",
-                L"https://raw.githubusercontent.com/mattiaverga/OpenNGC/36cb178a0f69dba8bfc03a99c10512831edf1c6b/database_files/does-not-exist.csv");
+                missingAddendumUrl.c_str());
             CleanupInstalled(sc);
 
             Report r = InstallFromPinnedUrl(sc.src, nullptr, nullptr);
