@@ -616,8 +616,7 @@ namespace ShellExtensionHostTests_CatalogSpec
 }
 
 // ===========================================================================
-// CatalogInstaller - offline import verifier + Probe
-// (No network calls; tests use InstallFromLocalFileVerified + Probe.)
+// CatalogInstaller - verified download/import flows + Probe
 // ===========================================================================
 namespace ShellExtensionHostTests_CatalogInstaller
 {
@@ -632,9 +631,12 @@ namespace ShellExtensionHostTests_CatalogInstaller
         // catalogs are never overwritten.
         struct SyntheticCatalog
         {
+            std::wstring  displayName;
             std::wstring  fileName;
             std::wstring  url;   // value unused by local-file install but kept sane
             std::wstring  hash;
+            std::wstring  sourceUrl;
+            std::wstring  sourceHashDisplay;
             CatalogSource src;
         };
 
@@ -655,14 +657,42 @@ namespace ShellExtensionHostTests_CatalogInstaller
             h.Update(bytes.data(), bytes.size());
             h.Finalize(d);
             sc.hash = xisf::ToHexLower(d);
+            sc.displayName = L"synthetic";
+            sc.sourceUrl = L"https://example.invalid/synthetic";
+            sc.sourceHashDisplay = sc.hash;
 
-            sc.src.displayName    = L"synthetic";
+            sc.src.displayName    = sc.displayName;
             sc.src.fileName       = sc.fileName;
             sc.src.url            = sc.url;
-            sc.src.sourceUrl      = L"https://example.invalid/synthetic";
+            sc.src.sourceUrl      = sc.sourceUrl;
             sc.src.expectedSha256 = sc.hash;
-            sc.src.sourceHashDisplay = sc.hash;
+            sc.src.sourceHashDisplay = sc.sourceHashDisplay;
             sc.src.maxBytes       = maxBytes;
+            return sc;
+        }
+
+        SyntheticCatalog MakePinnedDownloadSource(const CatalogSource& base, const wchar_t* stem, const wchar_t* urlOverride = nullptr)
+        {
+            SyntheticCatalog sc;
+            wchar_t unique[96]{};
+            std::swprintf(unique, 96, L"%ls-%llu-%lu.csv",
+                          stem,
+                          static_cast<unsigned long long>(GetTickCount64()),
+                          GetCurrentThreadId());
+            sc.displayName = std::wstring(base.displayName);
+            sc.fileName = unique;
+            sc.url = urlOverride ? std::wstring(urlOverride) : std::wstring(base.url);
+            sc.hash = std::wstring(base.expectedSha256);
+            sc.sourceUrl = std::wstring(base.sourceUrl);
+            sc.sourceHashDisplay = std::wstring(base.sourceHashDisplay);
+
+            sc.src.displayName = sc.displayName;
+            sc.src.fileName = sc.fileName;
+            sc.src.url = sc.url;
+            sc.src.sourceUrl = sc.sourceUrl;
+            sc.src.expectedSha256 = sc.hash;
+            sc.src.sourceHashDisplay = sc.sourceHashDisplay;
+            sc.src.maxBytes = base.maxBytes;
             return sc;
         }
 
@@ -698,6 +728,45 @@ namespace ShellExtensionHostTests_CatalogInstaller
 
             DeleteFileW(src.c_str());
             CleanupInstalled(sc);
+        }
+
+        TEST_METHOD(InstallFromPinnedUrl_DownloadsPinnedCatalogEndToEnd)
+        {
+            auto sc = MakePinnedDownloadSource(kAddendum, L"xisf-download");
+            CleanupInstalled(sc);
+
+            Report r = InstallFromPinnedUrl(sc.src, nullptr, nullptr);
+            Assert::IsTrue(r.result == Result::Ok,
+                           (std::wstring(L"downloaded catalog should install successfully: ") + r.errorDetail).c_str());
+
+            Presence p = Probe(sc.src);
+            Assert::IsTrue(p.state == PresenceState::PresentVerified,
+                           L"downloaded catalog should probe as verified");
+            Assert::IsTrue(IEqualsAscii(p.computedHash, sc.hash));
+
+            CleanupInstalled(sc);
+        }
+
+        TEST_METHOD(InstallFromPinnedUrl_NetworkFailureDoesNotInstallCatalog)
+        {
+            auto sc = MakePinnedDownloadSource(
+                kAddendum,
+                L"xisf-download-missing",
+                L"https://raw.githubusercontent.com/mattiaverga/OpenNGC/36cb178a0f69dba8bfc03a99c10512831edf1c6b/database_files/does-not-exist.csv");
+            CleanupInstalled(sc);
+
+            Report r = InstallFromPinnedUrl(sc.src, nullptr, nullptr);
+            Assert::IsTrue(
+                r.result == Result::HttpBadStatus ||
+                r.result == Result::HttpConnectFailed ||
+                r.result == Result::HttpRequestFailed,
+                (std::wstring(L"missing remote catalog should report an HTTP/network failure, got ") + std::to_wstring(static_cast<int>(r.result))).c_str());
+            if (r.result == Result::HttpBadStatus) {
+                Assert::AreEqual(404u, r.httpStatus);
+            }
+
+            auto dest = xisf::paths::CatalogFile(sc.fileName.c_str());
+            Assert::AreEqual<DWORD>(INVALID_FILE_ATTRIBUTES, GetFileAttributesW(dest.c_str()));
         }
 
         TEST_METHOD(InstallFromLocalFile_HashMismatch_Rejected_NoInstall)
