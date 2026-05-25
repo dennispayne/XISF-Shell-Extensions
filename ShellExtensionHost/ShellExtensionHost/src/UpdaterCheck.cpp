@@ -184,9 +184,9 @@ bool ParseRelease(const std::string& json, ReleaseInfo& info, std::wstring& erro
     info.version = std::wstring(tagName.begin(), tagName.end());
 
     // Find asset URLs. Parse the "assets" array by looking for the MSI name.
-    const std::string msiPrefixNarrow(kAssetPrefix.begin(), kAssetPrefix.end());
-    const std::string msiSuffixNarrow(kAssetSuffix.begin(), kAssetSuffix.end());
-    const std::string cksumName(kChecksumAssetName.begin(), kChecksumAssetName.end());
+    const std::string msiPrefixNarrow(kAssetPrefixNarrow);
+    const std::string msiSuffixNarrow(kAssetSuffixNarrow);
+    const std::string cksumName(kChecksumAssetNameNarrow);
 
     // Walk through "name"/"browser_download_url" pairs in the assets array.
     size_t pos = json.find("\"assets\"");

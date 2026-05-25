@@ -223,7 +223,9 @@ bool FetchText(const std::wstring& url, std::uint64_t maxBytes,
 // the given filename. Returns the 64-char lowercase hex, or empty string.
 std::wstring ParseChecksumFile(const std::string& content, const std::wstring& fileName)
 {
-    std::string narrowName(fileName.begin(), fileName.end());
+    std::string narrowName;
+    narrowName.reserve(fileName.size());
+    for (wchar_t c : fileName) narrowName += static_cast<char>(c);
     std::istringstream ss(content);
     std::string line;
     while (std::getline(ss, line)) {

@@ -21,9 +21,12 @@ inline constexpr std::wstring_view kRepo  = L"XISF-Shell-Extensions";
 // MSI asset filename: XISF.ShellExtensions_<version>_x64.msi
 inline constexpr std::wstring_view kAssetPrefix = L"XISF.ShellExtensions_";
 inline constexpr std::wstring_view kAssetSuffix = L"_x64.msi";
+inline constexpr std::string_view  kAssetPrefixNarrow = "XISF.ShellExtensions_";
+inline constexpr std::string_view  kAssetSuffixNarrow = "_x64.msi";
 
 // Companion checksum file published alongside the MSI.
 inline constexpr std::wstring_view kChecksumAssetName = L"SHA256SUMS.txt";
+inline constexpr std::string_view  kChecksumAssetNameNarrow = "SHA256SUMS.txt";
 
 // Hard ceiling on payload sizes (DoS / runaway-download guard).
 inline constexpr std::uint64_t kMaxMsiBytes      = 100ull * 1024ull * 1024ull; // 100 MB
