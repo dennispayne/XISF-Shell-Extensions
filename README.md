@@ -70,21 +70,22 @@ Under the hood, toggles write to:
 
 The Property Handler looks for catalog files in
 `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\` and loads whatever is present
-(`NGC.csv`, `addendum.csv`, `sharpless.csv`, `constellation_boundaries.csv`,
-`constellation_names.csv`). Missing files are simply skipped (constellation
-lookups fall back to compiled-in data when the CSV files are absent).
+(`NGC.csv`, `addendum.csv`, `sharpless.csv`, `constellations.csv`). Missing
+files are simply skipped (constellation lookups fall back to compiled-in data
+when the CSV files are absent).
 
 Two ways to install them:
 
-1. **Online (pinned + verified).** In the settings app, use the per-catalog
-   **Install / Update** buttons. The app downloads each file from a specific
-   pinned commit SHA over HTTPS (TLS 1.2+, cert validation enforced), hashes
-   the stream with SHA-256, and rejects any file whose hash does not match the
-   compiled-in pin. The download is written to a temp file and only
-   `MoveFileEx`-ed into place after verification.
+1. **Online (install-time + on-demand).** The MSI creates the shared catalog
+   directory but does **not** ship catalog seed files. Instead, the installer
+   runs the settings host in `--silent-install` mode to download current
+   catalogs after install, and the Settings app lets you refresh them later via
+   the catalog list's **Update Catalogs** action. Downloads use HTTPS (TLS
+   1.2+, cert validation enforced), hash while streaming, and only replace the
+   destination after validation/transformation completes.
    - `NGC.csv`, `addendum.csv` — from OpenNGC (mattiaverga/OpenNGC)
-   - `sharpless.csv`, `constellation_boundaries.csv`, `constellation_names.csv`
-     — from this project's own repository (`data/` directory)
+   - `sharpless.csv`, `constellations.csv` — generated at download time from
+     authoritative VizieR catalogs
 2. **Offline / custom import.** Click **Import from File…** and pick any CSV.
    The file is copied into the machine-wide catalog directory by filename
    (including additional catalogs beyond the built-in set). Imported rows

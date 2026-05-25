@@ -130,12 +130,12 @@ public class MsiTests
         => CollectionAssert.Contains(GetFileIds(), "xisf.propdesc");
 
     [TestMethod]
-    public void FileTable_ContainsSharplessSeedCatalog()
-        => CollectionAssert.Contains(GetFileIds(), "SeedSharplessCsv");
+    public void FileTable_DoesNotContainSharplessSeedCatalog()
+        => CollectionAssert.DoesNotContain(GetFileIds(), "SeedSharplessCsv");
 
     [TestMethod]
-    public void FileTable_ContainsConstellationsSeedCatalog()
-        => CollectionAssert.Contains(GetFileIds(), "SeedConstellationsCsv");
+    public void FileTable_DoesNotContainConstellationsSeedCatalog()
+        => CollectionAssert.DoesNotContain(GetFileIds(), "SeedConstellationsCsv");
 
     [TestMethod]
     public void CatalogDataDirectoryTree_IsUnderCommonAppData()
@@ -171,6 +171,44 @@ public class MsiTests
 
         Assert.IsNotNull(registryRow, "Catalog path registry row for CatalogDataFolder is missing.");
         Assert.AreEqual("[XisfCatalogDir]", registryRow![4]);
+    }
+
+    [TestMethod]
+    public void CatalogDownload_CustomActionInvokesSettingsHostSilentInstall()
+    {
+        var customActions = GetCustomActionIds();
+        CollectionAssert.Contains(customActions, "CA_SilentCatalogInstall");
+
+        var setterTarget = GetCustomActionTarget("SetCA_SilentCatalogInstall") ?? string.Empty;
+        StringAssert.Contains(setterTarget, "XISFShellExtensionHost.exe");
+        StringAssert.Contains(setterTarget, "--silent-install");
+    }
+
+    [TestMethod]
+    public void CatalogDownload_CustomActionRunsAfterSearchPathSetup()
+    {
+        const int sequenceColumn = 2; // InstallExecuteSequence.Action, Condition, Sequence
+        var rows = QueryTable("InstallExecuteSequence")
+            .Where(r =>
+                string.Equals(r[0], "CA_AddSearchPath", StringComparison.Ordinal) ||
+                string.Equals(r[0], "CA_SilentCatalogInstall", StringComparison.Ordinal))
+            .ToDictionary(r => r[0], StringComparer.Ordinal);
+
+        Assert.IsTrue(rows.ContainsKey("CA_SilentCatalogInstall"),
+            "CA_SilentCatalogInstall must be scheduled in InstallExecuteSequence.");
+
+        var condition = rows["CA_SilentCatalogInstall"][1];
+        StringAssert.Contains(condition, "$SettingsApp=3");
+        StringAssert.Contains(condition, "NOT REMOVE=\"ALL\"");
+
+        if (rows.TryGetValue("CA_AddSearchPath", out var addSearchPath))
+        {
+            Assert.IsTrue(
+                int.TryParse(rows["CA_SilentCatalogInstall"][sequenceColumn], out var silentSequence) &&
+                int.TryParse(addSearchPath[sequenceColumn], out var addSearchSequence) &&
+                silentSequence > addSearchSequence,
+                "CA_SilentCatalogInstall must run after CA_AddSearchPath when both are scheduled.");
+        }
     }
 
     // ── Custom Actions ──────────────────────────────────────────────────

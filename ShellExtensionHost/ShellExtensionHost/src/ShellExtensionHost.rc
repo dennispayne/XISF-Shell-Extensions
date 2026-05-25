@@ -70,7 +70,7 @@ BEGIN
     CONTROL         "", IDC_LIST_CATALOGS, WC_LISTVIEW,
                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
                     20, 220, 340, 80
-    PUSHBUTTON      "Install / Update",
+    PUSHBUTTON      "Update Catalogs",
                     IDC_BTN_CATALOG_INSTALL, 370, 220, 110, 14
     PUSHBUTTON      "Remove",
                     IDC_BTN_CATALOG_REMOVE, 370, 238, 110, 14
