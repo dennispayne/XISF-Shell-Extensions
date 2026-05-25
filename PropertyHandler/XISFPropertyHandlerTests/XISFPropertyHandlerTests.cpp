@@ -3228,8 +3228,8 @@ TEST_CLASS(PropertyHandler_ConstellationDB_FileLoad)
     {
         std::string csv =
             "B,0.0000,1.5000,35.0000,And\r\n"
-            "B,18.0000,18.7500,-12.0000,Sct\r\n"
-            "B,18.0000,18.7500,-14.0000,Ser\r\n"
+            "B,18.0000,18.5000,-12.0000,Ser\r\n"
+            "B,18.0000,18.5000,-20.0000,Sct\r\n"
             "B,5.0000,6.0000,-10.0000,Ori\r\n"
             "N,And,Andromeda\r\n"
             "N,Ori,Orion\r\n"
@@ -3240,8 +3240,8 @@ TEST_CLASS(PropertyHandler_ConstellationDB_FileLoad)
         DeleteFileA(path.c_str());
         Assert::IsTrue(ok, L"LoadFromCSV should succeed");
 
-        Assert::AreEqual(std::string("Ser"), xisf::ConstellationDB::Identify(274.7000, -13.7830),
-            L"M 16 should map to Serpens.");
+        Assert::AreEqual(std::string("Sct"), xisf::ConstellationDB::Identify(274.7000, -13.7830),
+            L"M 16 should map to Scutum.");
         Assert::AreEqual(std::string("And"), xisf::ConstellationDB::Identify(10.6847, 41.2692),
             L"M 31 should map to Andromeda.");
         Assert::AreEqual(std::string("Ori"), xisf::ConstellationDB::Identify(83.8221, -5.3911),
