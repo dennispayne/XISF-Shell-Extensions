@@ -2,6 +2,7 @@ name: Release
 
 on:
   push:
+    branches: [main]
     tags:
       - 'v*.*.*'
   workflow_dispatch:
@@ -53,6 +54,10 @@ jobs:
             $v = $override
           } elseif ($env:GITHUB_REF -like 'refs/tags/v*') {
             $v = $env:GITHUB_REF -replace '^refs/tags/v', ''
+          } elseif ($env:GITHUB_REF -eq 'refs/heads/main') {
+            # On main branch, use base version from version.json for the release
+            $baseJson = Get-Content version.json | ConvertFrom-Json
+            $v = $baseJson.version
           } elseif ($env:NBGV_SemVer2) {
             $v = $env:NBGV_SemVer2
           } else {
@@ -242,8 +247,17 @@ jobs:
           $lines | Set-Content -Path $notesPath -Encoding utf8
           "release_notes_path=$notesPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
+      - name: Create git tag (for main branch pushes)
+        if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.ver.outputs.tag }}" -m "Release ${{ steps.ver.outputs.full_version }}"
+          git push origin "${{ steps.ver.outputs.tag }}"
+
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && !contains(github.event_name, 'workflow_dispatch'))
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
@@ -253,6 +267,29 @@ jobs:
           files: |
             ${{ runner.temp }}/release-assets/*.msi
             ${{ runner.temp }}/release-assets/SHA256SUMS.txt
+
+      - name: Bump version for next development cycle (main branch only)
+        if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          $versionPath = 'version.json'
+          $json = Get-Content $versionPath -Raw | ConvertFrom-Json
+          $current = [version]$json.version
+          $nextPatch = $current.Build + 1
+          $nextVersion = "$($current.Major).$($current.Minor).$nextPatch"
+          $json.version = $nextVersion
+          $json | ConvertTo-Json -Depth 10 | Out-File $versionPath -Encoding utf8
+          Write-Host "Bumped version to $nextVersion"
+
+      - name: Push version bump (main branch only)
+        if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add version.json
+          git commit -m "Bump version for next development cycle" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+          git push origin main
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
