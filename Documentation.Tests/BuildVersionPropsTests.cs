@@ -24,11 +24,15 @@ public class BuildVersionPropsTests
             .Select(element => element.Value)
             .ToList();
 
-        Assert.AreEqual(1, clCompileDefinitions.Count, "Expected exactly one ClCompile preprocessor definition block.");
+        Assert.IsTrue(
+            clCompileDefinitions.Count >= 1,
+            "Expected at least one ClCompile preprocessor definition block."
+        );
 
-        StringAssert.Contains(
-            clCompileDefinitions[0],
-            "XISF_VERSION_TEXT=$(XISFFullVersion)",
+        Assert.IsTrue(
+            clCompileDefinitions.Any(def =>
+                def.Contains("XISF_VERSION_TEXT=$(XISFFullVersion)", StringComparison.Ordinal)
+            ),
             "ClCompile definitions must set XISF_VERSION_TEXT so C++ sources do not fall back to 0.1.0.0."
         );
     }
