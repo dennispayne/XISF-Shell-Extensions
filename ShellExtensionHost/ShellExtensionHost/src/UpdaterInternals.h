@@ -12,6 +12,8 @@
 #include <sstream>
 #include <algorithm>
 #include <cctype>
+#include <cstring>
+#include <cwchar>
 
 namespace xisf::updater::internals {
 
@@ -95,7 +97,7 @@ inline bool ExtractJsonBool(const std::string& json, const std::string& key,
 
 // ── Asset filename matching ──────────────────────────────────────────────────
 
-// Returns true if name matches kAssetPrefix + <anything> + kAssetSuffix.
+// Returns true if name matches kAssetPrefixNarrow + <anything> + kAssetSuffixNarrow.
 inline bool IsExpectedMsiName(const std::string& name)
 {
     const std::string_view prefix = kAssetPrefixNarrow;
