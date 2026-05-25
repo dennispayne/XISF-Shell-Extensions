@@ -247,62 +247,68 @@ jobs:
           $lines | Set-Content -Path $notesPath -Encoding utf8
           "release_notes_path=$notesPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: Create git tag (for main branch pushes)
-        if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')
-        shell: pwsh
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${{ steps.ver.outputs.tag }}" -m "Release ${{ steps.ver.outputs.full_version }}"
-          git push origin "${{ steps.ver.outputs.tag }}"
-
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && !contains(github.event_name, 'workflow_dispatch'))
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
-        with:
-          tag_name: ${{ steps.ver.outputs.tag }}
-          name: ${{ steps.ver.outputs.tag }}
-          body_path: ${{ steps.notes.outputs.release_notes_path }}
-          prerelease: ${{ contains(steps.ver.outputs.full_version, '-') }}
-          files: |
-            ${{ runner.temp }}/release-assets/*.msi
-            ${{ runner.temp }}/release-assets/SHA256SUMS.txt
+      - name: Create GitHub Release (from pushed tag)
+       if: startsWith(github.ref, 'refs/tags/v')
+       uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
+       with:
+         tag_name: ${{ steps.ver.outputs.tag }}
+         name: ${{ steps.ver.outputs.tag }}
+         body_path: ${{ steps.notes.outputs.release_notes_path }}
+         prerelease: ${{ contains(steps.ver.outputs.full_version, '-') }}
+         files: |
+           ${{ runner.temp }}/release-assets/*.msi
+           ${{ runner.temp }}/release-assets/SHA256SUMS.txt
 
       - name: Bump version for next development cycle (main branch only)
-        if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch'
-        shell: pwsh
-        run: |
-          $versionPath = 'version.json'
-          $json = Get-Content $versionPath -Raw | ConvertFrom-Json
-          $current = $json.version
-          # Parse version parts
-          $parts = $current -split '\.'
-          $major = [int]$parts[0]
-          $minor = [int]$parts[1]
-          $patch = [int]$parts[2]
-          $nextPatch = $patch + 1
-          $nextVersion = "$major.$minor.$nextPatch"
-          $json.version = $nextVersion
-          $json | ConvertTo-Json -Depth 10 | Out-File $versionPath -Encoding utf8
-          Write-Host "Bumped version from $current to $nextVersion"
+       if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch'
+       shell: pwsh
+       run: |
+         $versionPath = 'version.json'
+         $json = Get-Content $versionPath -Raw | ConvertFrom-Json
+         $current = $json.version
+         # Parse version parts
+         $parts = $current -split '\.'
+         $major = [int]$parts[0]
+         $minor = [int]$parts[1]
+         $patch = [int]$parts[2]
+         $nextPatch = $patch + 1
+         $nextVersion = "$major.$minor.$nextPatch"
+         $json.version = $nextVersion
+         $json | ConvertTo-Json -Depth 10 | Out-File $versionPath -Encoding utf8
+         Write-Host "Bumped version from $current to $nextVersion"
 
-      - name: Push version bump (main branch only)
-        if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch'
-        shell: pwsh
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git checkout main
-          git add version.json
-          $status = git status --porcelain
-          if ($status) {
-            git commit -m "Bump version for next development cycle" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
-            git push origin main
-            Write-Host "Pushed version bump to main"
-          } else {
-            Write-Host "No changes to version.json, skipping commit"
-          }
+      - name: Push version bump and create tag (main branch only)
+       if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch'
+       shell: pwsh
+       run: |
+         git config user.name "github-actions[bot]"
+         git config user.email "github-actions[bot]@users.noreply.github.com"
+         git add version.json
+         $status = git status --porcelain
+         if ($status) {
+           git commit -m "Bump version for next development cycle" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+           git push origin main
+           Write-Host "Pushed version bump to main"
+            
+           # Create and push tag after version bump commit
+           git tag -a "${{ steps.ver.outputs.tag }}" -m "Release ${{ steps.ver.outputs.full_version }}"
+           git push origin "${{ steps.ver.outputs.tag }}"
+           Write-Host "Created and pushed tag ${{ steps.ver.outputs.tag }}"
+         } else {
+           Write-Host "No changes to version.json, skipping commit and tag"
+         }
+
+      - name: Create GitHub Release (main branch pushes)
+       if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch'
+       uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
+       with:
+         tag_name: ${{ steps.ver.outputs.tag }}
+         name: ${{ steps.ver.outputs.tag }}
+         body_path: ${{ steps.notes.outputs.release_notes_path }}
+         prerelease: ${{ contains(steps.ver.outputs.full_version, '-') }}
+         files: |
+           ${{ runner.temp }}/release-assets/*.msi
+           ${{ runner.temp }}/release-assets/SHA256SUMS.txt
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
