@@ -29,6 +29,7 @@
 #include "HandlerDllPath.h"
 #include "UpdaterSpec.h"
 #include "UpdaterInternals.h"
+#include "ConstellationDB.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -66,6 +67,13 @@ namespace
             if (ca != cb) return false;
         }
         return true;
+    }
+
+    std::string ReadUtf8File(const std::wstring& path)
+    {
+        std::ifstream in(std::filesystem::path(path), std::ios::binary);
+        Assert::IsTrue(in.is_open(), L"expected catalog artifact to be readable");
+        return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
     }
 }
 
@@ -616,8 +624,7 @@ namespace ShellExtensionHostTests_CatalogSpec
 }
 
 // ===========================================================================
-// CatalogInstaller - offline import verifier + Probe
-// (No network calls; tests use InstallFromLocalFileVerified + Probe.)
+// CatalogInstaller - verified download/import flows + Probe
 // ===========================================================================
 namespace ShellExtensionHostTests_CatalogInstaller
 {
@@ -632,9 +639,12 @@ namespace ShellExtensionHostTests_CatalogInstaller
         // catalogs are never overwritten.
         struct SyntheticCatalog
         {
+            std::wstring  displayName;
             std::wstring  fileName;
             std::wstring  url;   // value unused by local-file install but kept sane
             std::wstring  hash;
+            std::wstring  sourceUrl;
+            std::wstring  sourceHashDisplay;
             CatalogSource src;
         };
 
@@ -655,14 +665,45 @@ namespace ShellExtensionHostTests_CatalogInstaller
             h.Update(bytes.data(), bytes.size());
             h.Finalize(d);
             sc.hash = xisf::ToHexLower(d);
+            sc.displayName = L"synthetic";
+            sc.sourceUrl = L"https://example.invalid/synthetic";
+            sc.sourceHashDisplay = sc.hash;
 
-            sc.src.displayName    = L"synthetic";
+            sc.src.displayName    = sc.displayName;
             sc.src.fileName       = sc.fileName;
             sc.src.url            = sc.url;
-            sc.src.sourceUrl      = L"https://example.invalid/synthetic";
+            sc.src.sourceUrl      = sc.sourceUrl;
             sc.src.expectedSha256 = sc.hash;
-            sc.src.sourceHashDisplay = sc.hash;
+            sc.src.sourceHashDisplay = sc.sourceHashDisplay;
             sc.src.maxBytes       = maxBytes;
+            return sc;
+        }
+
+        SyntheticCatalog MakePinnedDownloadSource(const CatalogSource& base,
+                                                  const wchar_t* stem,
+                                                  const wchar_t* urlOverride = nullptr,
+                                                  bool keepCanonicalFileName = false)
+        {
+            SyntheticCatalog sc;
+            wchar_t unique[96]{};
+            std::swprintf(unique, 96, L"%ls-%llu-%lu.csv",
+                          stem,
+                          static_cast<unsigned long long>(GetTickCount64()),
+                          GetCurrentThreadId());
+            sc.displayName = std::wstring(base.displayName);
+            sc.fileName = keepCanonicalFileName ? std::wstring(base.fileName) : std::wstring(unique);
+            sc.url = urlOverride ? std::wstring(urlOverride) : std::wstring(base.url);
+            sc.hash = std::wstring(base.expectedSha256);
+            sc.sourceUrl = std::wstring(base.sourceUrl);
+            sc.sourceHashDisplay = std::wstring(base.sourceHashDisplay);
+
+            sc.src.displayName = sc.displayName;
+            sc.src.fileName = sc.fileName;
+            sc.src.url = sc.url;
+            sc.src.sourceUrl = sc.sourceUrl;
+            sc.src.expectedSha256 = sc.hash;
+            sc.src.sourceHashDisplay = sc.sourceHashDisplay;
+            sc.src.maxBytes = base.maxBytes;
             return sc;
         }
 
@@ -698,6 +739,126 @@ namespace ShellExtensionHostTests_CatalogInstaller
 
             DeleteFileW(src.c_str());
             CleanupInstalled(sc);
+        }
+
+        TEST_METHOD(InstallFromPinnedUrl_DownloadsPinnedCatalogEndToEnd)
+        {
+            auto sc = MakePinnedDownloadSource(kAddendum, L"xisf-download");
+            CleanupInstalled(sc);
+
+            Report r = InstallFromPinnedUrl(sc.src, nullptr, nullptr);
+            Assert::IsTrue(r.result == Result::Ok,
+                           (std::wstring(L"downloaded catalog should install successfully: ") + r.errorDetail).c_str());
+
+            Presence p = Probe(sc.src);
+            Assert::IsTrue(p.state == PresenceState::PresentVerified,
+                           L"downloaded catalog should probe as verified");
+            Assert::IsTrue(IEqualsAscii(p.computedHash, sc.hash));
+
+            CleanupInstalled(sc);
+        }
+
+        TEST_METHOD(InstallFromPinnedUrl_NetworkFailureDoesNotInstallCatalog)
+        {
+            const std::wstring missingAddendumUrl =
+                std::wstring(L"https://raw.githubusercontent.com/mattiaverga/OpenNGC/") +
+                std::wstring(kOpenNGCCommit) +
+                L"/database_files/does-not-exist.csv";
+            auto sc = MakePinnedDownloadSource(
+                kAddendum,
+                L"xisf-download-missing",
+                missingAddendumUrl.c_str());
+            CleanupInstalled(sc);
+
+            Report r = InstallFromPinnedUrl(sc.src, nullptr, nullptr);
+            Assert::IsTrue(
+                r.result == Result::HttpBadStatus ||
+                r.result == Result::HttpConnectFailed ||
+                r.result == Result::HttpRequestFailed,
+                (std::wstring(L"missing remote catalog should report an HTTP/network failure, got ") + std::to_wstring(static_cast<int>(r.result))).c_str());
+            if (r.result == Result::HttpBadStatus) {
+                Assert::AreEqual(404u, r.httpStatus);
+            }
+
+            auto dest = xisf::paths::CatalogFile(sc.fileName.c_str());
+            Assert::AreEqual<DWORD>(INVALID_FILE_ATTRIBUTES, GetFileAttributesW(dest.c_str()));
+        }
+
+        TEST_METHOD(InstallFromPinnedUrl_DownloadsSharplessCatalogEndToEnd)
+        {
+            auto sc = MakePinnedDownloadSource(kSharpless, L"xisf-download-sharpless", nullptr, true);
+            CleanupInstalled(sc);
+
+            Report r = InstallFromPinnedUrl(sc.src, nullptr, nullptr);
+            Assert::IsTrue(r.result == Result::Ok,
+                           (std::wstring(L"downloaded Sharpless catalog should install successfully: ") + r.errorDetail).c_str());
+
+            auto installed = xisf::paths::CatalogFile(sc.fileName.c_str());
+            auto contents = ReadUtf8File(installed);
+            Assert::IsFalse(contents.empty(), L"Sharpless download should produce a transformed catalog file");
+            Assert::IsTrue(contents.rfind("Name;Type;RA;Dec;Const;", 0) == 0,
+                           L"Sharpless download should be transformed into OpenNGC-style CSV");
+
+            Presence p = Probe(sc.src);
+            Assert::IsTrue(p.state == PresenceState::PresentVerified,
+                           L"downloaded Sharpless catalog should probe as present");
+
+            CleanupInstalled(sc);
+        }
+
+        TEST_METHOD(InstallFromPinnedUrl_DownloadsConstellationsCatalogEndToEnd)
+        {
+            auto sc = MakePinnedDownloadSource(kConstellations, L"xisf-download-constellations", nullptr, true);
+            CleanupInstalled(sc);
+
+            Report r = InstallFromPinnedUrl(sc.src, nullptr, nullptr);
+            Assert::IsTrue(r.result == Result::Ok,
+                           (std::wstring(L"downloaded constellation catalog should install successfully: ") + r.errorDetail).c_str());
+
+            auto installed = xisf::paths::CatalogFile(sc.fileName.c_str());
+            auto contents = ReadUtf8File(installed);
+            Assert::IsFalse(contents.empty(), L"Constellation download should produce a transformed catalog file");
+            Assert::IsTrue(contents.find("N,Ori,Orion") != std::string::npos,
+                           L"Constellation download should contain translated abbreviation/name rows");
+            Assert::IsTrue(contents.find('\t') == std::string::npos,
+                           L"Constellation download should be transformed out of VizieR TSV format");
+
+            Presence p = Probe(sc.src);
+            Assert::IsTrue(p.state == PresenceState::PresentVerified,
+                           L"downloaded constellation catalog should probe as present");
+
+            CleanupInstalled(sc);
+        }
+
+        TEST_METHOD(InstallFromPinnedUrl_DownloadedConstellationsTempArtifactSupportsLookups)
+        {
+            auto sc = MakePinnedDownloadSource(kConstellations, L"xisf-download-constellations-temp", nullptr, true);
+            CleanupInstalled(sc);
+
+            Report r = InstallFromPinnedUrl(sc.src, nullptr, nullptr);
+            Assert::IsTrue(r.result == Result::Ok,
+                           (std::wstring(L"downloaded constellation catalog should install successfully: ") + r.errorDetail).c_str());
+
+            auto installed = xisf::paths::CatalogFile(sc.fileName.c_str());
+            auto tempArtifact = WriteTempFile({});
+            Assert::IsTrue(CopyFileW(installed.c_str(), tempArtifact.c_str(), FALSE) != 0,
+                           L"downloaded constellation catalog should copy to a temp artifact");
+
+            CleanupInstalled(sc);
+            Assert::AreEqual<DWORD>(INVALID_FILE_ATTRIBUTES, GetFileAttributesW(installed.c_str()));
+
+            const auto tempArtifactPath = std::filesystem::path(tempArtifact).string();
+            Assert::IsTrue(xisf::ConstellationDB::LoadFromCSV(tempArtifactPath),
+                           L"downloaded temp artifact should load into ConstellationDB");
+
+            Assert::AreEqual(std::string("Sct"), xisf::ConstellationDB::Identify(274.7000, -13.7830),
+                             L"M 16 should map to Scutum from the downloaded temp artifact.");
+            Assert::AreEqual(std::string("And"), xisf::ConstellationDB::Identify(10.6847, 41.2692),
+                             L"M 31 should map to Andromeda from the downloaded temp artifact.");
+            Assert::AreEqual(std::string("Ori"), xisf::ConstellationDB::Identify(83.8221, -5.3911),
+                             L"Orion Nebula should map to Orion from the downloaded temp artifact.");
+
+            DeleteFileW(tempArtifact.c_str());
         }
 
         TEST_METHOD(InstallFromLocalFile_HashMismatch_Rejected_NoInstall)
