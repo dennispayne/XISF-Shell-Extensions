@@ -15,6 +15,17 @@
 
 namespace xisf::updater::internals {
 
+inline bool TryNarrowAscii(std::wstring_view wide, std::string& narrow)
+{
+    narrow.clear();
+    narrow.reserve(wide.size());
+    for (wchar_t c : wide) {
+        if (c > 0x7F) return false;
+        narrow.push_back(static_cast<char>(c));
+    }
+    return true;
+}
+
 // ── Semver ───────────────────────────────────────────────────────────────────
 
 struct SemVer { int major = 0, minor = 0, patch = 0; };
@@ -101,10 +112,8 @@ inline bool IsExpectedMsiName(const std::string& name)
 inline std::wstring ParseChecksumFile(const std::string& content,
                                        const std::wstring& fileName)
 {
-    // MSI filenames are always ASCII; cast each wchar_t explicitly.
     std::string narrowName;
-    narrowName.reserve(fileName.size());
-    for (wchar_t c : fileName) narrowName += static_cast<char>(c);
+    if (!TryNarrowAscii(fileName, narrowName)) return {};
     std::istringstream ss(content);
     std::string line;
     while (std::getline(ss, line)) {
