@@ -305,10 +305,12 @@ After installing a catalog, verify it's active:
 #### Check 1: File Exists
 
 1. Open File Explorer
-2. Type in address bar: `%LOCALAPPDATA%\XISFShellExtension\catalogs\`
+2. Type in address bar: `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\`
 3. You should see:
    - `NGC.csv` (~8 MB)
    - `addendum.csv` (~1 MB)
+   - `sharpless.csv`
+   - `constellations.csv`
 
 #### Check 2: Settings App Status
 
