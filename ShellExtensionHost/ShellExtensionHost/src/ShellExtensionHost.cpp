@@ -217,6 +217,8 @@ void OnLocalImport(HWND hDlg, std::wstring targetFileName, std::wstring path);
 void UpdateCatalogActionButtons();
 void RemoveImportedSourcePath(std::wstring_view fileName);
 void RefreshCatalogListControl();
+bool IsMutableCatalogSource(const catalogspec::CatalogSource& src);
+bool ShouldSkipSilentCatalogInstall(const catalogspec::CatalogSource& src, installer::PresenceState state);
 bool TryReadRegisteredDllPath(const wchar_t* clsid, std::wstring& out);
 INT_PTR CALLBACK AdvancedDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam);
 void OnCheckForUpdates();
@@ -560,7 +562,7 @@ int RunSilentCatalogInstall()
     int failures = 0;
     for (const auto* src : catalogspec::kAllCatalogs) {
         auto p = installer::Probe(*src);
-        if (p.state == installer::PresenceState::PresentVerified)
+        if (ShouldSkipSilentCatalogInstall(*src, p.state))
             continue;
 
         installer::Report rep = installer::InstallFromPinnedUrl(
@@ -962,12 +964,20 @@ bool IsCatalogInstalled(const catalogspec::CatalogSource& src)
     return installer::Probe(src).state != installer::PresenceState::Missing;
 }
 
+bool IsMutableCatalogSource(const catalogspec::CatalogSource& src)
+{
+    return _wcsicmp(src.sourceHashDisplay.data(), catalogspec::kSourceHashNA.data()) == 0;
+}
+
+bool ShouldSkipSilentCatalogInstall(const catalogspec::CatalogSource& src, installer::PresenceState state)
+{
+    return !IsMutableCatalogSource(src) && state == installer::PresenceState::PresentVerified;
+}
+
 bool IsCatalogUpToDate(const catalogspec::CatalogSource& src)
 {
     const auto state = installer::Probe(src).state;
-    if (_wcsicmp(src.sourceHashDisplay.data(), catalogspec::kSourceHashNA.data()) == 0) {
-        return state != installer::PresenceState::Missing;
-    }
+    if (IsMutableCatalogSource(src)) return false;
     return state == installer::PresenceState::PresentVerified;
 }
 
@@ -1203,7 +1213,10 @@ void UpdateCatalogActionButtons()
         const auto& src = *catalogspec::kAllCatalogs[row.builtInIndex];
         const bool installed = IsCatalogInstalled(src);
         const bool upToDate = IsCatalogUpToDate(src);
-        SetDlgItemTextW(g_hDlg, IDC_BTN_CATALOG_INSTALL, installed ? L"Update" : L"Install");
+        SetDlgItemTextW(
+            g_hDlg,
+            IDC_BTN_CATALOG_INSTALL,
+            IsMutableCatalogSource(src) ? L"Update Catalogs" : (installed ? L"Update" : L"Install"));
         EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_CATALOG_INSTALL), upToDate ? FALSE : TRUE);
         EnableWindow(GetDlgItem(g_hDlg, IDC_BTN_CATALOG_REMOVE), installed ? TRUE : FALSE);
     } else {
@@ -1301,7 +1314,7 @@ void OnFetchOnline(int idx)
     g_activeTargetFileName = std::wstring(src.fileName);
     g_activeImportSourcePath.clear();
     g_activeExpectedHash = std::wstring(src.expectedSha256);
-    SetProgressText(std::wstring(L"Installing ") + std::wstring(src.fileName) + L" from pinned source…");
+    SetProgressText(std::wstring(L"Downloading ") + std::wstring(src.fileName) + L" from the catalog source…");
     SendDlgItemMessageW(g_hDlg, IDC_PROGRESS, PBM_SETMARQUEE, TRUE, 30);
     SendDlgItemMessageW(g_hDlg, IDC_PROGRESS, PBM_SETPOS, 0, 0);
     std::thread([hDlg = g_hDlg, idx]() { RunOnlineInstall(hDlg, idx); }).detach();

@@ -67,7 +67,7 @@
 
     <ItemGroup>
       <ClCompile>
-        <PreprocessorDefinitions>XISF_VERSION_STR="$(XISFFullVersion)";XISF_VERSION_MAJOR_MINOR_PATCH="$(XISFSimpleVersion)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+        <PreprocessorDefinitions>XISF_VERSION_TEXT=$(XISFFullVersion);XISF_VERSION_STR="$(XISFFullVersion)";XISF_VERSION_MAJOR_MINOR_PATCH="$(XISFSimpleVersion)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       </ClCompile>
       <ResourceCompile>
         <PreprocessorDefinitions>XISF_VERSION_TEXT=$(XISFFullVersion);XISF_VERSION_COMMA=$(_XISFFullVersionCommas);%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -78,4 +78,3 @@
              Text="$(MSBuildProjectName): XISF_VERSION_TEXT=$(XISFFullVersion) (BuildVersion=$(BuildVersion))" />
   </Target>
 </Project>
-

@@ -355,6 +355,16 @@ const std::array<std::pair<const char*, const char*>, 88> kConstellationNames = 
 
 bool GenerateConstellationsFromRomanTsv(const std::string& tsv, std::string& csv, std::wstring& err)
 {
+    struct BoundaryLine {
+        double raLow = 0.0;
+        double raUp = 0.0;
+        double decLow = 0.0;
+        std::string raLowText;
+        std::string raUpText;
+        std::string decLowText;
+        std::string abbr;
+    };
+
     std::vector<std::string> columns;
     std::vector<std::vector<std::string>> rows;
     if (!ParseAsuTsv(tsv, columns, rows)) {
@@ -370,26 +380,40 @@ bool GenerateConstellationsFromRomanTsv(const std::string& tsv, std::string& csv
         return false;
     }
 
-    std::ostringstream out;
-    out << "# Generated from VizieR VI/42 (Roman 1987)\n";
-    size_t produced = 0;
+    std::vector<BoundaryLine> boundaries;
+    boundaries.reserve(rows.size());
     for (const auto& r : rows) {
         if (idxRaLow >= static_cast<int>(r.size()) || idxRaUp >= static_cast<int>(r.size()) || idxDecLow >= static_cast<int>(r.size()) || idxConst >= static_cast<int>(r.size()))
             continue;
         double raLow = 0.0, raUp = 0.0, decLow = 0.0;
-        if (!TryParseDouble(TrimAscii(r[idxRaLow]), raLow) ||
-            !TryParseDouble(TrimAscii(r[idxRaUp]), raUp) ||
-            !TryParseDouble(TrimAscii(r[idxDecLow]), decLow)) {
+        const std::string raLowText = TrimAscii(r[idxRaLow]);
+        const std::string raUpText = TrimAscii(r[idxRaUp]);
+        const std::string decLowText = TrimAscii(r[idxDecLow]);
+        if (!TryParseDouble(raLowText, raLow) ||
+            !TryParseDouble(raUpText, raUp) ||
+            !TryParseDouble(decLowText, decLow)) {
             continue;
         }
         std::string abbr = TrimAscii(r[idxConst]);
         if (abbr.empty()) continue;
-        out << "B," << TrimAscii(r[idxRaLow]) << "," << TrimAscii(r[idxRaUp]) << "," << TrimAscii(r[idxDecLow]) << "," << abbr << "\n";
-        ++produced;
+        boundaries.push_back({raLow, raUp, decLow, raLowText, raUpText, decLowText, std::move(abbr)});
     }
-    if (produced < 300) {
+    if (boundaries.size() < 300) {
         err = L"Constellation generator produced too few boundary rows";
         return false;
+    }
+    std::sort(boundaries.begin(), boundaries.end(),
+              [](const BoundaryLine& a, const BoundaryLine& b) {
+                  if (a.decLow != b.decLow) return a.decLow > b.decLow;
+                  if (a.raLow != b.raLow) return a.raLow < b.raLow;
+                  if (a.raUp != b.raUp) return a.raUp < b.raUp;
+                  return a.abbr < b.abbr;
+              });
+
+    std::ostringstream out;
+    out << "# Generated from VizieR VI/42 (Roman 1987)\n";
+    for (const auto& boundary : boundaries) {
+        out << "B," << boundary.raLowText << "," << boundary.raUpText << "," << boundary.decLowText << "," << boundary.abbr << "\n";
     }
     for (const auto& [abbr, name] : kConstellationNames) {
         out << "N," << abbr << "," << name << "\n";
