@@ -1,5 +1,6 @@
 // UpdaterDownload.cpp - MSI download, SHA-256 verification, Authenticode check.
 #include "UpdaterDownload.h"
+#include "UpdaterInternals.h"
 #include "UpdaterSpec.h"
 #include "Sha256.h"
 #include "WinHttpHelpers.h"
@@ -28,17 +29,6 @@ namespace {
 constexpr DWORD kIoBuf = 64 * 1024;
 
 using xisf::winhttp::InetHandle;
-
-bool TryNarrowAscii(const std::wstring& wide, std::string& narrow)
-{
-    narrow.clear();
-    narrow.reserve(wide.size());
-    for (wchar_t c : wide) {
-        if (c > 0x7F) return false;
-        narrow.push_back(static_cast<char>(c));
-    }
-    return true;
-}
 
 bool CrackUrlDl(const std::wstring& url, std::wstring& host, std::wstring& path)
 {
@@ -235,7 +225,7 @@ bool FetchText(const std::wstring& url, std::uint64_t maxBytes,
 std::wstring ParseChecksumFile(const std::string& content, const std::wstring& fileName)
 {
     std::string narrowName;
-    if (!TryNarrowAscii(fileName, narrowName)) return {};
+    if (!internals::TryNarrowAscii(fileName, narrowName)) return {};
     std::istringstream ss(content);
     std::string line;
     while (std::getline(ss, line)) {
