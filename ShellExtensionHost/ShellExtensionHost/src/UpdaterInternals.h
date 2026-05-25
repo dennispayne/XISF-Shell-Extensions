@@ -87,8 +87,8 @@ inline bool ExtractJsonBool(const std::string& json, const std::string& key,
 // Returns true if name matches kAssetPrefix + <anything> + kAssetSuffix.
 inline bool IsExpectedMsiName(const std::string& name)
 {
-    const std::string prefix(kAssetPrefix.begin(), kAssetPrefix.end());
-    const std::string suffix(kAssetSuffix.begin(), kAssetSuffix.end());
+    const std::string_view prefix = kAssetPrefixNarrow;
+    const std::string_view suffix = kAssetSuffixNarrow;
     if (name.size() <= prefix.size() + suffix.size()) return false;
     return name.compare(0, prefix.size(), prefix) == 0 &&
            name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0;
@@ -101,7 +101,10 @@ inline bool IsExpectedMsiName(const std::string& name)
 inline std::wstring ParseChecksumFile(const std::string& content,
                                        const std::wstring& fileName)
 {
-    std::string narrowName(fileName.begin(), fileName.end());
+    // MSI filenames are always ASCII; cast each wchar_t explicitly.
+    std::string narrowName;
+    narrowName.reserve(fileName.size());
+    for (wchar_t c : fileName) narrowName += static_cast<char>(c);
     std::istringstream ss(content);
     std::string line;
     while (std::getline(ss, line)) {
