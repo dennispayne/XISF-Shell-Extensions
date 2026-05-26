@@ -294,10 +294,46 @@ jobs:
 
           $subjects = @(git log $range --pretty=format:'%s')
           $subjects = @($subjects | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-          $highlights = @($subjects | Where-Object { $_ -notmatch '^Merge ' } | Select-Object -First 3)
-          if ($highlights.Count -eq 0) { $highlights = @($subjects | Select-Object -First 3) }
-          if ($highlights.Count -eq 0) { $highlights = @('Release updates and maintenance improvements.') }
-          $changes = @($subjects | Select-Object -First 12)
+          $entries = @()
+          foreach ($s in $subjects) {
+            if ($s -match '^Merge ') { continue }
+            $raw = $s.Trim()
+            $component = 'General'
+            $text = $raw
+            if ($raw -match '^\[([^\]]+)\]\s*(.+)$') {
+              $component = $matches[1].Trim()
+              $text = $matches[2].Trim()
+            }
+            $entries += [pscustomobject]@{
+              Component = $component
+              Text = $text
+              Raw = $raw
+            }
+          }
+          if ($entries.Count -eq 0) {
+            $entries = @($subjects | Select-Object -First 12 | ForEach-Object {
+              [pscustomobject]@{ Component = 'General'; Text = $_; Raw = $_ }
+            })
+          }
+          if ($entries.Count -eq 0) {
+            $entries = @([pscustomobject]@{
+              Component = 'General'
+              Text = 'Release updates and maintenance improvements.'
+              Raw = 'Release updates and maintenance improvements.'
+            })
+          }
+
+          $priority = @{
+            'PropertyHandler' = 1; 'PreviewHandler' = 2; 'IFilter' = 3; 'Host' = 4
+            'Build' = 5; 'Test' = 6; 'Docs' = 7; 'General' = 8
+          }
+          $highlights = @(
+            $entries |
+              Sort-Object `
+                @{ Expression = { if ($priority.ContainsKey($_.Component)) { $priority[$_.Component] } else { 99 } } }, `
+                @{ Expression = { $_.Raw } } |
+              Select-Object -ExpandProperty Raw -Unique -First 3
+          )
 
           $compare = if ($prev) {
             "https://github.com/$repo/compare/$prev...$tag"
@@ -311,7 +347,16 @@ jobs:
           foreach ($h in $highlights) { $lines += "- $h" }
           $lines += ''
           $lines += '## What changed'
-          foreach ($c in $changes) { $lines += "- $c" }
+          $grouped = $entries | Group-Object Component | Sort-Object {
+            if ($priority.ContainsKey($_.Name)) { $priority[$_.Name] } else { 99 }
+          }
+          foreach ($g in $grouped) {
+            $lines += "### $($g.Name)"
+            foreach ($item in ($g.Group | Select-Object -First 8)) {
+              $lines += "- $($item.Text)"
+            }
+            $lines += ''
+          }
           $lines += ''
           $lines += '## Compare'
           $lines += "- $compare"
@@ -325,6 +370,7 @@ jobs:
           tag_name: ${{ steps.ver.outputs.tag }}
           name: ${{ steps.ver.outputs.tag }}
           body_path: ${{ steps.notes.outputs.release_notes_path }}
+          generate_release_notes: true
           prerelease: ${{ contains(steps.ver.outputs.full_version, '-') }}
           files: |
             ${{ runner.temp }}/release-assets/*.msi
