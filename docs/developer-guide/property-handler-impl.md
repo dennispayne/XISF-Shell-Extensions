@@ -379,8 +379,8 @@ std::call_once(s_catalogOnceFlag, []() {
     // 1. Read catalog priority from registry
     auto priority = ReadRegistryPriority();  // default: NGC, IC, Sharpless
     
-    // 2. Try to load from LOCALAPPDATA
-    if (catalog.LoadFromCSVFile("%LOCALAPPDATA%\XISFShellExtension\catalogs\NGC.csv")) {
+    // 2. Try to load from ProgramData
+    if (catalog.LoadFromCSVFile("%ProgramData%\DennisPayne\XISFShellExtension\catalogs\NGC.csv")) {
         catalog.AppendFromCSVFile("addendum.csv");
         catalog.AppendFromCSVFile("sharpless.csv");
     }

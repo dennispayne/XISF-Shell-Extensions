@@ -13,27 +13,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Sharpless catalog** (`sharpless.csv`): 313 Sharpless 2 HII regions are now
   installable from the settings app. The file is hosted in this repo's `data/`
   directory, pinned to a specific commit SHA and SHA-256 hash.  Resolves #1.
-- **Constellation boundary and name files** (`constellation_boundaries.csv`,
-  `constellation_names.csv`): IAU boundary data and full constellation name
-  mappings are now downloadable via the settings app. `ConstellationDB` loads
-  them at runtime when present and falls back to compiled-in data otherwise.
+- **Constellations catalog** (`constellations.csv`): IAU boundary data is now
+  downloadable via the settings app. `ConstellationDB` loads it at runtime when
+  present and falls back to compiled-in data otherwise.
   Resolves #2.
-- Settings dialog shows five installable catalog rows (NGC.csv, addendum.csv,
-  sharpless.csv, constellation_boundaries.csv, constellation_names.csv) each
+- Settings dialog shows four installable catalog rows (NGC.csv, addendum.csv,
+  sharpless.csv, constellations.csv) each
   with independent Install/Update/Remove buttons.
-- `CatalogSpec.h` gains `kSharpless`, `kConstellationBoundaries`,
-  `kConstellationNames` entries and a `kProjectDataCommit` constant for the
-  project-hosted data files.
-- `ConstellationDB` gains `LoadBoundariesFromFile` and `LoadNamesFromFile`
-  static methods; compiled-in data remains as a fallback.
-- `kAllowedUrlPrefixes` (array of two) replaces the single `kAllowedUrlPrefix`
-  to allow downloads from both OpenNGC and this project's own repository.
+- `CatalogSpec.h` gains `kSharpless` and `kConstellations` entries.
+- `kAllowedUrlPrefixes` is expanded from a single prefix to an allow-list that
+  permits OpenNGC and approved VizieR endpoints.
 
 ### Security
-- URL allow-list expanded to two pinned `raw.githubusercontent.com` paths:
-  `mattiaverga/OpenNGC/` and `dennispayne/XISF-Shell-Extensions/`.
-  All three new files are pinned to a specific commit SHA and SHA-256 hash;
-  mismatches are rejected and the candidate files are deleted.
+- URL allow-list expanded to include both pinned OpenNGC URLs and approved
+  `vizier.cds.unistra.fr` endpoints. All downloaded catalogs remain SHA-256
+  verified; mismatches are rejected and candidate files are deleted.
 
 ## [0.1.0] - TBD
 
@@ -60,7 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - OpenNGC / addendum / Sharpless catalogs are no longer embedded as RCDATA in
   `XISFPropertyHandler.dll`. They are loaded at runtime from
-  `%LOCALAPPDATA%\XISFShellExtension\catalogs\`. The Property Handler degrades
+  `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\`. The Property Handler degrades
   gracefully (no DSO enrichment) when the files are absent, keeping the shipped
   binary small and removing any redistribution of third-party catalog data.
 

@@ -64,7 +64,7 @@ stay installed. Changes apply to new handler activations — restart Explorer
 to force a reload.
 
 Under the hood, toggles write to:
-`HKCU\Software\DennisPayne\XISF Shell Extension\{PropertyEnabled,PreviewEnabled}` (DWORD, default 1).
+`HKCU\Software\DennisPayne\XISF Shell Extension\{PropertyEnabled,PreviewEnabled,FilterEnabled}` (DWORD, default 1).
 
 ## Catalogs
 

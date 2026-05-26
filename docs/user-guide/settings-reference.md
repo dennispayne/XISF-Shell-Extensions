@@ -178,9 +178,9 @@ XISF Shell Extensions uses **object name catalogs** to enhance XISF metadata. Ca
 - Support computed property filtering
 
 **Install Location**  
-Catalogs are stored in: `%LOCALAPPDATA%\XISFShellExtension\catalogs\`
+Catalogs are stored in: `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\`
 
-(Windows expands `%LOCALAPPDATA%` to `C:\Users\YourUsername\AppData\Local\`)
+(Windows expands `%ProgramData%` to `C:\ProgramData`)
 
 ---
 
@@ -212,26 +212,38 @@ Catalogs are stored in: `%LOCALAPPDATA%\XISFShellExtension\catalogs\`
 **Format**: CSV  
 **Source**: OpenNGC addendum on GitHub
 
-#### Sharpless Catalog (Future)
+#### sharpless.csv
 
-The Sharpless emission nebula catalog (Sh2) may be added in future versions.
+**Content**: Sharpless 2 HII-region catalog.
+
+**What It Enables**:
+- Additional emission-nebula name matches (Sh2 designations)
+- Better object-name coverage for nebula-heavy targets
+
+#### constellations.csv
+
+**Content**: IAU constellation boundary catalog used for constellation resolution.
+
+**What It Enables**:
+- Constellation mapping from RA/Dec coordinates
+- Expanded keyword/search enrichment with constellation names
 
 ---
 
-### Online Installation (Download from GitHub)
+### Online Installation (Download from Pinned Sources)
 
 #### Step 1: Open Catalog Management
 
 1. Launch Settings app
 2. Look for the **"Catalog Management"** section
-3. You should see two sections: **"OpenNGC NGC.csv"** and **"OpenNGC addendum.csv"**
+3. You should see four catalog rows: **"OpenNGC NGC.csv"**, **"OpenNGC addendum.csv"**, **"Sharpless sharpless.csv"**, and **"IAU Constellations constellations.csv"**
 
 #### Step 2: Download and Verify
 
 Click **"Download"** (or **"Update"**) next to the catalog name.
 
 **Behind the Scenes**:
-- Settings app downloads the catalog from GitHub
+- Settings app downloads each catalog from its pinned source URL
 - **SHA-256 cryptographic hash** is computed while downloading
 - Hash is compared against pinned hash compiled into the app
 - If hash matches: file is saved; if mismatch: file is deleted and error shown
@@ -258,7 +270,7 @@ The hash ensures:
 - **"HTTP connection failed"** → Check internet connectivity
 - **"SHA-256 mismatch"** → Download failed or corrupted file; retry or check disk space
 - **"File size exceeded"** → Catalog was larger than expected (possible attack); try again
-- **"URL not allowed"** → Security policy prevents download from this host (should not occur with GitHub)
+- **"URL not allowed"** → Security policy prevents download from this host (should not occur for built-in catalog sources)
 
 > **Tip**: Save the `.etl` trace files from failed downloads if reporting a bug (see [ETW Tracing](#section-3-etw-tracing)).
 
@@ -291,7 +303,7 @@ Get a copy of the catalog file (e.g., `NGC.csv`) from:
    - Read the file
    - Compute SHA-256 hash
    - Compare against pinned hash
-   - If match: copy to `%LOCALAPPDATA%\XISFShellExtension\catalogs\` and mark as verified
+   - If match: copy to `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\` and mark as verified
    - If mismatch: reject and show error
 
 > **Offline Verification**: The same security model applies offline. If your file doesn't match the pinned hash, the import fails to prevent corrupted or outdated data from being used.
@@ -338,7 +350,7 @@ If a catalog becomes corrupted or outdated:
 
 **To Remove a Catalog**:
 1. Open File Explorer
-2. Navigate to `%LOCALAPPDATA%\XISFShellExtension\catalogs\`
+2. Navigate to `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\`
 3. Delete the `.csv` file
 4. In Settings app, status will change to ✗ Missing
 
@@ -678,7 +690,7 @@ To see which tier is active, check what properties appear when you select an XIS
 **Check 2: Disk Space**
 
 1. Open File Explorer
-2. Right-click `%LOCALAPPDATA%\XISFShellExtension\catalogs\`
+2. Right-click `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\`
 3. Check available space (need ~10 MB free minimum)
 4. If low, free up disk space and retry
 
@@ -800,7 +812,7 @@ When reporting a bug, collect:
 | Open Settings app | Start menu → "XISF Shell Extensions Settings" |
 | Open file locations | In Settings, click folder icon next to paths |
 | Reset to defaults | Delete registry key: `HKEY_CURRENT_USER\Software\DennisPayne\XISF Shell Extension` |
-| View catalog files | Address bar: `%LOCALAPPDATA%\XISFShellExtension\catalogs\` |
+| View catalog files | Address bar: `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\` |
 | View trace files | Address bar: `%TEMP%\xisf\` |
 | Check handler registration | Registry: `HKEY_CLASSES_ROOT\CLSID\{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}` |
 

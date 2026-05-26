@@ -203,12 +203,13 @@ Optional: Verify independently on github.com:
 **Step 5: Confirm and Install**
 1. Click **"Install"** button
 2. Application begins download:
-   - Connects to GitHub over HTTPS
+   - Connects to pinned HTTPS catalog sources
    - Downloads NGC.csv
    - Downloads addendum.csv
-   - Downloads sharpless.csv (if applicable)
+   - Downloads sharpless.csv
+   - Downloads constellations.csv
    - Verifies each file's SHA-256 hash
-   - Stores in `%LOCALAPPDATA%\XISFShellExtension\catalogs\`
+   - Stores in `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\`
 
 3. Progress dialog shows:
    - Download progress (%)
@@ -397,19 +398,21 @@ To check what's installed:
 3. Shows:
    - NGC catalog: "13,543 objects" (example count)
    - Addendum catalog: "42 additions and corrections"
-   - Sharpless catalog: "312 nebulae"
+   - Sharpless catalog: "313 nebulae"
+   - Constellations catalog: "IAU boundaries"
 
 ### Storage Location
 
 Catalogs are stored in:
 ```
-C:\Users\{YourUsername}\AppData\Local\XISFShellExtension\catalogs\
+C:\ProgramData\DennisPayne\XISFShellExtension\catalogs\
 ```
 
 Files:
 - `NGC.csv` — Main catalog
 - `addendum.csv` — Corrections and additions
 - `sharpless.csv` — Sharpless nebulae
+- `constellations.csv` — IAU constellation boundaries
 
 ### Removing Catalogs
 
@@ -421,7 +424,7 @@ To remove catalogs and revert to Basic features:
 
 **Option 2: Manual Deletion**
 1. Open File Explorer
-2. Navigate to: `%LOCALAPPDATA%\XISFShellExtension\catalogs\`
+2. Navigate to: `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\`
 3. Delete CSV files you want to remove
 4. Restart Explorer
 
@@ -449,7 +452,8 @@ To get the latest catalog data:
 |---------|------|---------|
 | NGC.csv | ~2 MB | 13,543 |
 | addendum.csv | < 1 MB | Updates/additions |
-| sharpless.csv | < 1 MB | 312 nebulae |
+| sharpless.csv | < 1 MB | 313 nebulae |
+| constellations.csv | < 1 MB | IAU boundary dataset |
 | **Total** | **~5 MB** | **~14,000 objects** |
 
 ## Security & Verification
@@ -653,7 +657,7 @@ To verify the pinned commit on GitHub:
 **Solutions:**
 1. **Check installation location:**
    ```powershell
-   $path = "$env:LOCALAPPDATA\XISFShellExtension\catalogs"
+   $path = "$env:ProgramData\DennisPayne\XISFShellExtension\catalogs"
    Get-ChildItem $path
    ```
    - Should show NGC.csv, addendum.csv, sharpless.csv
@@ -690,7 +694,7 @@ To verify the pinned commit on GitHub:
    # NGC.csv: ~2-3 MB
    # addendum.csv: ~500 KB
    # sharpless.csv: ~50 KB
-   Get-Item "$env:LOCALAPPDATA\XISFShellExtension\catalogs\*.csv" | ForEach-Object {
+   Get-Item "$env:ProgramData\DennisPayne\XISFShellExtension\catalogs\*.csv" | ForEach-Object {
        Write-Host "$($_.Name): $($_.Length) bytes"
    }
    ```

@@ -372,7 +372,7 @@ private:
 | `HRESULT: 0x80070002` | FILE_NOT_FOUND | Check test fixture file path |
 | `Memory leak: N bytes` | Unreleased COM objects | Ensure all `AddRef()` calls have matching `Release()` |
 | `Test hangs/times out` | Infinite loop or deadlock | Check thread synchronization; use timeout in VSTest |
-| `Catalog not found` | LOCALAPPDATA missing | Create `%LOCALAPPDATA%\XISFShellExtension\catalogs\` or mock |
+| `Catalog not found` | ProgramData catalog directory missing | Create `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\` or mock |
 
 ### Test Debugging Tips
 
