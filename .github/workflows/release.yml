@@ -296,7 +296,7 @@ jobs:
           $subjects = @($subjects | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
           $entries = @()
           foreach ($s in $subjects) {
-            if ($s -match '^Merge pull request #\d+') { continue }
+            if ($s -match '^Merge ') { continue }
             $raw = $s.Trim()
             $component = 'General'
             $text = $raw
