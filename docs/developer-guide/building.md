@@ -389,11 +389,12 @@ Builds are automatically tested via `.github\workflows\ci.yml`:
 - Binaries contain version info resource
 
 **To release a new version:**
-1. Edit `version.json` with new SemVer
-2. Commit to main
-3. Tag commit: `git tag v1.2.3`
-4. Push tag: `git push origin v1.2.3`
-5. GitHub Actions automatically builds and releases MSI
+1. Merge your validated PR to `main`
+2. GitHub Actions cuts the next patch tag automatically (`vX.Y.Z`)
+3. The tag-triggered release workflow builds, tests, and publishes the MSI release
+
+For an explicit/manual release, you can still push a `v*.*.*` tag or run the
+release workflow via `workflow_dispatch` with `version_override`.
 
 ---
 
