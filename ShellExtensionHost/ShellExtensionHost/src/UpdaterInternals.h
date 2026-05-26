@@ -12,8 +12,21 @@
 #include <sstream>
 #include <algorithm>
 #include <cctype>
+#include <cstring>
+#include <cwchar>
 
 namespace xisf::updater::internals {
+
+inline bool TryNarrowAscii(std::wstring_view wide, std::string& narrow)
+{
+    narrow.clear();
+    narrow.reserve(wide.size());
+    for (wchar_t c : wide) {
+        if (c > 0x7F) return false;
+        narrow.push_back(static_cast<char>(c));
+    }
+    return true;
+}
 
 // ── Semver ───────────────────────────────────────────────────────────────────
 
@@ -84,11 +97,11 @@ inline bool ExtractJsonBool(const std::string& json, const std::string& key,
 
 // ── Asset filename matching ──────────────────────────────────────────────────
 
-// Returns true if name matches kAssetPrefix + <anything> + kAssetSuffix.
+// Returns true if name matches kAssetPrefixNarrow + <anything> + kAssetSuffixNarrow.
 inline bool IsExpectedMsiName(const std::string& name)
 {
-    const std::string prefix(kAssetPrefix.begin(), kAssetPrefix.end());
-    const std::string suffix(kAssetSuffix.begin(), kAssetSuffix.end());
+    const std::string_view prefix = kAssetPrefixNarrow;
+    const std::string_view suffix = kAssetSuffixNarrow;
     if (name.size() <= prefix.size() + suffix.size()) return false;
     return name.compare(0, prefix.size(), prefix) == 0 &&
            name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0;
@@ -101,7 +114,8 @@ inline bool IsExpectedMsiName(const std::string& name)
 inline std::wstring ParseChecksumFile(const std::string& content,
                                        const std::wstring& fileName)
 {
-    std::string narrowName(fileName.begin(), fileName.end());
+    std::string narrowName;
+    if (!TryNarrowAscii(fileName, narrowName)) return {};
     std::istringstream ss(content);
     std::string line;
     while (std::getline(ss, line)) {

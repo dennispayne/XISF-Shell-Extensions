@@ -1339,6 +1339,15 @@ namespace ShellExtensionHostTests_Updater
             Assert::AreEqual(std::wstring(L"abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"),
                              hash);
         }
+
+        TEST_METHOD(ParseChecksumFile_NonAsciiTargetName_ReturnsEmpty)
+        {
+            std::string content =
+                "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890  "
+                "XISF.ShellExtensions_1.0.0_x64.msi\n";
+            auto hash = ParseChecksumFile(content, L"XISF.ShellExtensions_1.0.0_\u00E9x64.msi");
+            Assert::IsTrue(hash.empty());
+        }
     };
 
     TEST_CLASS(UpdaterAllowListTests)

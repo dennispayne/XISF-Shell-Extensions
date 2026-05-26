@@ -1,0 +1,62 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: windows-2025-vs2026
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57  # v3.0.0
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7  # v5.2.0
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Read version.json
+        id: ver
+        shell: pwsh
+        run: |
+          $v = (Get-Content version.json | ConvertFrom-Json).version
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: c-cpp, csharp
+
+      - name: Build solution
+        shell: pwsh
+        run: |
+          msbuild Win11-XISF-Shell-Extensions.sln `
+            /t:Rebuild `
+            /restore `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:RestoreLockedMode=true `
+            /p:XISFVersion=${{ steps.ver.outputs.version }} `
+            /p:XISFBuildNumber=${{ github.run_number }} `
+            /m /v:minimal /nologo
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
