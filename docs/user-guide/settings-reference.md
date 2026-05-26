@@ -243,17 +243,15 @@ Catalogs are stored in: `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\`
 Click **"Download"** (or **"Update"**) next to the catalog name.
 
 **Behind the Scenes**:
-- Settings app downloads each catalog from its pinned source URL
-- **SHA-256 cryptographic hash** is computed while downloading
-- Hash is compared against pinned hash compiled into the app
-- If hash matches: file is saved; if mismatch: file is deleted and error shown
-- Process uses TLS (HTTPS) for secure transfer
+- Install/Update applies to the selected catalog row, not all rows at once
+- Settings app downloads the selected source over TLS (HTTPS)
+- **OpenNGC rows (`NGC.csv`, `addendum.csv`)**: downloaded bytes are SHA-256 checked against a compiled pin
+- **VizieR-generated rows (`sharpless.csv`, `constellations.csv`)**: source URL is allow-listed, data is transformed and structurally validated, but source bytes are not hash-pinned (`Source` shows `N/A`)
+- On any validation failure, the temp file is deleted and an error is shown
 
-**Why Hash Verification?**  
-The hash ensures:
-- File integrity (no corruption during download)
-- Authenticity (attacker cannot substitute a different file without detection)
-- Pinned hash is cryptographically tied to a specific GitHub commit, making it impossible to serve outdated versions
+**Why the model differs by source?**  
+- OpenNGC is pinned to immutable Git commit content, so hash pinning provides strong reproducibility
+- VizieR endpoints are dynamic query responses, so the app relies on allow-listing plus strict parsing/normalization checks instead of source-byte pinning
 
 #### Step 3: Progress and Errors
 

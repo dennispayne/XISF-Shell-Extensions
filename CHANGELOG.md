@@ -11,11 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Sharpless catalog** (`sharpless.csv`): 313 Sharpless 2 HII regions are now
-  installable from the settings app. The file is hosted in this repo's `data/`
-  directory, pinned to a specific commit SHA and SHA-256 hash.  Resolves #1.
+  installable from the settings app. It is generated at install time from an
+  allow-listed VizieR source and normalized into OpenNGC-style CSV. Resolves #1.
 - **Constellations catalog** (`constellations.csv`): IAU boundary data is now
   downloadable via the settings app. `ConstellationDB` loads it at runtime when
-  present and falls back to compiled-in data otherwise.
+  present; if missing, constellation lookups return empty strings.
   Resolves #2.
 - Settings dialog shows four installable catalog rows (NGC.csv, addendum.csv,
   sharpless.csv, constellations.csv) each
@@ -26,8 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - URL allow-list expanded to include both pinned OpenNGC URLs and approved
-  `vizier.cds.unistra.fr` endpoints. All downloaded catalogs remain SHA-256
-  verified; mismatches are rejected and candidate files are deleted.
+  `vizier.cds.unistra.fr` endpoints. OpenNGC downloads remain SHA-256 pin-verified;
+  VizieR-backed catalogs are validated via allow-list + strict transform/parsing.
 
 ## [0.1.0] - TBD
 

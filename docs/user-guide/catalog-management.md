@@ -203,12 +203,10 @@ Optional: Verify independently on github.com:
 **Step 5: Confirm and Install**
 1. Click **"Install"** button
 2. Application begins download:
-   - Connects to pinned HTTPS catalog sources
-   - Downloads NGC.csv
-   - Downloads addendum.csv
-   - Downloads sharpless.csv
-   - Downloads constellations.csv
-   - Verifies each file's SHA-256 hash
+   - Applies to the currently selected catalog row
+   - Connects to the configured HTTPS source for that row
+   - For OpenNGC rows (`NGC.csv`, `addendum.csv`): verifies SHA-256 against compiled pins
+   - For VizieR-generated rows (`sharpless.csv`, `constellations.csv`): enforces URL allow-list and content transformation/validation (`Source` hash displays `N/A`)
    - Stores in `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\`
 
 3. Progress dialog shows:

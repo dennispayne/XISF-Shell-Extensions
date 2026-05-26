@@ -266,13 +266,13 @@ Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
 [PropertyHandler] Support custom constellation database
 
 Allow users to provide their own constellation definitions via
-%ProgramData%\DennisPayne\XISFShellExtension\catalogs\constellations.csv. Falls back
-to built-in database if file not found.
+%ProgramData%\DennisPayne\XISFShellExtension\catalogs\constellations.csv.
+If the file is missing, constellation lookups return empty values.
 
 Fixes #142
 
 - Load constellation CSV if present
-- Fall through to built-in data if parsing fails
+- Return empty constellation fields if the catalog is absent or invalid
 - Add ConstellationDB::LoadCustom() function
 ```
 
