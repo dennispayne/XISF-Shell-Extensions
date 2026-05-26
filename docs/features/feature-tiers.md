@@ -74,7 +74,7 @@ Tier is determined at **handler initialization** based on registry settings and 
 - `addendum.csv` — Recent discoveries (optional)
 - `sharpless.csv` — Emission nebulae (optional)
 
-Located in: `%LOCALAPPDATA%\XISFShellExtension\catalogs\`
+Located in: `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\`
 
 **Features**:
 - All Free tier features ✓
@@ -139,12 +139,12 @@ static FeatureTier DetectFeatureTier() {
 
 static FeatureTier DetectTierFromCatalogs() {
     PWSTR pszBase = nullptr;
-    if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &pszBase))) {
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_ProgramData, 0, nullptr, &pszBase))) {
         return FeatureTier::Free;
     }
     
     std::wstring catalogPath = std::wstring(pszBase) + 
-        L"\\XISFShellExtension\\catalogs\\NGC.csv";
+        L"\\DennisPayne\\XISFShellExtension\\catalogs\\NGC.csv";
     CoTaskMemFree(pszBase);
     
     // If NGC.csv exists → Full tier
@@ -243,7 +243,7 @@ Example: RA/Dec within ±0.5° of catalog entry → included in MatchedObjects
 
 2. Create directory:
    ```
-   %LOCALAPPDATA%\XISFShellExtension\catalogs\
+   %ProgramData%\DennisPayne\XISFShellExtension\catalogs\
    ```
 
 3. Copy files to directory
@@ -317,7 +317,7 @@ Full tier:
 reg query HKCU\Software\DennisPayne\"XISF Shell Extension"
 ```
 
-Should show `FeatureTier` or catalog files present at `%LOCALAPPDATA%\XISFShellExtension\catalogs\NGC.csv`
+Should show `FeatureTier` or catalog files present at `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\NGC.csv`
 
 **Fix**:
 1. Verify catalogs installed in correct location
@@ -328,7 +328,7 @@ Should show `FeatureTier` or catalog files present at `%LOCALAPPDATA%\XISFShellE
 
 **Check catalog size**:
 ```powershell
-Get-ChildItem "$env:LOCALAPPDATA\XISFShellExtension\catalogs\*.csv" | Measure-Object -Sum Length
+Get-ChildItem "$env:ProgramData\DennisPayne\XISFShellExtension\catalogs\*.csv" | Measure-Object -Sum Length
 ```
 
 Expected: ~4-5 MB total for NGC.csv + addendum.csv

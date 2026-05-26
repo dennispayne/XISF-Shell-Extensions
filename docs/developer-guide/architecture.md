@@ -182,7 +182,7 @@ struct XISFRawMetadata {
 
 **Goal:** Fast cone-search lookup of deep-sky objects by RA/Dec coordinates.
 
-**Data Structure:** In-memory CSV loaded from `%LOCALAPPDATA%\XISFShellExtension\catalogs\NGC.csv` + addendum.
+**Data Structure:** In-memory CSV loaded from `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\NGC.csv` + addendum.
 
 **Algorithm:**
 - Load catalog CSV on first property handler use (lazy, thread-safe via `std::call_once`)
@@ -254,8 +254,8 @@ See [Telemetry & ETW](../features/telemetry-etw.md) for detailed logging.
 
 ## Persistence
 
-- **Catalogs** — `%LOCALAPPDATA%\XISFShellExtension\catalogs\{NGC,addendum,sharpless}.csv`
-- **Settings** — `HKCU\Software\DennisPayne\XISF Shell Extension\{PropertyEnabled,PreviewEnabled,CatalogPriority,MatchToleranceDeg}`
+- **Catalogs** — `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\{NGC,addendum,sharpless}.csv`
+- **Settings** — `HKCU\Software\DennisPayne\XISF Shell Extension\{PropertyEnabled,PreviewEnabled,FilterEnabled,CatalogPriority,MatchToleranceDeg}`
 - **Handler Registry** — `HKCU\Software\Classes\.xisf\…` (installed via COM registration)
 
 ## Security & Isolation

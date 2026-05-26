@@ -438,7 +438,7 @@ Set-ItemProperty -Path "HKCU:\Software\DennisPayne\XISF Shell Extension" `
 | Parser timeout | Large XISF file; slow disk | Use PerfView to profile parser |
 | "Access Denied" | File permissions | Check NTFS ACLs; run as admin |
 | Crash (0xC0000374) | Heap corruption | Enable ASAN; use heap debugger |
-| Catalog lookup returns 0 | Catalog file not found | Check `%LOCALAPPDATA%\XISFShellExtension\catalogs\` |
+| Catalog lookup returns 0 | Catalog file not found | Check `%ProgramData%\DennisPayne\XISFShellExtension\catalogs\` |
 | Thumbnail not showing | Preview Handler not registered | Re-enable in Settings app; restart Explorer |
 
 ## Documentation

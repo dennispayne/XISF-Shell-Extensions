@@ -168,7 +168,7 @@ Output: "-15° to 0°"
 
 **Requirements**:
 - RA/Dec from file
-- DSO catalogs (NGC.csv, IC.csv, Sharpless, etc.)
+- DSO catalogs (NGC.csv, addendum.csv, sharpless.csv)
 - Optional: Focal length + pixel size for Field-of-View calculation
 
 ### Step 1: Calculate Search Radius
