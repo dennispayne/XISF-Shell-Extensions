@@ -42,7 +42,9 @@ jobs:
           git fetch --tags --force
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-          $latest = git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | Select-Object -First 1
+          $latest = git tag --list 'v*' --sort=-version:refname |
+            Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } |
+            Select-Object -First 1
           if ([string]::IsNullOrWhiteSpace($latest)) {
             $base = (Get-Content version.json | ConvertFrom-Json).version
             if ($base -notmatch '^(\d+)\.(\d+)\.(\d+)$') {
