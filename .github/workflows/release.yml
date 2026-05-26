@@ -18,6 +18,9 @@ jobs:
   create-tag:
     name: Cut patch tag on main
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    outputs:
+      tag: ${{ steps.cut.outputs.tag }}
+      version: ${{ steps.cut.outputs.version }}
     runs-on: windows-2025-vs2026
     concurrency:
       group: release-tag-main
@@ -37,6 +40,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Compute and push next patch tag
+        id: cut
         shell: pwsh
         run: |
           git fetch --tags --force
@@ -74,9 +78,16 @@ jobs:
           git push origin $next
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+          "tag=$next" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "version=$($next.Substring(1))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
   release:
     name: Build + Package + Release
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    needs: [create-tag]
+    if: >
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.create-tag.result == 'success') ||
+      startsWith(github.ref, 'refs/tags/v') ||
+      github.event_name == 'workflow_dispatch'
     runs-on: windows-2025-vs2026
 
     steps:
@@ -112,6 +123,8 @@ jobs:
           $override = '${{ github.event.inputs.version_override }}'
           if ($override) {
             $v = $override
+          } elseif ($env:GITHUB_REF -eq 'refs/heads/main') {
+            $v = '${{ needs.create-tag.outputs.version }}'
           } elseif ($env:GITHUB_REF -like 'refs/tags/v*') {
             $v = $env:GITHUB_REF -replace '^refs/tags/v', ''
           } elseif ($env:NBGV_SemVer2) {
@@ -304,7 +317,7 @@ jobs:
           "release_notes_path=$notesPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
