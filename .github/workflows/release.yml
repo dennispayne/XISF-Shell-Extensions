@@ -15,8 +15,68 @@ permissions:
   contents: write  # needed to create a GitHub Release
 
 jobs:
+  create-tag:
+    name: Cut patch tag on main
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: windows-2025-vs2026
+    concurrency:
+      group: release-tag-main
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Compute and push next patch tag
+        shell: pwsh
+        run: |
+          git fetch --tags --force
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $latest = git tag --list 'v*' --sort=-version:refname |
+            Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } |
+            Select-Object -First 1
+          if ([string]::IsNullOrWhiteSpace($latest)) {
+            $base = (Get-Content version.json | ConvertFrom-Json).version
+            if ($base -notmatch '^(\d+)\.(\d+)\.(\d+)$') {
+              throw "version.json '$base' is not Major.Minor.Patch"
+            }
+            $major = [int]$matches[1]
+            $minor = [int]$matches[2]
+            $patch = [int]$matches[3]
+          } else {
+            if ($latest -notmatch '^v(\d+)\.(\d+)\.(\d+)$') {
+              throw "Latest tag '$latest' is not vMajor.Minor.Patch"
+            }
+            $major = [int]$matches[1]
+            $minor = [int]$matches[2]
+            $patch = [int]$matches[3]
+          }
+
+          do {
+            $patch++
+            $next = "v{0}.{1}.{2}" -f $major, $minor, $patch
+            $exists = git tag --list $next
+          } while (-not [string]::IsNullOrWhiteSpace($exists))
+
+          git tag -a $next -m "Release $($next.Substring(1))"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          git push origin $next
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
   release:
     name: Build + Package + Release
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: windows-2025-vs2026
 
     steps:
@@ -54,10 +114,6 @@ jobs:
             $v = $override
           } elseif ($env:GITHUB_REF -like 'refs/tags/v*') {
             $v = $env:GITHUB_REF -replace '^refs/tags/v', ''
-          } elseif ($env:GITHUB_REF -eq 'refs/heads/main') {
-            # On main branch, use base version from version.json for the release
-            $baseJson = Get-Content version.json | ConvertFrom-Json
-            $v = $baseJson.version
           } elseif ($env:NBGV_SemVer2) {
             $v = $env:NBGV_SemVer2
           } else {
@@ -247,17 +303,8 @@ jobs:
           $lines | Set-Content -Path $notesPath -Encoding utf8
           "release_notes_path=$notesPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: Create git tag (for main branch pushes)
-        if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')
-        shell: pwsh
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${{ steps.ver.outputs.tag }}" -m "Release ${{ steps.ver.outputs.full_version }}"
-          git push origin "${{ steps.ver.outputs.tag }}"
-
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && !contains(github.event_name, 'workflow_dispatch'))
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
@@ -268,15 +315,6 @@ jobs:
             ${{ runner.temp }}/release-assets/*.msi
             ${{ runner.temp }}/release-assets/SHA256SUMS.txt
 
-      - name: Bump version for next development cycle (main branch only)
-        if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch'
-        shell: pwsh
-        run: |
-          # Version bumping is now handled automatically by Nerdbank.GitVersioning,
-          # which increments the patch version based on commit height since the last tag.
-          # Tagging here ensures the next main merge will release a new version.
-          Write-Host "Version will auto-increment with next commit due to git height"
-
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
@@ -284,6 +322,3 @@ jobs:
           path: |
             ${{ runner.temp }}/release-assets/*.msi
             ${{ runner.temp }}/release-assets/SHA256SUMS.txt
-
-
-

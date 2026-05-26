@@ -298,10 +298,14 @@ vstest.console.exe x64\Release\XISFPropertyHandlerTests.dll /Tests:TestName
 
 ## Release Process
 
-Releases are automated via GitHub Actions when a `v*.*.*` Git tag is pushed:
+Releases are automated via GitHub Actions:
+
+- Every successful merge/push to `main` cuts the next patch tag (`vX.Y.Z`).
+- The tag push triggers the packaging/release workflow that publishes the MSI.
+- You can still run a manual release via `workflow_dispatch` with `version_override`.
 
 ```powershell
-# Create release (maintainers only)
+# Optional manual release (maintainers only)
 git tag v1.2.0
 git push origin v1.2.0
 
