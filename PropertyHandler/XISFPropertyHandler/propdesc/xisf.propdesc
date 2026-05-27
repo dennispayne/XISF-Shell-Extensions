@@ -182,7 +182,7 @@
       <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
     </propertyDescription>
     <propertyDescription name="XISF.FocuserName" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="32">
-      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <searchInfo inInvertedIndex="true" isColumn="true" />
       <labelInfo label="Astro Focuser Name" />
       <typeInfo type="String" isInnate="false" isViewable="true" />
       <displayInfo defaultColumnWidth="80" displayType="String" />
@@ -200,7 +200,7 @@
       <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
     </propertyDescription>
     <propertyDescription name="XISF.RotatorName" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="35">
-      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <searchInfo inInvertedIndex="true" isColumn="true" />
       <labelInfo label="Astro Rotator Name" />
       <typeInfo type="String" isInnate="false" isViewable="true" />
       <displayInfo defaultColumnWidth="80" displayType="String" />
@@ -212,7 +212,7 @@
       <displayInfo defaultColumnWidth="60" displayType="Number"><numberFormat formatAs="General" /></displayInfo>
     </propertyDescription>
     <propertyDescription name="XISF.FilterWheel" formatID="{7C54FA8B-9D63-4C10-8FBE-1A5A0F9A3B2E}" propID="37">
-      <searchInfo inInvertedIndex="false" isColumn="true" />
+      <searchInfo inInvertedIndex="true" isColumn="true" />
       <labelInfo label="Astro Filter Wheel" />
       <typeInfo type="String" isInnate="false" isViewable="true" />
       <displayInfo defaultColumnWidth="70" displayType="String" />
