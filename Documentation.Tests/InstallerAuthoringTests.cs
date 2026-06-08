@@ -1,3 +1,5 @@
+using System.Xml.Linq;
+
 namespace Documentation.Tests;
 
 [TestClass]
@@ -13,11 +15,24 @@ public class InstallerAuthoringTests
         var packagePath = Path.Combine(RepoRoot, "Installer", "XISFInstaller", "Package.wxs");
         Assert.IsTrue(File.Exists(packagePath), $"Installer authoring file not found at: {packagePath}");
 
-        var package = File.ReadAllText(packagePath);
+        var document = XDocument.Load(packagePath);
+        XNamespace ns = "http://wixtoolset.org/schemas/v4/wxs";
 
-        StringAssert.Contains(package, "Id=\"PathLabel\" Type=\"Text\"");
-        StringAssert.Contains(package, "Text=\"Data path:\"");
-        Assert.IsFalse(package.Contains("Text=\"Data &amp;path:\"", StringComparison.Ordinal),
-            "The data path label should not define an access-key ampersand.");
+        var dialog = document
+            .Descendants(ns + "Dialog")
+            .SingleOrDefault(element => string.Equals((string?)element.Attribute("Id"), "XISFDataPathDlg", StringComparison.Ordinal));
+        Assert.IsNotNull(dialog, "Dialog 'XISFDataPathDlg' not found in Package.wxs.");
+
+        var pathLabel = dialog!
+            .Elements(ns + "Control")
+            .SingleOrDefault(element => string.Equals((string?)element.Attribute("Id"), "PathLabel", StringComparison.Ordinal));
+        Assert.IsNotNull(pathLabel, "Control 'PathLabel' not found in dialog 'XISFDataPathDlg'.");
+
+        Assert.AreEqual(
+            "Data path:",
+            (string?)pathLabel!.Attribute("Text"),
+            "The data path label should be plain text without an access-key ampersand."
+        );
     }
+}
 }
