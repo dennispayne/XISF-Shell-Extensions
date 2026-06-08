@@ -76,7 +76,7 @@
                  Text="If your .xisf files live outside the default indexed locations (Documents, Pictures, etc.), enter the full path to your data root and the installer will add it to Windows Search. Leave blank to skip — you can always add it later from Indexing Options." />
 
         <Control Id="PathLabel" Type="Text" X="20" Y="120" Width="100" Height="13"
-                 NoPrefix="yes" Text="Data &amp;path:" />
+                 NoPrefix="yes" Text="Data path:" />
         <Control Id="PathEdit" Type="Edit" X="20" Y="135" Width="330" Height="18"
                  Property="XISF_DATA_PATH" Indirect="no" />
         <Control Id="HintLabel" Type="Text" X="20" Y="158" Width="330" Height="13"
